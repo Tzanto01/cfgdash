@@ -254,7 +254,7 @@ internal sealed class CfgdashServer : IAsyncDisposable
             }
 
             Touch();
-            ctx.Response.Cookies.Append(SessionCookie, queryToken[0]!, new CookieOptions
+            ctx.Response.Cookies.Append(SessionCookie, token.SessionValue(tailnet), new CookieOptions
             {
                 Path = "/",
                 HttpOnly = true,
@@ -265,7 +265,7 @@ internal sealed class CfgdashServer : IAsyncDisposable
             return;
         }
 
-        var authenticated = token.Verify(Bearer(request)) || token.Verify(request.Cookies[SessionCookie]);
+        var authenticated = token.Verify(Bearer(request)) || token.VerifySession(request.Cookies[SessionCookie], tailnet);
         if (tailnet)
         {
             if (!authenticated)

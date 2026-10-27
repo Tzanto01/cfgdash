@@ -13,6 +13,8 @@ namespace Cfgdash.Host;
 internal sealed class TokenVerifier(string token)
 {
     private readonly byte[] expected = Hash(token);
+    private readonly string uiSession = Session(token, "ui");
+    private readonly string tailnetSession = Session(token, "tailnet");
 
     public static string CreateToken()
     {
@@ -27,7 +29,14 @@ internal sealed class TokenVerifier(string token)
         }
     }
 
-    public bool Verify(string? presented)
+    public bool Verify(string? presented) => Matches(presented, expected);
+
+    /// <summary>The <c>cfgdash_session</c> cookie value of one listener: base64url HMAC-SHA256 of the listener name keyed by the token. Cookies ignore ports, so a value that reaches another service on the same host name works neither as a bearer nor on the other listener.</summary>
+    public string SessionValue(bool tailnet) => tailnet ? tailnetSession : uiSession;
+
+    public bool VerifySession(string? presented, bool tailnet) => Matches(presented, Hash(SessionValue(tailnet)));
+
+    private static bool Matches(string? presented, byte[] expectedHash)
     {
         if (string.IsNullOrEmpty(presented))
         {
@@ -37,13 +46,16 @@ internal sealed class TokenVerifier(string token)
         var hash = Hash(presented);
         try
         {
-            return CryptographicOperations.FixedTimeEquals(hash, expected);
+            return CryptographicOperations.FixedTimeEquals(hash, expectedHash);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(hash);
         }
     }
+
+    private static string Session(string token, string listener) =>
+        Base64Url.EncodeToString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes("cfgdash_session:" + listener)));
 
     private static byte[] Hash(string value)
     {
