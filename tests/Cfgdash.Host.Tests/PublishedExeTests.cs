@@ -7,7 +7,7 @@ namespace Cfgdash.Host.Tests;
 
 internal sealed class PublishedExeFactAttribute : FactAttribute
 {
-    public PublishedExeFactAttribute(bool linuxOnly = false)
+    public PublishedExeFactAttribute(bool linuxOnly = false, bool tailnet = false)
     {
         var exe = Environment.GetEnvironmentVariable("CFGDASH_SMOKE_EXE");
         if (string.IsNullOrEmpty(exe) || !File.Exists(exe))
@@ -17,6 +17,10 @@ internal sealed class PublishedExeFactAttribute : FactAttribute
         else if (linuxOnly && !OperatingSystem.IsLinux())
         {
             Skip = "Linux only";
+        }
+        else if (tailnet && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CFGDASH_SMOKE_TAILNET_PORT")))
+        {
+            Skip = "CFGDASH_SMOKE_TAILNET_PORT is not set to a free tailnet HTTPS port";
         }
     }
 }
@@ -45,7 +49,7 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
         using var sandbox = new Sandbox();
         sandbox.AssertNoLiveInstance();
         using var temp = new TempDir();
-        var (child, port, token) = await sandbox.StartServerAsync(temp.Root);
+        var (child, port, token, _) = await sandbox.StartServerAsync(temp.Root);
         var killed = false;
         try
         {
@@ -127,7 +131,7 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
     {
         using var sandbox = new Sandbox();
         using var temp = new TempDir();
-        var (child, _, _) = await sandbox.StartServerAsync(temp.Root);
+        var (child, _, _, _) = await sandbox.StartServerAsync(temp.Root);
         var killed = false;
         try
         {
@@ -151,7 +155,7 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
     {
         using var sandbox = new Sandbox();
         using var temp = new TempDir();
-        var (child, _, _) = await sandbox.StartServerAsync(temp.Root);
+        var (child, _, _, _) = await sandbox.StartServerAsync(temp.Root);
         var killed = false;
         try
         {
@@ -163,6 +167,61 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
             Assert.False(File.Exists(sandbox.RunJson));
             var log = Directory.GetFiles(Path.Combine(sandbox.CacheDir, "logs"), "*.log").Select(File.ReadAllLines).SelectMany(l => l).Last(l => l.Length > 0);
             Assert.EndsWith("stop hangup", log);
+        }
+        finally
+        {
+            killed = KillIfRunning(child);
+        }
+
+        Assert.False(killed, "the server had to be killed");
+    }
+
+    /// <summary>Live tailnet check on a machine with tailscale, MagicDNS and tailnet HTTPS. CFGDASH_SMOKE_TAILNET_PORT must be an HTTPS port without a serve handler. A forged identity header or X-Forwarded-For only keeps the tagged-device answer if serve strips and overwrites them.</summary>
+    [PublishedExeFact(tailnet: true)]
+    public async Task Tailnet_publish_needs_token_and_identity_ignores_forged_headers_and_is_undone_on_stop()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.AssertNoLiveInstance();
+        using var temp = new TempDir();
+        var (child, _, token, tailnetUrl) = await sandbox.StartServerAsync(temp.Root, Environment.GetEnvironmentVariable("CFGDASH_SMOKE_TAILNET_PORT")!, tailnet: true);
+        var killed = false;
+        try
+        {
+            using var http = new HttpClient(new SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(60) };
+            Assert.NotNull(tailnetUrl);
+            var baseUrl = tailnetUrl[..tailnetUrl.IndexOf("/?token=", StringComparison.Ordinal)];
+
+            async Task<HttpResponseMessage> GetAsync(string path, params (string Name, string Value)[] headers)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + path);
+                foreach (var (name, value) in headers)
+                {
+                    request.Headers.TryAddWithoutValidation(name, value);
+                }
+
+                return await http.SendAsync(request);
+            }
+
+            var bearer = ("Authorization", "Bearer " + token);
+            Assert.Equal(200, (int)(await GetAsync("/api/v1/health", bearer)).StatusCode);
+            Assert.Equal(200, (int)(await GetAsync("/api/v1/health", bearer, ("Tailscale-User-Login", "other@example.com"))).StatusCode);
+            Assert.Equal(200, (int)(await GetAsync("/api/v1/health", bearer, ("X-Forwarded-For", "192.0.2.1"))).StatusCode);
+            Assert.Equal(401, (int)(await GetAsync("/api/v1/health")).StatusCode);
+
+            using var login = await GetAsync($"/?token={token}");
+            Assert.Equal(302, (int)login.StatusCode);
+            var cookie = login.Headers.GetValues("Set-Cookie").Single();
+            Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+            var session = cookie.Split(';')[0].Split('=', 2)[1];
+            Assert.NotEqual(token, session);
+            Assert.Equal(200, (int)(await GetAsync("/api/v1/health", ("Cookie", $"cfgdash_session={session}"))).StatusCode);
+
+            var (stopExit, _, _) = await sandbox.RunAsync("stop");
+            Assert.Equal(0, stopExit);
+            Assert.True(child.WaitForExit(15_000), "the server did not exit within 15 s of cfgdash stop");
+            Assert.False(File.Exists(sandbox.RunJson));
+            var log = Directory.GetFiles(Path.Combine(sandbox.CacheDir, "logs"), "*.log").Select(File.ReadAllLines).SelectMany(l => l).ToList();
+            Assert.Contains("serve-off ok", log.Last(l => l.Contains(" serve-off ", StringComparison.Ordinal)));
         }
         finally
         {
@@ -220,11 +279,12 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
             return (process.ExitCode, await stdout, await stderr);
         }
 
-        public async Task<(Process Child, int Port, string Token)> StartServerAsync(string dir)
+        public async Task<(Process Child, int Port, string Token, string? TailnetUrl)> StartServerAsync(string dir, string port = "0", bool tailnet = false)
         {
-            var child = Start("run", "--port", "0", "--no-open", "--dir", dir);
+            var child = tailnet ? Start("run", "--port", port, "--tailnet", "--no-open", "--dir", dir) : Start("run", "--port", port, "--no-open", "--dir", dir);
             _ = child.StandardError.ReadToEndAsync();
             var lines = new List<string>();
+            Match? local = null;
             var deadline = DateTime.UtcNow.AddSeconds(60);
             while (DateTime.UtcNow < deadline)
             {
@@ -235,10 +295,12 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
                 }
 
                 lines.Add(line);
-                if (UrlLine().Match(line) is { Success: true } match)
+                local ??= UrlLine().Match(line) is { Success: true } match ? match : null;
+                var tailnetUrl = tailnet && line.StartsWith("https://", StringComparison.Ordinal) ? line : null;
+                if (local is not null && (!tailnet || tailnetUrl is not null))
                 {
                     _ = child.StandardOutput.ReadToEndAsync();
-                    return (child, int.Parse(match.Groups["port"].Value), match.Groups["token"].Value);
+                    return (child, int.Parse(local.Groups["port"].Value), local.Groups["token"].Value, tailnetUrl);
                 }
             }
 
