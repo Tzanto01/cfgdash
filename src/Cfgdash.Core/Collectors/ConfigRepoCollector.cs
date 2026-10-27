@@ -32,7 +32,7 @@ internal sealed class ConfigRepoCollector : ICollector
         }
 
         var parsed = ParseStatus(status.StandardOutput);
-        var log = await context.Processes.RunAsync(git, [.. pinned, "log", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
+        var log = await context.Processes.RunAsync(git, [.. pinned, "log", "--no-show-signature", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
         var commit = !log.TimedOut && log.ExitCode == 0 ? log.StandardOutput.TrimEnd('\r', '\n').Split('\u001f') : [];
 
         var source = new SourceRef("git");

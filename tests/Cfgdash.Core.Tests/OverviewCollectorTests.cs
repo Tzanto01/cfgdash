@@ -84,7 +84,7 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
             "? untracked.txt") + "\0";
         var processes = new FakeProcessRunner()
             .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), status)
-            .On("git", Git(repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"), "abc123\u001f2026-01-01T00:00:00+00:00\u001fsubject line\n");
+            .On("git", Git(repo, "log", "--no-show-signature", "-1", "--format=%H%x1f%cI%x1f%s"), "abc123\u001f2026-01-01T00:00:00+00:00\u001fsubject line\n");
 
         var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
 
