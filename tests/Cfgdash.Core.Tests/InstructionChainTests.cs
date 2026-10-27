@@ -100,6 +100,26 @@ public sealed class InstructionChainTests(InstructionChainFixture fixture) : ICl
 
     private static string? Error(TreeNode node) => node.Meta?.GetValueOrDefault("error")?.GetValue<string>();
 
+    [Fact]
+    public void A_file_never_lists_itself_or_its_importer_as_a_reference()
+    {
+        using var tree = new TempTree();
+        tree.Write("app/CLAUDE.md", """
+            Keep CLAUDE.md short.
+            @notes.md
+            """);
+        tree.Write("app/notes.md", "Back to CLAUDE.md and docs/guide.md here\n");
+        tree.Write("app/docs/guide.md", "guide");
+        var environment = TestContexts.WithConfigDir(tree, tree.Dir("home/user/.claude"));
+
+        var block = (TreeBlock)InstructionChainFixture.Collect(tree, environment, tree.Path("app"), null).Blocks.Single();
+
+        var app = block.Nodes.Single(n => n.Label == PathUtil.ToJson(tree.Path("app/CLAUDE.md")));
+        var notes = Assert.Single(app.Children);
+        Assert.Equal("@notes.md", notes.Label);
+        Assert.Equal(["docs/guide.md"], notes.Children.Select(c => c.Label));
+    }
+
     [WindowsFact]
     public void Network_import_is_reported_without_being_probed()
     {

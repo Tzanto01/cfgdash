@@ -1250,6 +1250,8 @@ app-table-block {
 
 .meta-entry {
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .node-size {

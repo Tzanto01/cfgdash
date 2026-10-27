@@ -355,7 +355,7 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
                 var hash = raw.IndexOf('#');
                 var reference = hash < 0 ? raw : raw[..hash];
                 var target = Resolve(reference, dir, null);
-                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || PathUtil.IsNetworkPath(target) || !File.Exists(target) || importTargets.Contains(target) || FileRegistry.IsNeverRead(target) || !seen.Add(PathUtil.RealPath(target)))
+                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || PathUtil.IsNetworkPath(target) || !File.Exists(target) || importTargets.Contains(target) || FileRegistry.IsNeverRead(target) || PathUtil.RealPath(target) is var real && (chain.Contains(real, PathUtil.Comparer) || !seen.Add(real)))
                 {
                     continue;
                 }
