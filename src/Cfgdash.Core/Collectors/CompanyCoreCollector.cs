@@ -41,15 +41,15 @@ internal sealed partial class CompanyCoreCollector : ICollector
                 return CollectorResult.Unavailable("pwsh timed out after 18 s");
             }
 
+            var firstError = run.StandardError.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
             if (run.ExitCode != 0)
             {
-                var first = run.StandardError.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? $"exit code {run.ExitCode}";
-                return CollectorResult.Unavailable(redactor.RedactText("pwsh failed: " + first));
+                return CollectorResult.Unavailable(redactor.RedactText("pwsh failed: " + (firstError ?? $"exit code {run.ExitCode}")));
             }
 
             if (!TryParse(run.StandardOutput, results, out prefixCount))
             {
-                return CollectorResult.Unavailable("unexpected output from agent-core.ps1");
+                return CollectorResult.Unavailable(redactor.RedactText("unexpected output from agent-core.ps1" + (firstError is null ? string.Empty : ": " + firstError)));
             }
         }
 
@@ -123,7 +123,7 @@ internal sealed partial class CompanyCoreCollector : ICollector
             "$prefixes = @(Get-CompanyPrefixes -PathsFile $pathsFile -DerivedOnly)",
             $"$list = @(foreach ($t in @({list})) {{ $r = Get-AgentComposedContext -Prefixes $prefixes -AgentType $t; [ordered]@{{ type = $t; state = [string]$r.State; context = $r.Context }} }})",
             "$json = ConvertTo-Json -InputObject ([ordered]@{ prefixes = @($prefixes); agents = @($list) }) -Depth 5 -Compress",
-            "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))");
+            "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))") + "\n\n";
     }
 
     private static bool TryParse(string stdout, Dictionary<string, (string State, string? Context)> results, out int prefixCount)

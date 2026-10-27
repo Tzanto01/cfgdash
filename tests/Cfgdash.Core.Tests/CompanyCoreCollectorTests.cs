@@ -135,7 +135,8 @@ public sealed class CompanyCoreCollectorTests(CompanyCoreFixture fixture) : ICla
         var result = await new CompanyCoreCollector().CollectAsync(CompanyCoreFixture.Context(CompanyCoreFixture.CreateEnvironment(fixture.Tree, "pwsh-fake"), runner), CancellationToken.None);
 
         var script = Assert.Single(runner.StandardInputs)!;
-        Assert.DoesNotContain('\n', script);
+        Assert.EndsWith("\n\n", script);
+        Assert.DoesNotContain('\n', script.TrimEnd('\n'));
         Assert.DoesNotContain('\r', script);
         Assert.DoesNotContain("bad name", script, StringComparison.Ordinal);
         Assert.Contains("'reviewer'", script, StringComparison.Ordinal);

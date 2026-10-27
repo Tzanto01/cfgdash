@@ -16,6 +16,9 @@ internal static class PathUtil
 
     public static string ToJson(string path) => Full(path).Replace('\\', '/');
 
+    /// <summary>A Windows UNC or device path (<c>\\server\share</c>, <c>\\?\</c>, <c>\\.\</c>). Probing one can send the user's credentials to a remote host, so paths taken from file content are never touched when this is true.</summary>
+    public static bool IsNetworkPath(string path) => OperatingSystem.IsWindows() && path.Replace('/', '\\').StartsWith(@"\\", StringComparison.Ordinal);
+
     public static bool PathEquals(string a, string b) => string.Equals(Full(a), Full(b), Comparison);
 
     public static bool IsUnder(string path, string root)

@@ -107,7 +107,7 @@ Every block has `type`, a section-unique `id`, `title`, optional `description`.
 }
 ```
 
-A cell is a string, number, boolean, null, or `{ "text": string, "fileId"?: string }`. Row `fileId` opens the row's main file. `flags` (row or kv) render as badges; known flags: `missing-script`, `overridden`, `company`, `redacted`, `link`, `lazy`, `referenced`, `conditional`, `duplicate`, `error`. Unknown flags render as neutral badges.
+A cell is a string, number, boolean, null, or `{ "text": string, "fileId"?: string }`. Row `fileId` opens the row's main file. `flags` (row or kv) render as badges; known flags: `missing-script`, `network-path`, `overridden`, `company`, `redacted`, `link`, `lazy`, `referenced`, `conditional`, `duplicate`, `error`. Unknown flags render as neutral badges.
 
 ### tree
 

@@ -7,6 +7,7 @@ import { Icon } from './icon';
 
 const BADGE_TONES: Record<string, string> = {
   'missing-script': 'danger',
+  'network-path': 'warn',
   error: 'danger',
   overridden: 'warn',
   conditional: 'warn',

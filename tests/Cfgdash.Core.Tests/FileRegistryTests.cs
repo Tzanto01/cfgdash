@@ -130,6 +130,28 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
         Assert.Null(new FileRegistry([]).Register(path + "::$DATA", "other"));
     }
 
+    [WindowsFact]
+    public void Network_paths_are_never_read()
+    {
+        Assert.True(FileRegistry.IsNeverRead(@"\\203.0.113.7\share\notes.md"));
+        Assert.True(FileRegistry.IsNeverRead("//203.0.113.7/share/notes.md"));
+        Assert.True(FileRegistry.IsNeverRead(@"\\?\UNC\203.0.113.7\share\notes.md"));
+        Assert.Null(new FileRegistry([]).Register("//203.0.113.7/share/notes.md", "instruction"));
+    }
+
+    [LinuxFact]
+    public void Proc_files_are_never_registered_directly_or_through_a_link()
+    {
+        var link = tree.Path("proc-link/notes.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        File.CreateSymbolicLink(link, "/proc/self/environ");
+        var registry = new FileRegistry([]);
+
+        Assert.Null(registry.Register("/proc/self/environ", "instruction"));
+        Assert.Null(registry.Register(link, "instruction"));
+        Assert.Empty(registry.All);
+    }
+
     [Fact]
     public void Company_flag_follows_a_link_into_a_company_prefix()
     {

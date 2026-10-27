@@ -100,6 +100,21 @@ public sealed class InstructionChainTests(InstructionChainFixture fixture) : ICl
 
     private static string? Error(TreeNode node) => node.Meta?.GetValueOrDefault("error")?.GetValue<string>();
 
+    [WindowsFact]
+    public void Network_import_is_reported_without_being_probed()
+    {
+        using var tree = new TempTree();
+        tree.Write("app/CLAUDE.md", "@//203.0.113.7/share/x.md\nSee [r](//203.0.113.7/share/r.md).\n");
+        var environment = TestContexts.WithConfigDir(tree, tree.Dir("home/user/.claude"));
+
+        var block = (TreeBlock)InstructionChainFixture.Collect(tree, environment, tree.Path("app"), null).Blocks.Single();
+
+        var app = block.Nodes.Single(n => n.Label == PathUtil.ToJson(tree.Path("app/CLAUDE.md")));
+        var import = Assert.Single(app.Children);
+        Assert.Equal("@//203.0.113.7/share/x.md", import.Label);
+        Assert.Equal("network path not read", Error(import));
+    }
+
     [Fact]
     public void Top_level_files_follow_the_documented_load_order()
     {

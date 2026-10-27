@@ -25,6 +25,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
 
     private static readonly string[] NeverReadSegments = [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"];
     private static readonly string[] NeverReadConfigDirs = ["gh", "gcloud"];
+    private static readonly string[] NeverReadRoots = ["/proc/", "/sys/", "/dev/"];
 
     private readonly Lock gate = new();
     private readonly Dictionary<string, RegisteredFile> files = new(StringComparer.Ordinal);
@@ -56,7 +57,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         }
 
         var full = PathUtil.Full(path);
-        if (!File.Exists(full) || IsNeverRead(full))
+        if (IsNeverRead(full) || !File.Exists(full))
         {
             return null;
         }
@@ -99,11 +100,11 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16];
     }
 
-    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path.</summary>
+    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path, and for network and pseudo-filesystem paths.</summary>
     public static bool IsNeverRead(string path)
     {
         var full = PathUtil.Full(path);
-        if (OperatingSystem.IsWindows() && full.IndexOf(':', (Path.GetPathRoot(full) ?? string.Empty).Length) >= 0)
+        if (PathUtil.IsNetworkPath(full) || (OperatingSystem.IsWindows() && full.IndexOf(':', (Path.GetPathRoot(full) ?? string.Empty).Length) >= 0))
         {
             return true;
         }
@@ -115,7 +116,8 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
     {
         var name = Path.GetFileName(full);
         var comparison = StringComparison.OrdinalIgnoreCase;
-        if (NeverReadNames.Any(n => name.Equals(n, comparison))
+        if ((!OperatingSystem.IsWindows() && NeverReadRoots.Any(r => full.StartsWith(r, StringComparison.Ordinal)))
+            || NeverReadNames.Any(n => name.Equals(n, comparison))
             || name.StartsWith(".env.", comparison)
             || NeverReadPrefixes.Any(p => name.StartsWith(p, comparison))
             || NeverReadExtensions.Any(e => name.EndsWith(e, comparison)))

@@ -301,10 +301,11 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
             foreach (var import in imports)
             {
                 var target = Resolve(import.Path, dir, context.Environment.HomeDir);
+                var network = target is not null && PathUtil.IsNetworkPath(target);
                 Node child;
-                if (target is null || !File.Exists(target))
+                if (target is null || network || !File.Exists(target))
                 {
-                    child = new Node("@" + import.Raw) { Error = "missing" };
+                    child = new Node("@" + import.Raw) { Error = network ? "network path not read" : "missing" };
                     child.Badges.AddRange(["import", "error"]);
                 }
                 else
@@ -354,7 +355,7 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
                 var hash = raw.IndexOf('#');
                 var reference = hash < 0 ? raw : raw[..hash];
                 var target = Resolve(reference, dir, null);
-                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || !File.Exists(target) || importTargets.Contains(target) || FileRegistry.IsNeverRead(target) || !seen.Add(PathUtil.RealPath(target)))
+                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || PathUtil.IsNetworkPath(target) || !File.Exists(target) || importTargets.Contains(target) || FileRegistry.IsNeverRead(target) || !seen.Add(PathUtil.RealPath(target)))
                 {
                     continue;
                 }

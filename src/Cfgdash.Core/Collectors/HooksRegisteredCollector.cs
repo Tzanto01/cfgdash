@@ -122,7 +122,12 @@ internal sealed class HooksRegisteredCollector(SettingsLayers settings, Platform
                         if (Text(handler["type"]) == "command" && command is not null && HookScripts.ExtractScript(command) is { } extracted)
                         {
                             var path = HookScripts.Expand(extracted, configDir, stack.TargetDir, source.PluginDir, environment.HomeDir);
-                            if (File.Exists(path))
+                            if (PathUtil.IsNetworkPath(path))
+                            {
+                                script = redactor.RedactText(PathUtil.ToJson(path));
+                                flags.Add("network-path");
+                            }
+                            else if (File.Exists(path))
                             {
                                 var scriptFile = context.Files.Register(path, "hookScript");
                                 script = Cell.File(redactor.RedactText(PathUtil.ToJson(path)), scriptFile?.Id);
