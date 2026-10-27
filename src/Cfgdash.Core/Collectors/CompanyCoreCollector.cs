@@ -100,7 +100,7 @@ internal sealed partial class CompanyCoreCollector : ICollector
             {
                 if (Directory.Exists(dir))
                 {
-                    types.UnionWith(Directory.EnumerateDirectories(dir).Select(d => Path.GetFileName(d)));
+                    types.UnionWith(Directory.EnumerateDirectories(dir).Where(d => File.Exists(Path.Combine(d, "core.md"))).Select(d => Path.GetFileName(d)));
                 }
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)

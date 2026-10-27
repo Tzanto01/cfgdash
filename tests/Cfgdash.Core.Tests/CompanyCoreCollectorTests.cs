@@ -42,7 +42,8 @@ public sealed class CompanyCoreFixture : IDisposable
         ReadyFile = Tree.Write("ws/acme/.claude/custom/agents/reviewer/core.md", ReadyCore);
         Tree.Write("ws/acme/.claude/custom/agents/blank/core.md", "  \n");
         Tree.Dir("ws/acme/.claude/custom/agents/nocore");
-        Tree.Dir("ws/acme/.claude/custom/agents/bad name");
+        Tree.Write("ws/acme/.claude/custom/agents/bad name/core.md", "bad");
+        Tree.Write("ws/other/.claude/custom/agents/stray/core.md", "stray");
 
         var pwsh = new ProcessRunner().RunAsync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], TimeSpan.FromSeconds(30), CancellationToken.None)
             .ContinueWith(t => t.IsCompletedSuccessfully && t.Result.ExitCode == 0).GetAwaiter().GetResult();
@@ -73,7 +74,7 @@ public sealed class CompanyCoreFixture : IDisposable
             TestEnvironments.ContextPath(PathKeys.CompanyLayer, tree.Path("ws/acme")),
         ],
         tools: new Dictionary<string, string> { ["pwsh"] = pwsh },
-        companyPrefixes: [tree.Path("ws/acme")]);
+        companyPrefixes: [tree.Path("ws/acme"), tree.Path("ws/other")]);
 
     internal static CollectContext Context(MachineEnvironment environment, IProcessRunner processes) => new()
     {
@@ -108,8 +109,8 @@ public sealed class CompanyCoreCollectorTests(CompanyCoreFixture fixture) : ICla
     [Fact]
     public void States_are_reported_per_type_in_sorted_order()
     {
-        Assert.Equal(["bad name", "blank", "nocore", "reviewer"], Nodes.Select(n => n.Label));
-        Assert.Equal(["Invalid", "Empty", "Missing", "Ready"], Nodes.Select(n => n.Meta!["state"]!.GetValue<string>()));
+        Assert.Equal(["bad name", "blank", "reviewer", "stray"], Nodes.Select(n => n.Label));
+        Assert.Equal(["Invalid", "Empty", "Ready", "Missing"], Nodes.Select(n => n.Meta!["state"]!.GetValue<string>()));
         Assert.Equal(["empty", "company"], Nodes.Single(n => n.Label == "blank").Badges);
         Assert.False(Nodes.Single(n => n.Label == "blank").Meta!.ContainsKey("text"));
         Assert.Contains("Missing: 1, Empty: 1, Invalid: 1", fixture.Result.Notes!);
@@ -124,7 +125,7 @@ public sealed class CompanyCoreCollectorTests(CompanyCoreFixture fixture) : ICla
         Assert.True(fixture.Files.Files.TryGet(reviewer.FileId!, out var file));
         Assert.True(file.Ref.Company);
         Assert.Equal("agent", file.Ref.Kind);
-        Assert.Null(Nodes.Single(n => n.Label == "nocore").FileId);
+        Assert.DoesNotContain(Nodes, n => n.Label == "nocore");
     }
 
     [Fact]
