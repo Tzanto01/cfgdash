@@ -1,4 +1,5 @@
 using Cfgdash.Core.Infrastructure;
+using Cfgdash.Core.Settings;
 
 namespace Cfgdash.Core.Collectors;
 
@@ -7,9 +8,17 @@ internal static class CollectorCatalog
 {
     public static IReadOnlyList<ICollector> All(IEnvironmentReader environmentReader) => Create(environmentReader, PlatformLocations.Default);
 
-    public static IReadOnlyList<ICollector> Create(IEnvironmentReader environmentReader, PlatformLocations locations) =>
-    [
-        new MachineCollector(CfgdashPaths.OverridesFile(environmentReader)),
-        new ConfigRepoCollector(),
-    ];
+    public static IReadOnlyList<ICollector> Create(IEnvironmentReader environmentReader, PlatformLocations locations)
+    {
+        var settings = new SettingsLayers(locations);
+        return
+        [
+            new MachineCollector(CfgdashPaths.OverridesFile(environmentReader)),
+            new ConfigRepoCollector(),
+            new SettingsEffectiveCollector(settings),
+            new McpServersCollector(settings, locations),
+            new SettingsHighlightsCollector(settings),
+            new EnvHarnessCollector(settings, environmentReader),
+        ];
+    }
 }
