@@ -24,6 +24,9 @@ internal static class CollectorCatalog
             new McpServersCollector(settings, locations),
             new SettingsHighlightsCollector(settings),
             new EnvHarnessCollector(settings, environmentReader),
+            new WindowsTasksCollector(),
+            new SystemdUserCollector(environmentReader),
+            new CrontabCollector(),
         ];
     }
 }
