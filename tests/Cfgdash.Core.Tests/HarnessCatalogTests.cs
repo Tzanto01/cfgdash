@@ -104,7 +104,7 @@ public sealed class CatalogSnapshotFixture : IDisposable
 
     public void Dispose() => Tree.Dispose();
 
-    private static void CreateDirectoryLink(string link, string target)
+    internal static void CreateDirectoryLink(string link, string target)
     {
         if (OperatingSystem.IsWindows())
         {
