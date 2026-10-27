@@ -1022,6 +1022,11 @@ app-json-value {
 @media (max-width: 47.99rem) {
   .kv-row {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+
+  .kv-value {
+    gap: var(--space-2);
   }
 
   .kv-meta {
@@ -1080,6 +1085,10 @@ app-json-value {
 
 .data-table td .mono {
   overflow-wrap: anywhere;
+}
+
+.data-table td:first-child .mono {
+  overflow-wrap: break-word;
 }
 
 .data-table td.num {
@@ -1258,6 +1267,11 @@ app-json-value {
 @media (max-width: 47.99rem) {
   .node-row {
     grid-template-columns: var(--target) minmax(0, 1fr);
+  }
+
+  .node-label {
+    flex: 1 1 8rem;
+    text-align: left;
   }
 
   .node-size {
