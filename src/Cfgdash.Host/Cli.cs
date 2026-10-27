@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Cfgdash.Core;
@@ -52,13 +53,21 @@ internal static partial class CfgdashCli
             return ExitError;
         }
 
-        return options.Command switch
+        try
         {
-            "stop" => await StopAsync(dependencies),
-            "update" => await UpdateAsync(options, dependencies),
-            "export" => await ExportAsync(options, dependencies),
-            _ => await RunServerAsync(options, dependencies),
-        };
+            return options.Command switch
+            {
+                "stop" => await StopAsync(dependencies),
+                "update" => await UpdateAsync(options, dependencies),
+                "export" => await ExportAsync(options, dependencies),
+                _ => await RunServerAsync(options, dependencies),
+            };
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            dependencies.Error.WriteLine($"cfgdash: {e.Message}");
+            return ExitError;
+        }
     }
 
     /// <summary>Null with <paramref name="error"/> set on an unknown command, unknown option or bad value.</summary>
@@ -202,6 +211,22 @@ internal static partial class CfgdashCli
             return ExitError;
         }
 
+        using var cleanedUp = new ManualResetEventSlim();
+        using var hangup = PosixSignalRegistration.Create(PosixSignal.SIGHUP, context =>
+        {
+            context.Cancel = true;
+            try
+            {
+                server.Stop("hangup");
+                if (OperatingSystem.IsWindows())
+                {
+                    cleanedUp.Wait(TimeSpan.FromSeconds(4));
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        });
         RunTailnet? tailnet = null;
         if (tailnetOptions is not null)
         {
@@ -256,21 +281,29 @@ internal static partial class CfgdashCli
             }
             else if (!options.NoOpen)
             {
-                dependencies.OpenBrowser(url);
+                dependencies.OpenBrowser(url, core.EnvironmentReader);
             }
 
             reason = await server.WaitForShutdownAsync();
         }
         finally
         {
-            if (published && !await RemoveServeHandlerAsync(tailscale, tailnet!, log))
-            {
-                dependencies.Error.WriteLine($"cfgdash: could not confirm that the tailscale serve handler is gone; remove it with: tailscale serve --https={tailnet!.HttpsPort} off");
-            }
-
+            var serveOff = !published || await RemoveServeHandlerAsync(tailscale, tailnet!, log);
             await server.DisposeAsync();
             store.Delete();
             log.Write($"stop {reason}");
+            if (!serveOff)
+            {
+                try
+                {
+                    dependencies.Error.WriteLine($"cfgdash: could not confirm that the tailscale serve handler is gone; remove it with: tailscale serve --https={tailnet!.HttpsPort} off");
+                }
+                catch (IOException)
+                {
+                }
+            }
+
+            cleanedUp.Set();
         }
 
         return ExitOk;
@@ -308,7 +341,11 @@ internal static partial class CfgdashCli
                 process.WaitForExit(TimeSpan.FromSeconds(5));
                 dependencies.Out.WriteLine($"cfgdash did not stop within 10 s; killed process {state.Pid}.");
             }
-            catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+            catch (ArgumentException)
+            {
+                dependencies.Out.WriteLine("cfgdash stopped.");
+            }
+            catch (Exception e) when (e is InvalidOperationException or Win32Exception or NotSupportedException)
             {
                 dependencies.Error.WriteLine($"cfgdash: could not stop process {state.Pid} ({e.GetType().Name}).");
                 return ExitError;
@@ -340,9 +377,18 @@ internal static partial class CfgdashCli
         var exportsDir = PrivateFiles.EnsureDirectory(Path.Combine(PrivateFiles.EnsureDirectory(dependencies.CacheDir(core.EnvironmentReader)), "exports"));
         var stamp = dependencies.TimeProvider.GetUtcNow().ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
         var path = Path.Combine(exportsDir, $"{SanitizeHostname(core.Environment.Hostname)}-{stamp}.json");
-        await using (var stream = PrivateFiles.Open(path, FileMode.CreateNew))
+        var stream = PrivateFiles.Open(path, FileMode.CreateNew);
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, result.Snapshot, SnapshotJson.Options);
+            await using (stream)
+            {
+                await JsonSerializer.SerializeAsync(stream, result.Snapshot, SnapshotJson.Options);
+            }
+        }
+        catch
+        {
+            File.Delete(path);
+            throw;
         }
 
         dependencies.Out.WriteLine(path);

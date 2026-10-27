@@ -250,7 +250,7 @@ internal static class TestCore
             Out = output ?? new CaptureWriter(),
             Error = error ?? new CaptureWriter(),
             TimeProvider = time ?? TimeProvider.System,
-            OpenBrowser = open ?? (_ => throw new InvalidOperationException("browser must not open")),
+            OpenBrowser = open is null ? (_, _) => throw new InvalidOperationException("browser must not open") : (url, _) => open(url),
             ExePath = exe,
             UiFiles = ui,
         };

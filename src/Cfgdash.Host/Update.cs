@@ -20,11 +20,11 @@ internal static partial class CfgdashCli
     private static async Task<int> UpdateAsync(CliOptions options, HostDependencies dependencies)
     {
         var core = await dependencies.CreateCore(CancellationToken.None);
-        var gh = core.Environment.Tools.GetValueOrDefault("gh") ?? "gh";
+        var gh = core.Environment.Tools.GetValueOrDefault("gh") ?? HostDependencies.FindOnPath("gh", core.EnvironmentReader);
         ProcessResult auth;
         try
         {
-            auth = await core.Processes.RunAsync(gh, ["auth", "status"], GhTimeout, CancellationToken.None);
+            auth = gh is null ? throw new InvalidOperationException() : await core.Processes.RunAsync(gh, ["auth", "status"], GhTimeout, CancellationToken.None);
         }
         catch (Exception e) when (e is Win32Exception or InvalidOperationException)
         {

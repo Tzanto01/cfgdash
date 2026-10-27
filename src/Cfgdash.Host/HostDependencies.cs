@@ -22,7 +22,7 @@ internal sealed class HostDependencies
 
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
-    public Action<string> OpenBrowser { get; init; } = OpenDefaultBrowser;
+    public Action<string, IEnvironmentReader> OpenBrowser { get; init; } = OpenDefaultBrowser;
 
     public string? ExePath { get; init; } = Environment.ProcessPath;
 
@@ -46,11 +46,44 @@ internal sealed class HostDependencies
         }
     }
 
-    private static void OpenDefaultBrowser(string url)
+    /// <summary>The absolute path of <paramref name="name"/> (<c>&lt;name&gt;.exe</c> on Windows) in the first fully qualified <c>PATH</c> entry that has it; relative entries such as <c>.</c> are skipped. Null when not found.</summary>
+    internal static string? FindOnPath(string name, IEnvironmentReader environment)
     {
-        var startInfo = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo(url) { UseShellExecute = true }
-            : new ProcessStartInfo(OperatingSystem.IsMacOS() ? "open" : "xdg-open") { ArgumentList = { url } };
+        var fileName = OperatingSystem.IsWindows() ? name + ".exe" : name;
+        foreach (var entry in (environment.Get("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var dir = entry.Trim('"');
+            if (!Path.IsPathFullyQualified(dir))
+            {
+                continue;
+            }
+
+            var candidate = Path.Combine(dir, fileName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static void OpenDefaultBrowser(string url, IEnvironmentReader environment)
+    {
+        ProcessStartInfo startInfo;
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo = new ProcessStartInfo(url) { UseShellExecute = true };
+        }
+        else if (FindOnPath(OperatingSystem.IsMacOS() ? "open" : "xdg-open", environment) is { } opener)
+        {
+            startInfo = new ProcessStartInfo(opener) { ArgumentList = { url } };
+        }
+        else
+        {
+            return;
+        }
+
         try
         {
             using var process = Process.Start(startInfo);

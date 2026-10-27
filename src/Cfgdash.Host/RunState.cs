@@ -60,13 +60,13 @@ internal sealed class RunStateStore(string cacheDir)
         }
     }
 
-    /// <summary>The recorded process still runs: same PID, start time within 1 s, same executable path.</summary>
+    /// <summary>The recorded process still runs: same PID, start time within 5 s (Linux derives it from wall clock minus uptime, so a clock step moves it), same executable path.</summary>
     public static bool IsLive(RunState state)
     {
         try
         {
             using var process = Process.GetProcessById(state.Pid);
-            if (process.HasExited || (process.StartTime.ToUniversalTime() - state.ProcessStart.UtcDateTime).Duration() > TimeSpan.FromSeconds(1))
+            if (process.HasExited || (process.StartTime.ToUniversalTime() - state.ProcessStart.UtcDateTime).Duration() > TimeSpan.FromSeconds(5))
             {
                 return false;
             }
@@ -90,6 +90,7 @@ internal sealed class RunStateStore(string cacheDir)
 /// <summary>cfgdash's own log in <c>&lt;cache&gt;/logs/cfgdash-&lt;yyyy-MM-dd&gt;.log</c> (UTC). Never throws.</summary>
 internal sealed class CfgdashLog
 {
+    private const int MaxLoggedPath = 256;
     private readonly string directory;
     private readonly TimeProvider time;
     private readonly Lock gate = new();
@@ -124,9 +125,9 @@ internal sealed class CfgdashLog
         }
     }
 
-    /// <summary>Method, path and status only: never the query string, headers or bodies.</summary>
+    /// <summary>Method, path (first 256 characters) and status only: never the query string, headers or bodies.</summary>
     public void Request(string method, string? path, int status) =>
-        Write($"{Clean(method)} {Clean(path)} {status.ToString(CultureInfo.InvariantCulture)}");
+        Write($"{Clean(method)} {Clean(path is { Length: > MaxLoggedPath } ? path[..MaxLoggedPath] : path)} {status.ToString(CultureInfo.InvariantCulture)}");
 
     public void Error(Exception exception) => Write($"error {exception.GetType().Name}");
 
@@ -158,7 +159,7 @@ internal static class PrivateFiles
     /// <summary>Opens a file for writing; a new file is 0600 on Linux/macOS.</summary>
     public static FileStream Open(string path, FileMode mode)
     {
-        var options = new FileStreamOptions { Mode = mode, Access = FileAccess.Write, Share = FileShare.Read };
+        var options = new FileStreamOptions { Mode = mode, Access = FileAccess.Write, Share = FileShare.ReadWrite };
         if (!OperatingSystem.IsWindows())
         {
             options.UnixCreateMode = FileModeUserOnly;

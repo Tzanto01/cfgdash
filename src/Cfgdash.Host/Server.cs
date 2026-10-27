@@ -482,7 +482,7 @@ internal sealed class CfgdashServer : IAsyncDisposable
     private Lazy<Task<SnapshotResult>> NewBuild(string dir)
     {
         Lazy<Task<SnapshotResult>>? build = null;
-        build = new Lazy<Task<SnapshotResult>>(() => BuildAsync(dir, build!));
+        build = new Lazy<Task<SnapshotResult>>(() => Task.Run(() => BuildAsync(dir, build!)));
         return build;
     }
 
