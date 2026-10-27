@@ -4,7 +4,7 @@ Owner: department lead. Producer: `host`. Consumer: `web` (and later the fleet v
 
 ## Auth (every `/api/*` route)
 
-A request is authenticated when it carries the per-run token as `Authorization: Bearer <token>` or as the `cfgdash_session` cookie. Static UI files and `GET /` are public (they contain no data). `GET /?token=<token>` with a valid token sets the cookie and answers `302 Location: /` so the token leaves the address bar. Failures: `401 {"error":"unauthenticated"}`, `403 {"error":"forbidden","reason":"..."}` (tailnet identity), `400 {"error":"bad-host"}` (Host not allowed). Full rules: [security-v1](security-v1.md).
+A request is authenticated when it carries the per-run token as `Authorization: Bearer <token>` or a valid `cfgdash_session` cookie. Static UI files and `GET /` are public (they contain no data). `GET /?token=<token>` with a valid token sets the cookie and answers `302 Location: /` so the token leaves the address bar. The cookie never holds the raw token: its value is base64url HMAC-SHA256 keyed by the token over `cfgdash_session:ui` or `cfgdash_session:tailnet`, accepted only on the listener that issued it. Failures: `401 {"error":"unauthenticated"}`, `403 {"error":"forbidden","reason":"..."}` (tailnet identity), `400 {"error":"bad-host"}` (Host not allowed). Full rules: [security-v1](security-v1.md).
 
 ## Endpoints
 

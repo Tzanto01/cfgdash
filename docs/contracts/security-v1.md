@@ -13,7 +13,7 @@ Owner: department lead. Every team implements its side; `security-reviewer` chec
 
 - Kestrel binds `127.0.0.1` only: the UI port and, with `--tailnet`, one extra ephemeral loopback port that only `tailscale serve` targets. Never `0.0.0.0`, `::`, a LAN address or a tailnet address.
 - Per-run token: 32 bytes from a CSPRNG, base64url. Compared in constant time. Lives only in memory, the run-state file and the printed URL.
-- Cookie `cfgdash_session`: `HttpOnly`, `SameSite=Strict`, `Path=/`, `Secure` on the tailnet listener.
+- Cookie `cfgdash_session`: `HttpOnly`, `SameSite=Strict`, `Path=/`, `Secure` on the tailnet listener; its value is a per-listener HMAC of the token (never the token itself), valid only on the listener that issued it.
 - Host allowlist (anti DNS-rebinding), checked before auth: UI listener `127.0.0.1:<port>` and `localhost:<port>`; tailnet listener the machine's tailnet DNS name (with and without the HTTPS port) and whatever exact Host value `tailscale serve` is verified to forward. Anything else `400`.
 - `POST /api/v1/shutdown` accepts the bearer header only.
 - Headers on every response: `Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; API responses `Cache-Control: no-store`.
