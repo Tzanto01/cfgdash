@@ -84,14 +84,18 @@ public sealed class SecurityTests(UiServerFixture fixture) : IClassFixture<UiSer
     }
 
     [Fact]
-    public async Task Api_accepts_the_bearer_token_and_the_session_cookie()
+    public async Task Api_accepts_the_bearer_token_and_the_session_cookie_but_not_the_raw_token_as_cookie()
     {
+        var session = (await Host.GetAsync($"/?token={Host.Token}", null)).SessionCookieValue;
+
         var bearer = await Host.GetAsync("/api/v1/health");
-        var cookie = await Host.GetAsync("/api/v1/health", null, ("Cookie", $"cfgdash_session={Host.Token}"));
+        var cookie = await Host.GetAsync("/api/v1/health", null, ("Cookie", $"cfgdash_session={session}"));
+        var rawTokenCookie = await Host.GetAsync("/api/v1/health", null, ("Cookie", $"cfgdash_session={Host.Token}"));
         var wrongCookie = await Host.GetAsync("/api/v1/health", null, ("Cookie", "cfgdash_session=wrong-token"));
 
         Assert.Equal(200, bearer.Status);
         Assert.Equal(200, cookie.Status);
+        Assert.Equal(401, rawTokenCookie.Status);
         Assert.Equal(401, wrongCookie.Status);
     }
 
@@ -103,7 +107,10 @@ public sealed class SecurityTests(UiServerFixture fixture) : IClassFixture<UiSer
         Assert.Equal(302, response.Status);
         Assert.Equal("/", response.Message.Headers.Location?.OriginalString);
         var cookie = response.SetCookie!;
-        Assert.StartsWith($"cfgdash_session={Host.Token}", cookie);
+        Assert.StartsWith("cfgdash_session=", cookie);
+        Assert.NotEmpty(response.SessionCookieValue!);
+        Assert.NotEqual(Host.Token, response.SessionCookieValue);
+        Assert.DoesNotContain(Host.Token, cookie);
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("path=/", cookie, StringComparison.OrdinalIgnoreCase);
@@ -182,8 +189,9 @@ public sealed class SecurityTests(UiServerFixture fixture) : IClassFixture<UiSer
     public async Task Cookie_only_caller_cannot_shut_the_server_down()
     {
         await using var host = await ServerHost.StartAsync();
+        var session = (await host.GetAsync($"/?token={host.Token}", null)).SessionCookieValue;
 
-        var response = await host.SendAsync(HttpMethod.Post, "/api/v1/shutdown", host.Port, null, null, ("Cookie", $"cfgdash_session={host.Token}"));
+        var response = await host.SendAsync(HttpMethod.Post, "/api/v1/shutdown", host.Port, null, null, ("Cookie", $"cfgdash_session={session}"));
         var stopped = host.Server.WaitForShutdownAsync();
         await Task.WhenAny(stopped, Task.Delay(300));
 
@@ -211,7 +219,7 @@ public sealed class SecurityTests(UiServerFixture fixture) : IClassFixture<UiSer
 
         var response = await host.GetAsync($"/?token={host.Token}", null);
         await host.GetAsync("/api/v1/dirs?path=secret-query-value");
-        await Poll.UntilAsync(() => host.ReadLog().Contains("/api/v1/dirs"));
+        await Poll.UntilAsync(() => host.ReadLog() is var text && text.Contains("GET / 302") && text.Contains("/api/v1/dirs"));
         var log = host.ReadLog();
 
         Assert.Equal(HttpStatusCode.Redirect, response.Message.StatusCode);
@@ -220,5 +228,18 @@ public sealed class SecurityTests(UiServerFixture fixture) : IClassFixture<UiSer
         Assert.DoesNotContain(host.Token, log);
         Assert.DoesNotContain("token=", log);
         Assert.DoesNotContain("secret-query-value", log);
+    }
+
+    [Fact]
+    public async Task Request_log_caps_the_logged_path_at_256_characters()
+    {
+        await using var host = await ServerHost.StartAsync();
+
+        await host.GetAsync("/" + new string('a', 600), null);
+        await Poll.UntilAsync(() => host.ReadLog().Contains("GET /"));
+        var log = host.ReadLog();
+
+        Assert.Contains("GET /" + new string('a', 255) + " 200", log);
+        Assert.DoesNotContain(new string('a', 256), log);
     }
 }

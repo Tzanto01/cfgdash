@@ -121,6 +121,8 @@ internal sealed class FakeTailscale : FakeProcesses
 
     public bool ServeFails { get; set; }
 
+    public bool OffFails { get; set; }
+
     public void Claim(int port, string dns, string proxy)
     {
         Tcp.Add(port.ToString());
@@ -159,6 +161,11 @@ internal sealed class FakeTailscale : FakeProcesses
                     Claim(int.Parse(https["--https=".Length..]), Dns, target);
                     return Ok();
                 case ["serve", var https, "off"] when https.StartsWith("--https=", StringComparison.Ordinal):
+                    if (OffFails)
+                    {
+                        return Fail("serve off denied");
+                    }
+
                     var port = https["--https=".Length..];
                     Tcp.Remove(port);
                     foreach (var key in Web.Keys.Where(k => k.EndsWith(":" + port, StringComparison.Ordinal)).ToList())

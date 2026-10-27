@@ -20,6 +20,8 @@ internal sealed class Resp(HttpResponseMessage message, string body)
 
     public string? SetCookie => Header("Set-Cookie");
 
+    public string? SessionCookieValue => SetCookie?.Split(';')[0].Split('=', 2)[1];
+
     public string? Error => Json.TryGetProperty("error", out var error) ? error.GetString() : null;
 
     public string? Reason => Json.TryGetProperty("reason", out var reason) ? reason.GetString() : null;
@@ -119,7 +121,11 @@ internal sealed class ServerHost : IAsyncDisposable
     {
         try
         {
-            return string.Concat(Directory.GetFiles(LogDir, "*.log").Select(f => File.ReadAllText(f)));
+            return string.Concat(Directory.GetFiles(LogDir, "*.log").Select(f =>
+            {
+                using var reader = new StreamReader(new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+                return reader.ReadToEnd();
+            }));
         }
         catch (IOException)
         {

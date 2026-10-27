@@ -71,7 +71,10 @@ public sealed class TailnetListenerTests(TailnetFixture fixture) : IClassFixture
 
         Assert.Equal(302, response.Status);
         var cookie = response.SetCookie!;
-        Assert.StartsWith($"cfgdash_session={Host.Token}", cookie);
+        Assert.StartsWith("cfgdash_session=", cookie);
+        Assert.NotEmpty(response.SessionCookieValue!);
+        Assert.NotEqual(Host.Token, response.SessionCookieValue);
+        Assert.DoesNotContain(Host.Token, cookie);
         Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
@@ -91,10 +94,45 @@ public sealed class TailnetListenerTests(TailnetFixture fixture) : IClassFixture
     public async Task Allowed_login_header_matches_case_insensitively_and_the_session_cookie_works()
     {
         var bearer = await Host.TailAsync("/api/v1/health", headers: [("Tailscale-User-Login", "USER@GitHub")]);
-        var cookie = await Host.TailAsync("/api/v1/health", bearer: null, headers: [.. Identity, ("Cookie", $"cfgdash_session={Host.Token}")]);
+        var session = (await Host.TailAsync($"/?token={Host.Token}", bearer: null, headers: Identity)).SessionCookieValue;
+        var cookie = await Host.TailAsync("/api/v1/health", bearer: null, headers: [.. Identity, ("Cookie", $"cfgdash_session={session}")]);
 
         Assert.Equal(200, bearer.Status);
         Assert.Equal(200, cookie.Status);
+    }
+
+    [Fact]
+    public async Task Session_cookies_work_only_on_the_listener_that_issued_them()
+    {
+        var ui = (await Host.GetAsync($"/?token={Host.Token}", null)).SessionCookieValue!;
+        var tailnet = (await Host.TailAsync($"/?token={Host.Token}", bearer: null, headers: Identity)).SessionCookieValue!;
+
+        var uiOnUi = await Host.GetAsync("/api/v1/health", null, ("Cookie", $"cfgdash_session={ui}"));
+        var uiOnTailnet = await Host.TailAsync("/api/v1/health", bearer: null, headers: [.. Identity, ("Cookie", $"cfgdash_session={ui}")]);
+        var tailnetOnTailnet = await Host.TailAsync("/api/v1/health", bearer: null, headers: [.. Identity, ("Cookie", $"cfgdash_session={tailnet}")]);
+        var tailnetOnUi = await Host.GetAsync("/api/v1/health", null, ("Cookie", $"cfgdash_session={tailnet}"));
+
+        Assert.NotEqual(ui, tailnet);
+        Assert.Equal(200, uiOnUi.Status);
+        Assert.Equal(401, uiOnTailnet.Status);
+        Assert.Equal(200, tailnetOnTailnet.Status);
+        Assert.Equal(401, tailnetOnUi.Status);
+    }
+
+    [Fact]
+    public async Task The_raw_token_is_accepted_as_bearer_but_never_as_a_session_cookie_on_either_listener()
+    {
+        var rawCookie = ("Cookie", $"cfgdash_session={Host.Token}");
+
+        var uiCookie = await Host.GetAsync("/api/v1/health", null, rawCookie);
+        var tailnetCookie = await Host.TailAsync("/api/v1/health", bearer: null, headers: [.. Identity, rawCookie]);
+        var uiBearer = await Host.GetAsync("/api/v1/health");
+        var tailnetBearer = await Host.TailAsync("/api/v1/health", headers: Identity);
+
+        Assert.Equal(401, uiCookie.Status);
+        Assert.Equal(401, tailnetCookie.Status);
+        Assert.Equal(200, uiBearer.Status);
+        Assert.Equal(200, tailnetBearer.Status);
     }
 
     [Fact]

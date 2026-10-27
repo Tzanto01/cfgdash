@@ -129,6 +129,19 @@ internal sealed class CaptureWriter : TextWriter
     }
 }
 
+internal sealed class ThrowingWriter : TextWriter
+{
+    public override Encoding Encoding => Encoding.UTF8;
+
+    public override void Write(char value) => throw new IOException("broken pipe");
+
+    public override void Write(string? value) => throw new IOException("broken pipe");
+
+    public override void Write(char[] buffer, int index, int count) => throw new IOException("broken pipe");
+
+    public override void WriteLine(string? value) => throw new IOException("broken pipe");
+}
+
 internal sealed class FakeEnv(IDictionary<string, string>? values = null) : IEnvironmentReader
 {
     public string? Get(string name) => values is not null && values.TryGetValue(name, out var value) ? value : null;

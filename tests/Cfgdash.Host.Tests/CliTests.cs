@@ -179,6 +179,49 @@ public sealed class CliRunTests
         Assert.Equal(env.Dir, json.RootElement.GetProperty("context").GetProperty("targetDir").GetString());
     }
 
+    [Fact]
+    public async Task Second_export_in_the_same_second_exits_1_and_leaves_the_first_file_untouched()
+    {
+        using var env = new CliEnv();
+        var first = await env.RunAsync("export", "--dir", env.Dir);
+        var path = env.Out.Text.Trim();
+        var content = File.ReadAllText(path);
+
+        var second = await env.RunAsync("export", "--dir", env.Dir);
+
+        Assert.Equal(0, first);
+        Assert.Equal(1, second);
+        Assert.StartsWith("cfgdash:", env.Error.Text);
+        Assert.Equal(content, File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(Path.Combine(env.Cache, "exports")));
+    }
+
+    [Theory]
+    [InlineData("export")]
+    [InlineData("run")]
+    public async Task A_cache_dir_that_cannot_be_created_exits_1_with_a_message_instead_of_an_exception(string command)
+    {
+        using var env = new CliEnv();
+        File.WriteAllText(env.Cache, "a file where the cache dir should be");
+
+        var exit = await env.RunAsync(command, "--dir", env.Dir);
+
+        Assert.Equal(1, exit);
+        Assert.StartsWith("cfgdash:", env.Error.Text);
+    }
+
+    [Fact]
+    public void A_recorded_process_start_within_5_seconds_is_live_and_beyond_it_is_not()
+    {
+        using var env = new CliEnv();
+        var record = env.LiveRecord(12345, "recorded-token");
+
+        Assert.True(RunStateStore.IsLive(record with { ProcessStart = record.ProcessStart.AddSeconds(3) }));
+        Assert.True(RunStateStore.IsLive(record with { ProcessStart = record.ProcessStart.AddSeconds(-3) }));
+        Assert.False(RunStateStore.IsLive(record with { ProcessStart = record.ProcessStart.AddSeconds(10) }));
+        Assert.False(RunStateStore.IsLive(record with { ProcessStart = record.ProcessStart.AddSeconds(-10) }));
+    }
+
     [LinuxFact]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public async Task Run_state_is_user_only_on_linux()

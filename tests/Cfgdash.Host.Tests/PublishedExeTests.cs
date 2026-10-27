@@ -63,10 +63,12 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
 
             using var login = await http.GetAsync($"{baseUrl}/?token={token}");
             Assert.Equal(302, (int)login.StatusCode);
-            Assert.Contains($"cfgdash_session={token}", string.Join(";", login.Headers.GetValues("Set-Cookie")));
+            var session = login.Headers.GetValues("Set-Cookie").Single().Split(';')[0].Split('=', 2)[1];
+            Assert.NotEmpty(session);
+            Assert.NotEqual(token, session);
 
             using var snapshot = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/api/v1/snapshot");
-            snapshot.Headers.TryAddWithoutValidation("Cookie", $"cfgdash_session={token}");
+            snapshot.Headers.TryAddWithoutValidation("Cookie", $"cfgdash_session={session}");
             using var snapshotResponse = await http.SendAsync(snapshot);
             using var snapshotJson = JsonDocument.Parse(await snapshotResponse.Content.ReadAsStringAsync());
             Assert.Equal(200, (int)snapshotResponse.StatusCode);
@@ -135,6 +137,32 @@ public sealed partial class PublishedExeTests(ITestOutputHelper output)
             Assert.True(child.WaitForExit(15_000), "the server did not exit within 15 s of SIGTERM");
             Assert.Equal(0, child.ExitCode);
             Assert.False(File.Exists(sandbox.RunJson));
+        }
+        finally
+        {
+            killed = KillIfRunning(child);
+        }
+
+        Assert.False(killed, "the server had to be killed");
+    }
+
+    [PublishedExeFact(linuxOnly: true)]
+    public async Task Sighup_stops_the_server_gracefully_and_logs_the_hangup()
+    {
+        using var sandbox = new Sandbox();
+        using var temp = new TempDir();
+        var (child, _, _) = await sandbox.StartServerAsync(temp.Root);
+        var killed = false;
+        try
+        {
+            using var kill = Process.Start(new ProcessStartInfo("kill", ["-HUP", child.Id.ToString()]) { UseShellExecute = false })!;
+            await kill.WaitForExitAsync();
+
+            Assert.True(child.WaitForExit(15_000), "the server did not exit within 15 s of SIGHUP");
+            Assert.Equal(0, child.ExitCode);
+            Assert.False(File.Exists(sandbox.RunJson));
+            var log = Directory.GetFiles(Path.Combine(sandbox.CacheDir, "logs"), "*.log").Select(File.ReadAllLines).SelectMany(l => l).Last(l => l.Length > 0);
+            Assert.EndsWith("stop hangup", log);
         }
         finally
         {

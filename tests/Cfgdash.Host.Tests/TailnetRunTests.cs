@@ -83,6 +83,29 @@ public sealed class TailnetRunTests
     }
 
     [Fact]
+    public async Task Failed_serve_off_with_a_broken_error_stream_still_removes_run_state_and_logs_the_stop()
+    {
+        var tailscale = new FakeTailscale();
+        using var env = new CliEnv(TailnetEnv.Machine(), tailscale);
+        var port = CliEnv.FreePort();
+        var exit = CfgdashCli.RunAsync(
+            ["run", "--tailnet", "--port", port.ToString(), "--no-open", "--dir", env.Dir],
+            TestCore.Deps(env.Core, env.Cache, env.Out, new ThrowingWriter(), env.Time, env.Opened.Add, env.Exe));
+        await Poll.UntilAsync(() => exit.IsCompleted || (env.Store.Read() is not null && env.Out.Text.Contains("Tagged devices")));
+        var state = env.Store.Read()!;
+        tailscale.OffFails = true;
+
+        await env.ShutdownAsync(state);
+        var code = await exit;
+
+        var log = string.Concat(Directory.GetFiles(Path.Combine(env.Cache, "logs"), "*.log").Select(File.ReadAllText));
+        Assert.Equal(0, code);
+        Assert.True(tailscale.Called("serve", $"--https={port}", "off"));
+        Assert.False(File.Exists(env.Store.FilePath));
+        Assert.Contains("stop requested", log);
+    }
+
+    [Fact]
     public async Task Run_tailnet_prints_the_override_login_and_the_allowed_tags()
     {
         var tailscale = new FakeTailscale();

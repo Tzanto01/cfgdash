@@ -143,6 +143,45 @@ public sealed class ApiTests(ApiFixture fixture) : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task A_snapshot_build_that_blocks_synchronously_does_not_hold_the_request_or_the_server()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var snapshots = new FakeSnapshots
+        {
+            FailWith = (_, _) =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+                return null;
+            },
+        };
+        await using var host = await ServerHost.StartAsync(snapshots: snapshots);
+        using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var abort = new CancellationTokenSource();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{host.Port}/api/v1/snapshot");
+        request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + host.Token);
+        try
+        {
+            var pending = http.SendAsync(request, abort.Token);
+            Assert.True(await Poll.UntilAsync(() => entered.IsSet), "the build never started");
+
+            var health = host.GetAsync("/api/v1/health");
+            var answered = await Task.WhenAny(health, Task.Delay(5_000)) == health;
+            await abort.CancelAsync();
+            var logged = await Poll.UntilAsync(() => host.ReadLog().Contains("GET /api/v1/snapshot"), 5_000);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+
+            Assert.True(answered, "health did not answer while a build was blocked");
+            Assert.True(logged, "the aborted snapshot request stayed stuck behind the blocking build");
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [Fact]
     public async Task File_known_to_the_snapshot_returns_its_content()
     {
         var response = await Host.GetAsync("/api/v1/files/f1");
@@ -224,12 +263,32 @@ public sealed class ApiTests(ApiFixture fixture) : IClassFixture<ApiFixture>
     }
 
     [WindowsFact]
-    public async Task Dirs_rejects_unc_paths_without_touching_the_network()
+    public async Task Dirs_rejects_device_and_unc_style_paths_even_when_they_name_an_existing_directory()
     {
-        var response = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(@"\\server.example\share")}");
+        var device = @"\\?\" + fixture.Tree;
+        var slashes = "//?/" + Slash(fixture.Tree);
 
-        Assert.Equal(400, response.Status);
-        Assert.Equal("bad-dir", response.Error);
+        var plain = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(fixture.Tree)}");
+        var backslashes = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(device)}");
+        var forward = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(slashes)}");
+
+        Assert.Equal(200, plain.Status);
+        Assert.Equal(400, backslashes.Status);
+        Assert.Equal("bad-dir", backslashes.Error);
+        Assert.Equal(400, forward.Status);
+        Assert.Equal("bad-dir", forward.Error);
+    }
+
+    [Fact]
+    public async Task Dirs_of_a_filesystem_root_reports_a_null_parent()
+    {
+        var root = Path.GetPathRoot(fixture.Tree)!;
+
+        var response = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(root)}");
+
+        Assert.Equal(200, response.Status);
+        Assert.True(response.Json.TryGetProperty("parent", out var parent), "parent is missing from the JSON");
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, parent.ValueKind);
     }
 
     [Fact]
