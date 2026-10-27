@@ -1,0 +1,98 @@
+@let s = snapshot();
+@if (s) {
+  <header class="page-header identity">
+    <h1 tabindex="-1" class="mono">{{ s.machine.hostname }}</h1>
+    <ul class="identity-facts">
+      <li>{{ s.machine.os.description }}, {{ s.machine.os.arch }}</li>
+      @if (s.machine.tailnet; as t) {
+        <li>
+          <span class="mono">{{ t.dnsName }}</span>
+          @for (tag of t.tags; track tag) {
+            <span class="badge" data-tone="neutral">{{ tag }}</span>
+          }
+        </li>
+      }
+      <li>{{ collected() }}</li>
+      <li>cfgdash {{ s.machine.cfgdashVersion }}</li>
+    </ul>
+  </header>
+
+  <section class="overview-part" aria-labelledby="sources-title">
+    <h2 id="sources-title">Sources</h2>
+    <p class="tabular">{{ sourcesSummary() }}</p>
+    @if (nonActive().length) {
+      <ul class="source-list">
+        @for (c of nonActive(); track c.id) {
+          <li>
+            <span class="source-title">{{ c.title }}</span>
+            <app-state-chip [state]="c.state" />
+            @if (c.reason) {
+              <span class="muted">{{ c.reason }}</span>
+            }
+            <a [routerLink]="viewLink(c)" [queryParams]="url.linkParams()" class="source-link">
+              View<span class="sr-only"> {{ c.title }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="overview-part" aria-labelledby="views-title">
+    <h2 id="views-title">Views</h2>
+    <ul class="view-cards">
+      @for (v of cards(); track v.id) {
+        <li class="view-card">
+          <h3 class="view-card-title">
+            <a [routerLink]="'/' + v.id" [queryParams]="url.linkParams()" class="stretched">{{ v.label }}</a>
+          </h3>
+          <p class="muted">{{ v.description }}</p>
+          <p class="tabular muted">{{ count(v.itemCount) }}</p>
+          <ul class="card-states">
+            @for (c of v.collectors; track c.id) {
+              <li>
+                <app-state-chip [state]="c.state" />
+                <span>{{ c.title }}</span>
+                @if (c.state !== 'active' && c.reason) {
+                  <span class="muted">{{ c.reason }}</span>
+                }
+              </li>
+            }
+          </ul>
+        </li>
+      }
+    </ul>
+  </section>
+
+  <section class="overview-part" aria-labelledby="paths-title">
+    <h2 id="paths-title">Context paths</h2>
+    <ul class="context-paths">
+      <li class="context-row">
+        <span class="context-key">Target folder</span>
+        <span class="mono context-value">{{ s.context.targetDir }}</span>
+        <span class="muted context-source">selected folder</span>
+        <span></span>
+      </li>
+      @for (p of s.context.paths; track p.key) {
+        <li class="context-row">
+          <span class="mono context-key">{{ p.key }}</span>
+          @if (p.value) {
+            <span class="mono context-value">{{ p.value }}</span>
+          } @else {
+            <span class="muted context-value">not set</span>
+          }
+          <span class="muted context-source">{{ p.source ?? '' }}</span>
+          <span>
+            @if (!p.exists) {
+              <span class="badge" data-tone="neutral">missing</span>
+            }
+          </span>
+        </li>
+      }
+    </ul>
+  </section>
+
+  @for (section of overview()?.sections ?? []; track section.collectorId) {
+    <app-section-view [section]="section" [collector]="collectorsById().get(section.collectorId)" [reveal]="reveal()" />
+  }
+}

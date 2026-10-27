@@ -1,0 +1,98 @@
+<header class="page-header">
+  <h1 tabindex="-1">Search</h1>
+</header>
+
+<form role="search" class="search-page-form" (submit)="onSubmit($event)">
+  <label for="search-page-input">Search everything</label>
+  <div class="search-field">
+    <app-icon name="search" />
+    <input
+      id="search-page-input"
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Search settings, files, hooks..."
+      [value]="text()"
+      (input)="onInput($event)"
+    />
+  </div>
+</form>
+
+@let st = state();
+<div class="search-results">
+  @switch (st.phase) {
+    @case ('hint') {
+      <p class="muted">Search keys, values, labels and file contents. Type at least 2 characters.</p>
+    }
+    @case ('loading') {
+      <p class="panel-inline muted" role="status"><span class="spinner" aria-hidden="true"></span>Searching...</p>
+    }
+    @case ('error') {
+      @if (st.phase === 'error') {
+        <div class="panel">
+          @if (st.kind === 'unreachable') {
+            <p>cfgdash isn't answering. It may have stopped; start it again with <code>cfgdash</code>.</p>
+          } @else {
+            <p>The search didn't work.</p>
+          }
+          <button type="button" class="button" (click)="retry()">Try again</button>
+        </div>
+      }
+    }
+    @case ('content') {
+      @if (st.phase === 'content') {
+        @if (!st.value.results.length) {
+          <p>No results for "{{ st.value.query }}".</p>
+        } @else {
+          <div>
+            <p class="tabular">{{ summary() }}</p>
+            @if (st.value.truncated) {
+              <p class="muted">Showing the first 200; refine the search.</p>
+            }
+          </div>
+          @for (group of groups(); track group.id) {
+            <section class="hit-group">
+              <h2>{{ group.label }} ({{ group.hits.length }})</h2>
+              <ul class="hits">
+                @for (h of group.hits; track $index) {
+                  <li>
+                    <a class="hit" [routerLink]="h.link" [queryParams]="url.linkParams()" [fragment]="h.fragment">
+                      <span class="hit-location">{{ h.location }}</span>
+                      <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
+                    </a>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+          @if (fileGroups().length) {
+            <section class="hit-group">
+              <h2>File contents ({{ fileHitCount() }})</h2>
+              @for (file of fileGroups(); track file.fileId) {
+                @let all = expandedFiles().has(file.fileId);
+                <section class="file-hits">
+                  <h3 class="mono">{{ file.path }} <span class="muted tabular">({{ file.hits.length }} {{ file.hits.length === 1 ? 'match' : 'matches' }})</span></h3>
+                  <ul class="hits" #fileHits>
+                    @for (h of all ? file.hits : file.hits.slice(0, filePreview); track $index) {
+                      <li>
+                        <button type="button" class="hit" (click)="url.openFile(file.fileId, h.hit.line)">
+                          <span class="hit-location">{{ h.location }}<span class="sr-only"> of {{ file.path }}</span></span>
+                          <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                  @if (!all && file.hits.length > filePreview) {
+                    <button type="button" class="link-button show-all" (click)="showAllInFile(file.fileId, fileHits)">
+                      Show all {{ file.hits.length }} in this file
+                    </button>
+                  }
+                </section>
+              }
+            </section>
+          }
+        }
+      }
+    }
+  }
+</div>
