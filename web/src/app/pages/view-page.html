@@ -1,0 +1,53 @@
+@let m = model();
+@if (!m) {
+  <header class="page-header">
+    <h1 tabindex="-1">Nothing here</h1>
+    <p class="muted">There is no view called "{{ view() }}".</p>
+  </header>
+  <p><a routerLink="/overview" [queryParams]="url.linkParams()">Go to the overview</a></p>
+} @else {
+  <header class="page-header">
+    <h1 tabindex="-1">{{ m.label }}</h1>
+    <p class="muted">{{ m.description }}</p>
+    @if (needsFolder()) {
+      <div class="folder-row">
+        <span class="folder-label">Folder</span>
+        <span class="mono folder-path">{{ store.snapshot()?.context?.targetDir }}</span>
+        <button type="button" class="button" (click)="openPicker()">Change folder</button>
+      </div>
+    }
+  </header>
+
+  @if (unavailable().length) {
+    <ul class="state-notes">
+      @for (c of unavailable(); track c.id) {
+        <li><span class="dot" data-state="unavailable" aria-hidden="true"></span>{{ c.title }}: unavailable, {{ c.reason }}</li>
+      }
+    </ul>
+  }
+
+  @if (m.sections.length) {
+    @for (group of groups(); track group.viewId) {
+      @if (m.id === 'other') {
+        <h2 class="group-title mono">{{ group.viewId }}</h2>
+        @if (!group.sections.length) {
+          <p class="muted">Nothing to show for this view on this machine.</p>
+        }
+      }
+      @for (section of group.sections; track section.collectorId) {
+        <app-section-view
+          [section]="section"
+          [collector]="collectorsById().get(section.collectorId)"
+          [headingLevel]="m.id === 'other' ? 3 : 2"
+          [reveal]="reveal()"
+        />
+      }
+    }
+  } @else {
+    <p class="empty muted">Nothing to show for this view on this machine.</p>
+  }
+
+  @if (notPresent().length) {
+    <p class="not-present muted">Not on this machine: {{ notPresentText() }}</p>
+  }
+}

@@ -1,0 +1,71 @@
+<dialog #dialog class="sheet sheet-side" aria-labelledby="file-viewer-title" (cancel)="onCancel($event)">
+  <div class="sheet-header">
+    <div class="sheet-heading">
+      <h2 id="file-viewer-title" #heading tabindex="-1" class="mono">{{ name() }}</h2>
+      <p class="mono muted file-path">{{ path() }}</p>
+      <p class="file-facts muted tabular">
+        @if (kind()) {
+          <span>{{ kind() }}</span>
+        }
+        @if (size()) {
+          <span>{{ size() }}</span>
+        }
+        @if (tokens()) {
+          <span>{{ tokens() }}</span>
+        }
+        @if (ref()?.company) {
+          <span class="badge" data-tone="company">company</span>
+        }
+      </p>
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="button button-quiet" (click)="copyPath()" [disabled]="!path()">
+        <app-icon name="copy" />{{ copied() ? 'Copied' : 'Copy path' }}
+      </button>
+      <span class="sr-only" aria-live="polite">{{ copied() ? 'Path copied' : '' }}</span>
+      <button type="button" class="icon-button" aria-label="Close file" (click)="close()">
+        <app-icon name="close" />
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet-body">
+    @if (url.file()) {
+      @let st = state();
+      @switch (st.phase) {
+        @case ('loading') {
+          <p class="panel-inline muted" role="status"><span class="spinner" aria-hidden="true"></span>Loading the file...</p>
+        }
+        @case ('error') {
+          @if (st.phase === 'error') {
+            <div class="panel">
+              @if (st.kind === 'not-found') {
+                <p>This file isn't available for the selected folder.</p>
+              } @else {
+                <p>Couldn't load the file.</p>
+                <button type="button" class="button" (click)="retry()">Try again</button>
+              }
+            </div>
+          }
+        }
+        @case ('content') {
+          @if (st.phase === 'content') {
+            <div class="file-toolbar">
+              @if (st.value.truncated) {
+                <p class="notice">Showing the first 512 KB; the rest of the file is cut off.</p>
+              }
+              <button type="button" class="button button-quiet" [attr.aria-pressed]="wrap()" (click)="wrap.set(!wrap())">
+                Wrap lines
+              </button>
+            </div>
+            <ol class="code" [class.nowrap]="!wrap()" aria-label="File content" tabindex="0">
+              @for (text of lines(); track $index; let i = $index) {
+                <li [attr.data-line]="i + 1" [class.line-hit]="url.line() === i + 1">{{ text }}</li>
+              }
+            </ol>
+          }
+        }
+      }
+    }
+  </div>
+</dialog>
