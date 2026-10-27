@@ -55,7 +55,7 @@ internal static partial class CfgdashCli
         return options.Command switch
         {
             "stop" => await StopAsync(dependencies),
-            "update" => NotImplemented(dependencies, "update"),
+            "update" => await UpdateAsync(options, dependencies),
             "export" => await ExportAsync(options, dependencies),
             _ => await RunServerAsync(options, dependencies),
         };
@@ -165,12 +165,6 @@ internal static partial class CfgdashCli
         }
     }
 
-    private static int NotImplemented(HostDependencies dependencies, string what)
-    {
-        dependencies.Error.WriteLine($"cfgdash: {what} is not implemented yet.");
-        return ExitError;
-    }
-
     private static async Task<int> RunServerAsync(CliOptions options, HostDependencies dependencies)
     {
         var core = await dependencies.CreateCore(CancellationToken.None);
@@ -188,17 +182,19 @@ internal static partial class CfgdashCli
             await CleanupStaleAsync(store, existing, core);
         }
 
-        if (options.Tailnet)
+        TailnetListenerOptions? tailnetOptions = null;
+        if (options.Tailnet && (tailnetOptions = CheckTailnet(core, dependencies.Error)) is null)
         {
-            return NotImplemented(dependencies, "--tailnet");
+            return ExitPrerequisite;
         }
 
+        var tailscale = new TailscaleCli(core.Processes, core.Environment.Tools.GetValueOrDefault("tailscale"));
         var token = TokenVerifier.CreateToken();
         var log = new CfgdashLog(Path.Combine(cacheDir, "logs"), dependencies.TimeProvider);
         CfgdashServer server;
         try
         {
-            server = await CfgdashServer.StartAsync(new ServerOptions(options.Port, options.Dir, token), core, dependencies, log, CancellationToken.None);
+            server = await CfgdashServer.StartAsync(new ServerOptions(options.Port, options.Dir, token, tailnetOptions), core, dependencies, log, CancellationToken.None);
         }
         catch (IOException)
         {
@@ -206,12 +202,51 @@ internal static partial class CfgdashCli
             return ExitError;
         }
 
+        RunTailnet? tailnet = null;
+        if (tailnetOptions is not null)
+        {
+            tailnet = new RunTailnet(server.HttpsPort!.Value, server.BackendPort!.Value, tailnetOptions.DnsName);
+            var status = await tailscale.ServeStatusAsync(CancellationToken.None);
+            var problem = status is null
+                ? "could not read `tailscale serve status --json`"
+                : status.UsesPort(tailnet.HttpsPort) ? $"HTTPS port {tailnet.HttpsPort} already has a tailscale serve handler; choose another --port" : null;
+            if (problem is not null)
+            {
+                await server.DisposeAsync();
+                dependencies.Error.WriteLine($"cfgdash: {problem}");
+                return ExitPrerequisite;
+            }
+        }
+
         var reason = "error";
+        var published = false;
         try
         {
-            store.Write(new RunState(Environment.ProcessId, RunStateStore.CurrentProcessStart(), dependencies.ExePath ?? string.Empty, server.Port, token, options.Dir, null, dependencies.TimeProvider.GetUtcNow()));
-            log.Write($"start version={HostDependencies.Version} port={server.Port} tailnet=off");
-            var url = PrintUrls(dependencies.Out, server.Port, token, null);
+            store.Write(new RunState(Environment.ProcessId, RunStateStore.CurrentProcessStart(), dependencies.ExePath ?? string.Empty, server.Port, token, options.Dir, tailnet, dependencies.TimeProvider.GetUtcNow()));
+            if (tailnet is not null)
+            {
+                var result = await tailscale.ServeAsync(tailnet.HttpsPort, tailnet.BackendPort, CancellationToken.None);
+                if (result.TimedOut || result.ExitCode != 0)
+                {
+                    dependencies.Error.WriteLine($"cfgdash: tailscale serve failed: {ShortLine(result.TimedOut ? "timed out" : result.StandardError)}");
+                    await RemoveServeHandlerIfOursAsync(tailscale, tailnet, log);
+                    return ExitPrerequisite;
+                }
+
+                published = true;
+            }
+
+            log.Write($"start version={HostDependencies.Version} port={server.Port} tailnet={(tailnet is null ? "off" : $"{tailnet.DnsName}:{tailnet.HttpsPort}")}");
+            var url = PrintUrls(dependencies.Out, server.Port, token, tailnet);
+            if (tailnetOptions is not null)
+            {
+                dependencies.Out.WriteLine($"Allowed login: {(tailnetOptions.AllowedLogins.Count == 0 ? "none" : string.Join(", ", tailnetOptions.AllowedLogins))}");
+                if (tailnetOptions.MagicDnsSuffix.Length > 0)
+                {
+                    dependencies.Out.WriteLine($"Tagged devices of {core.Environment.Tailnet!.TailnetName} allowed{(tailnetOptions.AllowedTags.Count == 0 ? string.Empty : $" (tags: {string.Join(", ", tailnetOptions.AllowedTags)})")}");
+                }
+            }
+
             if (!HasDesktop(core.EnvironmentReader))
             {
                 if (!options.Tailnet)
@@ -228,6 +263,11 @@ internal static partial class CfgdashCli
         }
         finally
         {
+            if (published && !await RemoveServeHandlerAsync(tailscale, tailnet!, log))
+            {
+                dependencies.Error.WriteLine($"cfgdash: could not confirm that the tailscale serve handler is gone; remove it with: tailscale serve --https={tailnet!.HttpsPort} off");
+            }
+
             await server.DisposeAsync();
             store.Delete();
             log.Write($"stop {reason}");
@@ -328,7 +368,64 @@ internal static partial class CfgdashCli
         store.Delete();
     }
 
-    private static Task RemoveRecordedServeHandlerAsync(RunState state, CoreServices core) => Task.CompletedTask;
+    /// <summary>Removes the serve handler recorded in a stale <c>run.json</c>, only when serve status proves it is cfgdash's (exact <c>&lt;dnsName&gt;:&lt;httpsPort&gt;</c> key whose <c>/</c> proxies to the recorded backend port).</summary>
+    private static async Task RemoveRecordedServeHandlerAsync(RunState state, CoreServices core)
+    {
+        if (state.Tailnet is { } tailnet && core.Environment.Tools.GetValueOrDefault("tailscale") is { } executable)
+        {
+            await RemoveServeHandlerIfOursAsync(new TailscaleCli(core.Processes, executable), tailnet, null);
+        }
+    }
+
+    private static async Task RemoveServeHandlerIfOursAsync(TailscaleCli tailscale, RunTailnet tailnet, CfgdashLog? log)
+    {
+        if ((await tailscale.ServeStatusAsync(CancellationToken.None))?.IsOurs(tailnet) == true)
+        {
+            await RemoveServeHandlerAsync(tailscale, tailnet, log);
+        }
+    }
+
+    /// <summary><c>serve --https=&lt;port&gt; off</c>, then confirms the port is gone from serve status.</summary>
+    private static async Task<bool> RemoveServeHandlerAsync(TailscaleCli tailscale, RunTailnet tailnet, CfgdashLog? log)
+    {
+        var off = await tailscale.ServeOffAsync(tailnet.HttpsPort, CancellationToken.None);
+        var removed = !off.TimedOut && off.ExitCode == 0
+            && await tailscale.ServeStatusAsync(CancellationToken.None) is { } status && !status.UsesPort(tailnet.HttpsPort);
+        log?.Write(removed ? "serve-off ok" : "serve-off failed");
+        return removed;
+    }
+
+    /// <summary>The tailnet listener options when every <c>--tailnet</c> precondition holds; otherwise prints the first failure and returns null.</summary>
+    private static TailnetListenerOptions? CheckTailnet(CoreServices core, TextWriter error)
+    {
+        var environment = core.Environment;
+        var status = environment.Tailnet;
+        var dnsName = status is null ? string.Empty : TailnetRules.TrimDot(status.DnsName);
+        var logins = TailnetRules.AllowedLogins(environment);
+        var problem =
+            !environment.HasTool("tailscale") ? "tailscale is not installed"
+            : status is null ? "tailscale is not running or not logged in"
+            : status.BackendState != "Running" ? $"tailscale is not running (state: {status.BackendState})"
+            : !status.MagicDnsEnabled ? "MagicDNS is off for this tailnet; enable it in the tailscale admin console"
+            : dnsName.Length == 0 || !status.CertDomains.Any(d => string.Equals(TailnetRules.TrimDot(d), dnsName, StringComparison.OrdinalIgnoreCase))
+                ? "tailnet HTTPS certificates are not enabled; enable HTTPS in the tailscale admin console"
+            : logins.Count == 0 && status.MagicDnsSuffix.Length == 0
+                ? $"no allowed tailnet identity can be derived; set allowedLogins in {CfgdashPaths.OverridesFile(core.EnvironmentReader)}"
+            : null;
+        if (problem is not null)
+        {
+            error.WriteLine($"cfgdash: {problem}");
+            return null;
+        }
+
+        return new TailnetListenerOptions(dnsName, logins, status!.MagicDnsSuffix, environment.AllowedTags);
+    }
+
+    private static string ShortLine(string text)
+    {
+        var line = string.Join(' ', text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return line.Length == 0 ? "no details" : line.Length > 300 ? line[..300] : line;
+    }
 
     private static async Task RequestShutdownAsync(RunState state, CancellationToken cancellationToken)
     {

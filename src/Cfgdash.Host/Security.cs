@@ -1,4 +1,6 @@
 using System.Buffers.Text;
+using System.ComponentModel;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -64,6 +66,7 @@ internal sealed record WhoisNode(string Name, IReadOnlyList<string> Tags);
 internal sealed class TailscaleCli(IProcessRunner processes, string? executable)
 {
     private static readonly TimeSpan WhoisTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ServeTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Null when tailscale is absent, fails, or answers without a node name.</summary>
     public async Task<WhoisNode?> WhoisAsync(string ip, CancellationToken cancellationToken)
@@ -102,6 +105,97 @@ internal sealed class TailscaleCli(IProcessRunner processes, string? executable)
             return null;
         }
     }
+
+    /// <summary>Parsed <c>tailscale serve status --json</c>; null when tailscale is absent, fails, or prints something unparseable. Missing <c>TCP</c>/<c>Web</c>/<c>Handlers</c> mean empty.</summary>
+    public async Task<ServeStatus?> ServeStatusAsync(CancellationToken cancellationToken)
+    {
+        var result = await RunAsync(["serve", "status", "--json"], cancellationToken);
+        if (result.TimedOut || result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(result.StandardOutput);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var tcp = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("TCP", out var tcpObject) && tcpObject.ValueKind == JsonValueKind.Object)
+            {
+                tcp.UnionWith(tcpObject.EnumerateObject().Select(p => p.Name));
+            }
+
+            var web = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("Web", out var webObject) && webObject.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var site in webObject.EnumerateObject())
+                {
+                    string? proxy = null;
+                    if (site.Value.ValueKind == JsonValueKind.Object
+                        && site.Value.TryGetProperty("Handlers", out var handlers) && handlers.ValueKind == JsonValueKind.Object
+                        && handlers.TryGetProperty("/", out var rootHandler) && rootHandler.ValueKind == JsonValueKind.Object
+                        && rootHandler.TryGetProperty("Proxy", out var proxyValue) && proxyValue.ValueKind == JsonValueKind.String)
+                    {
+                        proxy = proxyValue.GetString();
+                    }
+
+                    web[site.Name] = proxy;
+                }
+            }
+
+            return new ServeStatus(tcp, web);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary><c>tailscale serve --bg --https=&lt;httpsPort&gt; http://127.0.0.1:&lt;backendPort&gt;</c>.</summary>
+    public Task<ProcessResult> ServeAsync(int httpsPort, int backendPort, CancellationToken cancellationToken) =>
+        RunAsync(["serve", "--bg", $"--https={httpsPort.ToString(CultureInfo.InvariantCulture)}", $"http://127.0.0.1:{backendPort.ToString(CultureInfo.InvariantCulture)}"], cancellationToken);
+
+    /// <summary><c>tailscale serve --https=&lt;httpsPort&gt; off</c>: drops every handler on that port, so only call it for a port cfgdash published.</summary>
+    public Task<ProcessResult> ServeOffAsync(int httpsPort, CancellationToken cancellationToken) =>
+        RunAsync(["serve", $"--https={httpsPort.ToString(CultureInfo.InvariantCulture)}", "off"], cancellationToken);
+
+    private async Task<ProcessResult> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        if (executable is null)
+        {
+            return new ProcessResult(-1, string.Empty, "tailscale is not installed", false);
+        }
+
+        try
+        {
+            return await processes.RunAsync(executable, arguments, ServeTimeout, cancellationToken);
+        }
+        catch (Win32Exception)
+        {
+            return new ProcessResult(-1, string.Empty, "tailscale could not be started", false);
+        }
+    }
+}
+
+/// <summary><c>TCP</c> port keys and, per <c>Web</c> key (<c>&lt;dnsName&gt;:&lt;port&gt;</c>), the <c>/</c> handler's <c>Proxy</c> (null when absent).</summary>
+internal sealed record ServeStatus(IReadOnlySet<string> TcpPorts, IReadOnlyDictionary<string, string?> Web)
+{
+    /// <summary>The port has a TCP entry or any Web key ends with <c>:&lt;port&gt;</c> (one per MagicDNS name).</summary>
+    public bool UsesPort(int port)
+    {
+        var key = port.ToString(CultureInfo.InvariantCulture);
+        return TcpPorts.Contains(key) || Web.Keys.Any(k => k.EndsWith(":" + key, StringComparison.Ordinal));
+    }
+
+    /// <summary>The handler at <c>&lt;dnsName&gt;:&lt;httpsPort&gt;</c> <c>/</c> proxies exactly to cfgdash's backend port.</summary>
+    public bool IsOurs(RunTailnet tailnet) =>
+        Web.TryGetValue($"{TailnetRules.TrimDot(tailnet.DnsName)}:{tailnet.HttpsPort.ToString(CultureInfo.InvariantCulture)}", out var proxy)
+        && proxy == $"http://127.0.0.1:{tailnet.BackendPort.ToString(CultureInfo.InvariantCulture)}";
 }
 
 internal static class TailnetRules

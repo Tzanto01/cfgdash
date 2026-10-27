@@ -157,9 +157,13 @@ internal sealed class CfgdashServer : IAsyncDisposable
         await app.DisposeAsync();
     }
 
+    /// <summary>Null unless an existing fully qualified directory. On Windows a path starting with a separator (UNC <c>\\server\share</c>, <c>//server</c>, device <c>\\?\</c>, <c>\\.\</c>, <c>\??\</c>) is rejected before any file system access.</summary>
     internal static string? NormalizeDir(string? path)
     {
-        if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path) || !Directory.Exists(path))
+        if (string.IsNullOrEmpty(path)
+            || (OperatingSystem.IsWindows() && path[0] is '\\' or '/')
+            || !Path.IsPathFullyQualified(path)
+            || !Directory.Exists(path))
         {
             return null;
         }
