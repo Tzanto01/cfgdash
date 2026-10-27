@@ -1035,6 +1035,14 @@ app-json-value {
   }
 }
 
+app-table-block {
+  position: relative;
+  display: block;
+  margin: -4px;
+  padding: 4px;
+  overflow-x: auto;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
