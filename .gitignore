@@ -37,3 +37,4 @@ tmp/
 
 # Team receipts and local notes
 .notes/
+.worktrees/
