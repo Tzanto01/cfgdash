@@ -60,6 +60,11 @@ internal sealed partial class Redactor : IRedactor
         + "([\"']?\\s*[=:]\\s*(?:(?:Bearer|Basic)\\s+)?)(\"[^\"]*\"|'[^']*'|[^\\s,;\"']+)",
         LinearIgnoreCase);
 
+    private static readonly Regex CamelAssignmentRegex = new(
+        "\\b([A-Za-z0-9_.-]*[a-z0-9](?:Key|Keys|Pass|Auth|Session|Secret|Token|Password|Pwd|Credential|Cookie)[A-Za-z0-9_.-]*)"
+        + "([\"']?\\s*[=:]\\s*(?:(?:Bearer|Basic)\\s+)?)(\"[^\"]*\"|'[^']*'|[^\\s,;\"']+)",
+        Linear);
+
     private static readonly Regex NetrcPasswordRegex = new("\\b(?:password|passwd)[ \\t]+([^\\s=:]\\S*)", LinearIgnoreCase);
 
     public bool IsSecretName(string name)
@@ -103,6 +108,7 @@ internal sealed partial class Redactor : IRedactor
         text = CliFlagRegex.Replace(text, m => ReplaceValue(m, m.Groups[2]));
         text = AssignmentRegex.Replace(text, m =>
             IsPasswordName(m.Groups[1].Value) && IsExempt(m.Groups[3].Value) ? m.Value : ReplaceValue(m, m.Groups[3]));
+        text = CamelAssignmentRegex.Replace(text, m => ReplaceValue(m, m.Groups[3]));
         text = NetrcPasswordRegex.Replace(text, m => ReplaceGroup(m, m.Groups[1]));
         return text;
     }

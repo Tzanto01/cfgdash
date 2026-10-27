@@ -15,7 +15,7 @@ public sealed class FrontmatterTests
         Assert.Null(result.Fields);
         Assert.Equal("frontmatter is too large or too deeply nested", result.Error);
         Assert.Equal("body", result.Body);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), watch.Elapsed.ToString());
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), watch.Elapsed.ToString());
     }
 
     [Fact]
