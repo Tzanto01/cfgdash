@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "machine": {
+    "hostname": "devbox",
+    "tailnet": { "dnsName": "devbox.example.ts.net", "tailnetName": "example.github", "tags": ["tag:pc"] },
+    "os": { "family": "windows", "description": "Microsoft Windows 10.0.26200", "arch": "x64" },
+    "collectedAt": "2026-10-27T10:00:00Z",
+    "cfgdashVersion": "0.1.0"
+  },
+  "context": {
+    "targetDir": "D:/ws/app",
+    "paths": [
+      { "key": "workspaceRoot", "value": "D:/ws", "source": "env-user:WORKSPACE_ROOT", "exists": true },
+      { "key": "claudeConfigDir", "value": "D:/ws/config/.claude", "source": "env:CLAUDE_CONFIG_DIR", "exists": true },
+      { "key": "engramDataDir", "value": "D:/ws/config/.engram", "source": "env:ENGRAM_DATA_DIR", "exists": true },
+      { "key": "configRepo", "value": "D:/ws/config", "source": "derived:claudeConfigDir-parent", "exists": true },
+      { "key": "companyLayer", "value": "D:/ws/acme", "source": "file:company-paths.psd1", "exists": true }
+    ]
+  },
+  "collectors": [
+    { "id": "overview.machine", "title": "Machine", "version": "1.0.0", "view": "overview", "state": "active", "requirements": { "targetDir": false }, "durationMs": 310 },
+    { "id": "settings.effective", "title": "Effective settings", "version": "1.0.0", "view": "settings", "state": "active", "requirements": { "paths": ["claudeConfigDir"], "targetDir": true }, "durationMs": 12 },
+    { "id": "instructions.chain", "title": "Instruction chain", "version": "1.0.0", "view": "instructions", "state": "active", "requirements": { "targetDir": true }, "durationMs": 20 },
+    { "id": "agents.company-core", "title": "Company agent cores", "version": "1.0.0", "view": "agents", "state": "unavailable", "reason": "pwsh not installed", "requirements": { "tools": ["pwsh"], "paths": ["configRepo", "companyLayer"], "targetDir": false }, "durationMs": 0 },
+    { "id": "hooks.registered", "title": "Hooks", "version": "1.0.0", "view": "hooks", "state": "active", "requirements": { "paths": ["claudeConfigDir"], "targetDir": true }, "durationMs": 9, "notes": ["1 hook script not found"] },
+    { "id": "jobs.systemd-user", "title": "systemd user units", "version": "1.0.0", "view": "jobs", "state": "notPresent", "reason": "Linux only", "requirements": { "os": ["linux"], "tools": ["systemctl"], "targetDir": false }, "durationMs": 0 }
+  ],
+  "sections": [
+    {
+      "collectorId": "overview.machine", "view": "overview", "title": "Machine",
+      "blocks": [
+        { "type": "kv", "id": "machine", "title": "Machine", "rows": [
+          { "key": "hostname", "value": "devbox", "source": { "label": "system" } },
+          { "key": "claudeCodeVersion", "value": "2.1.311", "source": { "label": "claude --version" } },
+          { "key": "workspaceRoot", "value": "D:/ws", "source": { "label": "env-user:WORKSPACE_ROOT" } }
+        ] }
+      ]
+    },
+    {
+      "collectorId": "settings.effective", "view": "settings", "title": "Effective settings",
+      "blocks": [
+        { "type": "kv", "id": "effective", "title": "Effective settings", "description": "Merged from 3 layers for D:/ws/app", "rows": [
+          { "key": "model", "value": "opus", "source": { "label": "project (local)", "fileId": "a1b2c3d4e5f60718" },
+            "contributions": [
+              { "value": "opus", "source": { "label": "project (local)", "fileId": "a1b2c3d4e5f60718" }, "status": "applied" },
+              { "value": "sonnet", "source": { "label": "user", "fileId": "0f1e2d3c4b5a6978" }, "status": "overridden" }
+            ] },
+          { "key": "permissions.allow", "value": ["Bash(npm test *)", "Read(./docs/**)"], "source": { "label": "2 layers" },
+            "contributions": [
+              { "value": ["Bash(npm test *)"], "source": { "label": "project", "fileId": "b2c3d4e5f6071829" }, "status": "merged" },
+              { "value": ["Read(./docs/**)"], "source": { "label": "user", "fileId": "0f1e2d3c4b5a6978" }, "status": "merged" }
+            ] },
+          { "key": "env.OTEL_EXPORTER_OTLP_HEADERS", "value": "[redacted]", "redacted": true, "flags": ["redacted"], "source": { "label": "user", "fileId": "0f1e2d3c4b5a6978" } }
+        ] },
+        { "type": "table", "id": "layers", "title": "Layers (highest precedence first)",
+          "columns": [ { "key": "layer", "label": "Layer" }, { "key": "file", "label": "File" }, { "key": "status", "label": "Status" } ],
+          "rows": [
+            { "id": "managed", "cells": { "layer": "managed", "file": null, "status": "not present" } },
+            { "id": "local", "cells": { "layer": "project (local)", "file": { "text": "D:/ws/app/.claude/settings.local.json", "fileId": "a1b2c3d4e5f60718" }, "status": "loaded" }, "fileId": "a1b2c3d4e5f60718" },
+            { "id": "project", "cells": { "layer": "project", "file": { "text": "D:/ws/app/.claude/settings.json", "fileId": "b2c3d4e5f6071829" }, "status": "loaded" }, "fileId": "b2c3d4e5f6071829" },
+            { "id": "user", "cells": { "layer": "user", "file": { "text": "D:/ws/config/.claude/settings.json", "fileId": "0f1e2d3c4b5a6978" }, "status": "loaded" }, "fileId": "0f1e2d3c4b5a6978" }
+          ] }
+      ]
+    },
+    {
+      "collectorId": "instructions.chain", "view": "instructions", "title": "Instruction chain",
+      "blocks": [
+        { "type": "tree", "id": "chain", "title": "Load order for D:/ws/app", "summary": { "files": 4, "sizeBytes": 18400, "tokens": 4600 },
+          "nodes": [
+            { "id": "n1", "label": "D:/ws/config/.claude/CLAUDE.md", "fileId": "c3d4e5f607182930", "badges": ["user", "loaded"], "meta": { "order": 1, "sizeBytes": 9000, "tokens": 2250 }, "children": [] },
+            { "id": "n2", "label": "D:/ws/app/CLAUDE.md", "fileId": "d4e5f60718293041", "badges": ["project", "loaded"], "meta": { "order": 2, "sizeBytes": 5200, "tokens": 1300 },
+              "children": [
+                { "id": "n2.1", "label": "@AGENTS.md", "fileId": "e5f6071829304152", "badges": ["import", "loaded"], "meta": { "sizeBytes": 4000, "tokens": 1000 }, "children": [] },
+                { "id": "n2.2", "label": "docs/AGENTS.override.md", "fileId": "f607182930415263", "badges": ["referenced"], "meta": { "sizeBytes": 800, "tokens": 200 }, "children": [] },
+                { "id": "n2.3", "label": "@docs/missing.md", "badges": ["import", "error"], "meta": { "error": "missing" }, "children": [] }
+              ] },
+            { "id": "n3", "label": "Output style: Concise", "badges": ["built-in", "loaded"], "meta": { "order": 3 }, "children": [] },
+            { "id": "n4", "label": "D:/ws/app/web/CLAUDE.md", "fileId": "0718293041526374", "badges": ["lazy"], "meta": { "sizeBytes": 200, "tokens": 50 }, "children": [] }
+          ] }
+      ]
+    },
+    {
+      "collectorId": "hooks.registered", "view": "hooks", "title": "Hooks",
+      "blocks": [
+        { "type": "table", "id": "hooks", "title": "Registered hooks",
+          "columns": [ { "key": "event", "label": "Event" }, { "key": "matcher", "label": "Matcher" }, { "key": "script", "label": "Script" }, { "key": "source", "label": "Registered in" }, { "key": "purpose", "label": "Purpose" } ],
+          "rows": [
+            { "id": "PreToolUse-0-0", "cells": { "event": "PreToolUse", "matcher": "Bash", "script": { "text": "hooks/shell-guard.ps1", "fileId": "1829304152637485" }, "source": { "text": "user settings", "fileId": "0f1e2d3c4b5a6978" }, "purpose": "Blocks destructive shell commands." }, "fileId": "1829304152637485" },
+            { "id": "Stop-0-0", "cells": { "event": "Stop", "matcher": "*", "script": "hooks/gone.ps1", "source": { "text": "project settings", "fileId": "b2c3d4e5f6071829" }, "purpose": null }, "flags": ["missing-script"] }
+          ] }
+      ]
+    }
+  ],
+  "files": [
+    { "id": "0f1e2d3c4b5a6978", "path": "D:/ws/config/.claude/settings.json", "kind": "settings", "sizeBytes": 6100, "tokens": 1525, "company": false },
+    { "id": "a1b2c3d4e5f60718", "path": "D:/ws/app/.claude/settings.local.json", "kind": "settings", "sizeBytes": 120, "tokens": 30, "company": false },
+    { "id": "b2c3d4e5f6071829", "path": "D:/ws/app/.claude/settings.json", "kind": "settings", "sizeBytes": 300, "tokens": 75, "company": false },
+    { "id": "c3d4e5f607182930", "path": "D:/ws/config/.claude/CLAUDE.md", "kind": "instruction", "sizeBytes": 9000, "tokens": 2250, "company": false },
+    { "id": "d4e5f60718293041", "path": "D:/ws/app/CLAUDE.md", "kind": "instruction", "sizeBytes": 5200, "tokens": 1300, "company": false },
+    { "id": "e5f6071829304152", "path": "D:/ws/app/AGENTS.md", "kind": "instruction", "sizeBytes": 4000, "tokens": 1000, "company": false },
+    { "id": "f607182930415263", "path": "D:/ws/app/docs/AGENTS.override.md", "kind": "instruction", "sizeBytes": 800, "tokens": 200, "company": false },
+    { "id": "0718293041526374", "path": "D:/ws/app/web/CLAUDE.md", "kind": "instruction", "sizeBytes": 200, "tokens": 50, "company": false },
+    { "id": "1829304152637485", "path": "D:/ws/config/.claude/hooks/shell-guard.ps1", "kind": "hookScript", "sizeBytes": 85000, "tokens": 21250, "company": false }
+  ]
+}

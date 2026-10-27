@@ -1,0 +1,39 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Tt]est[Rr]esults/
+coverage/
+*.binlog
+
+# Visual Studio and JetBrains
+.vs/
+.idea/
+*.user
+*.suo
+
+# Node and Angular
+node_modules/
+.angular/
+dist/
+npm-debug.log*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+*.pfx
+*.pem
+*-key.pem
+
+# Runtime and temporary files
+logs/
+tmp/
+*.tmp
+~$*
+*~
+
+# Team receipts and local notes
+.notes/

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cfgdash.Core/Cfgdash.Core.csproj" />
+    <Project Path="src/Cfgdash.Host/Cfgdash.Host.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cfgdash.Core.Tests/Cfgdash.Core.Tests.csproj" />
+    <Project Path="tests/Cfgdash.Host.Tests/Cfgdash.Host.Tests.csproj" />
+  </Folder>
+</Solution>
