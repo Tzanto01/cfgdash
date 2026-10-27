@@ -10,6 +10,26 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>cfgdash</AssemblyName>
     <RootNamespace>Cfgdash.Host</RootNamespace>
+    <Version>0.0.0-dev</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <CfgdashWebDist Condition="'$(CfgdashWebDist)' == ''">$(MSBuildThisFileDirectory)..\..\web\dist\cfgdash\browser\</CfgdashWebDist>
+    <CfgdashWebDistDir>$([MSBuild]::EnsureTrailingSlash('$(CfgdashWebDist)'))</CfgdashWebDistDir>
+    <GenerateEmbeddedFilesManifest Condition="Exists('$(CfgdashWebDistDir)index.html')">true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.12" />
+    <EmbeddedResource Include="$(CfgdashWebDistDir)**" LinkBase="wwwroot" />
+    <InternalsVisibleTo Include="Cfgdash.Host.Tests" />
+  </ItemGroup>
 
 </Project>

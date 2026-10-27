@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: build (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            exe: cfgdash.exe
+          - os: ubuntu-latest
+            rid: linux-x64
+            exe: cfgdash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        if: hashFiles('web/package.json') != ''
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web install
+        if: hashFiles('web/package.json') != ''
+        working-directory: web
+        shell: pwsh
+        run: npm ci
+
+      - name: Web test
+        if: hashFiles('web/package.json') != ''
+        working-directory: web
+        shell: pwsh
+        run: npm test
+
+      - name: Web build
+        if: hashFiles('web/package.json') != ''
+        working-directory: web
+        shell: pwsh
+        run: npm run build
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -match '^refs/tags/v(\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$') {
+            $version = $Matches[1]
+          } elseif ($env:GITHUB_REF.StartsWith('refs/tags/v')) {
+            throw "Tag '$env:GITHUB_REF_NAME' is not vX.Y.Z[-pre]"
+          } else {
+            $version = '0.0.0-dev'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Version: $version"
+
+      - name: Build
+        shell: pwsh
+        run: dotnet build cfgdash.slnx -c Release
+
+      - name: Test
+        shell: pwsh
+        run: dotnet test cfgdash.slnx -c Release --no-build --logger "console;verbosity=normal" --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.rid }}
+          path: TestResults/**/*.trx
+          retention-days: 7
+
+      - name: Publish
+        shell: pwsh
+        run: >-
+          dotnet publish src/Cfgdash.Host/Cfgdash.Host.csproj -c Release -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishTrimmed=false
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish
+
+      - name: Smoke test published exe
+        shell: pwsh
+        env:
+          CFGDASH_SMOKE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'publish/${{ matrix.exe }}'
+          if (-not (Test-Path $exe)) { throw "Published exe not found: $exe" }
+          $env:CFGDASH_SMOKE_EXE = $exe
+          $output = (& $exe --version) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "--version exited $LASTEXITCODE" }
+          $output
+          if ($output -notmatch [regex]::Escape($env:CFGDASH_SMOKE_VERSION)) { throw "--version did not print $env:CFGDASH_SMOKE_VERSION" }
+          dotnet test tests/Cfgdash.Host.Tests/Cfgdash.Host.Tests.csproj -c Release --no-build --filter "Category=PublishedExe" --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "PublishedExe tests failed" }
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          if ($IsWindows) {
+            $package = 'cfgdash-${{ matrix.rid }}.zip'
+            Compress-Archive -Path publish/cfgdash.exe -DestinationPath $package
+          } else {
+            $package = 'cfgdash-${{ matrix.rid }}.tar.gz'
+            chmod +x publish/cfgdash
+            tar -czf $package -C publish cfgdash
+            if ($LASTEXITCODE -ne 0) { throw "tar failed" }
+          }
+          "package=$package" >> $env:GITHUB_OUTPUT
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: cfgdash-${{ matrix.rid }}
+          path: ${{ steps.package.outputs.package }}
+          if-no-files-found: error
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 30 || 7 }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cfgdash-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create release
+        shell: bash
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha256sum cfgdash-win-x64.zip cfgdash-linux-x64.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          prerelease=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" cfgdash-win-x64.zip cfgdash-linux-x64.tar.gz SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${prerelease[@]}"
