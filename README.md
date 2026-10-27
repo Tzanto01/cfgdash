@@ -13,7 +13,7 @@ cfgdash update          # install the latest release (needs gh)
 cfgdash export          # write a snapshot JSON to the cache dir
 ```
 
-Every run has a fresh token in the printed URL. The server listens on `127.0.0.1` only and stops after 30 idle minutes.
+Every run has a fresh token in the printed URL. The server listens on `127.0.0.1` only and stops after 30 idle minutes. Other devices reach a `--tailnet` instance only when the tailnet policy allows `tcp:<port>` (default 7820) to that machine.
 
 ## Install
 
