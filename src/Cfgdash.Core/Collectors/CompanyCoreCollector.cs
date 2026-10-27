@@ -131,7 +131,7 @@ internal sealed partial class CompanyCoreCollector : ICollector
         prefixCount = 0;
         try
         {
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(stdout.Trim()));
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(TerminalEscape().Replace(stdout, string.Empty).Trim()));
             if (JsonNode.Parse(json) is not JsonObject root)
             {
                 return false;
@@ -161,4 +161,8 @@ internal sealed partial class CompanyCoreCollector : ICollector
 
     [GeneratedRegex(@"^[A-Za-z0-9_:-]+\z")]
     internal static partial Regex ValidType();
+
+    /// <summary>Terminal escape sequences pwsh on Linux writes around output in <c>-Command -</c> mode (for example <c>ESC[?1h</c>).</summary>
+    [GeneratedRegex(@"\x1B(?:\[[0-?]*[ -/]*[@-~]|[0-~])")]
+    private static partial Regex TerminalEscape();
 }

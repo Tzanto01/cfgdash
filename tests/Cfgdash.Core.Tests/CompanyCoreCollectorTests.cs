@@ -145,6 +145,19 @@ public sealed class CompanyCoreCollectorTests(CompanyCoreFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Terminal_escape_sequences_around_the_output_are_ignored()
+    {
+        var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes("""{"prefixes":["p"],"agents":[{"type":"reviewer","state":"Ready","context":"Core text"}]}"""));
+        var runner = new FakeProcessRunner().On("pwsh-fake", PwshArguments, "\u001b[?1h\u001b[?1l" + payload + "\n\u001b[?1h\u001b=\n");
+
+        var result = await new CompanyCoreCollector().CollectAsync(CompanyCoreFixture.Context(CompanyCoreFixture.CreateEnvironment(fixture.Tree, "pwsh-fake"), runner), CancellationToken.None);
+
+        Assert.Null(result.UnavailableReason);
+        var reviewer = ((TreeBlock)result.Blocks.Single()).Nodes.Single(n => n.Label == "reviewer");
+        Assert.Equal("Core text", reviewer.Meta!["text"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Non_zero_exit_becomes_unavailable_with_the_first_stderr_line()
     {
         var runner = new FakeProcessRunner().On("pwsh-fake", PwshArguments, string.Empty, exitCode: 1, stderr: "agent-core exploded\nat line 2");
