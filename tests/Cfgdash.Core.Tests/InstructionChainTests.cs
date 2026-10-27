@@ -286,5 +286,23 @@ public sealed class InstructionChainAgentsMdTests : IDisposable
         Assert.Contains(result.Notes!, n => n.Contains("2.1.277", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Links_to_non_markdown_files_create_no_node_and_register_no_file()
+    {
+        var config = tree.Dir("cfg");
+        tree.Write("proj/AGENTS.md", "See [notes](notes.txt), [data](../secret.json) and [guide](guide.md).");
+        tree.Write("proj/notes.txt", "notes");
+        tree.Write("secret.json", "{}");
+        tree.Write("proj/guide.md", "guide");
+        var context = TestContexts.Create(TestContexts.WithConfigDir(tree, config), tree.Path("proj"));
+        var locations = new PlatformLocations(null, null, _ => null);
+
+        var result = await new InstructionChainCollector(new SettingsLayers(locations), locations).CollectAsync(context, CancellationToken.None);
+        var agents = ((TreeBlock)result.Blocks.Single()).Nodes.Single(n => n.Badges!.Contains("agents-md"));
+
+        Assert.Equal(["guide.md"], agents.Children.Select(c => c.Label));
+        Assert.DoesNotContain(context.Files.All, f => !f.Ref.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static TreeNode Child(TreeNode parent, string label) => parent.Children.Single(c => c.Label == label);
 }

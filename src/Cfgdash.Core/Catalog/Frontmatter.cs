@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 
 namespace Cfgdash.Core.Catalog;
@@ -12,6 +13,8 @@ internal static class Frontmatter
 {
     private const int MaxNodes = 10_000;
     private const int MaxDepth = 64;
+    private const int MaxYamlChars = 64 * 1024;
+    private const string TooLarge = "frontmatter is too large or too deeply nested";
 
     public static FrontmatterResult Parse(string text)
     {
@@ -30,10 +33,21 @@ internal static class Frontmatter
             }
 
             var body = text[after..];
+            var yaml = text[yamlStart..position];
+            if (yaml.Length > MaxYamlChars)
+            {
+                return new FrontmatterResult(null, body, TooLarge);
+            }
+
             try
             {
+                if (NestingDepth(yaml) > MaxDepth)
+                {
+                    return new FrontmatterResult(null, body, TooLarge);
+                }
+
                 var stream = new YamlStream();
-                stream.Load(new StringReader(text[yamlStart..position]));
+                stream.Load(new StringReader(yaml));
                 if (stream.Documents.Count == 0 || stream.Documents[0].RootNode is YamlScalarNode { Value: null or "" })
                 {
                     return new FrontmatterResult(new JsonObject(), body, null);
@@ -71,11 +85,28 @@ internal static class Frontmatter
         return true;
     }
 
+    private static int NestingDepth(string yaml)
+    {
+        var parser = new Parser(new StringReader(yaml));
+        var depth = 0;
+        while (depth <= MaxDepth && parser.MoveNext())
+        {
+            depth += parser.Current switch
+            {
+                MappingStart or SequenceStart => 1,
+                MappingEnd or SequenceEnd => -1,
+                _ => 0,
+            };
+        }
+
+        return depth;
+    }
+
     private static JsonNode? Convert(YamlNode node, int depth, ref int budget)
     {
         if (--budget < 0 || depth > MaxDepth)
         {
-            throw new InvalidDataException("frontmatter is too large or too deeply nested");
+            throw new InvalidDataException(TooLarge);
         }
 
         switch (node)

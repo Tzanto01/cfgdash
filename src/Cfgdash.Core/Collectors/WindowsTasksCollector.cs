@@ -56,10 +56,11 @@ internal sealed class WindowsTasksCollector(Func<IReadOnlyList<ScheduledTaskInfo
             return Task.FromResult(CollectorResult.Unavailable(context.Redactor.RedactText("Task Scheduler not reachable: " + ex.Message.ReplaceLineEndings(" ").Trim())));
         }
 
-        var needles = new[] { context.Environment.GetPath(PathKeys.WorkspaceRoot), context.Environment.GetPath(PathKeys.ConfigRepo), "WORKSPACE_ROOT", "CLAUDE_CONFIG_DIR" }
+        var roots = new[] { context.Environment.GetPath(PathKeys.WorkspaceRoot), context.Environment.GetPath(PathKeys.ConfigRepo) }
             .Where(n => !string.IsNullOrEmpty(n))
             .Select(n => Normalize(n!))
             .ToList();
+        string[] names = ["WORKSPACE_ROOT", "CLAUDE_CONFIG_DIR"];
 
         var redactor = context.Redactor;
         var rows = new List<TableRow>();
@@ -68,7 +69,7 @@ internal sealed class WindowsTasksCollector(Func<IReadOnlyList<ScheduledTaskInfo
             var action = task.Actions.FirstOrDefault(a =>
             {
                 var text = Normalize(a.Path + "\n" + a.Arguments + "\n" + a.WorkingDirectory);
-                return needles.Any(n => text.Contains(n, StringComparison.Ordinal));
+                return roots.Any(r => ContainsRoot(text, r)) || names.Any(n => text.Contains(n, StringComparison.Ordinal));
             });
             if (action is null)
             {
@@ -108,6 +109,20 @@ internal sealed class WindowsTasksCollector(Func<IReadOnlyList<ScheduledTaskInfo
     }
 
     private static string Normalize(string value) => value.Replace('\\', '/').ToUpperInvariant();
+
+    private static bool ContainsRoot(string text, string root)
+    {
+        for (var i = text.IndexOf(root, StringComparison.Ordinal); i >= 0; i = text.IndexOf(root, i + 1, StringComparison.Ordinal))
+        {
+            var end = i + root.Length;
+            if (end == text.Length || text[end] is '/' or '"' or '\'' || char.IsWhiteSpace(text[end]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static JsonNode? Time(DateTimeOffset value) => value.Year < 2000 ? null : IsoTime.Format(value);
 }

@@ -64,13 +64,14 @@ public sealed class FileContentReaderTests(TempTree tree) : IClassFixture<TempTr
     [Fact]
     public async Task Content_is_capped_at_512_KiB_and_marked_truncated()
     {
-        var file = Registered("big/large.json", "[" + new string(' ', FileContentReader.MaxBytes) + "1]");
+        var head = "[\n" + new string(' ', FileContentReader.MaxBytes - 22);
+        var file = Registered("big/large.json", head + "gh" + "p_" + new string('a', 36) + "]");
 
         var content = await reader.ReadAsync(file, CancellationToken.None);
 
         Assert.True(content.Truncated);
         Assert.Equal("text", content.ContentType);
-        Assert.Equal(FileContentReader.MaxBytes, content.Content.Length);
+        Assert.Equal("[\n", content.Content);
     }
 
     [Fact]

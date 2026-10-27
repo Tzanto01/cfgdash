@@ -10,7 +10,7 @@ internal static class ToolProbe
         var dirs = (env.Get("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(d => d.Trim('"'))
-            .Where(d => d.Length > 0)
+            .Where(Path.IsPathFullyQualified)
             .ToList();
         IReadOnlyList<string> extensions = os == OsFamily.Windows
             ? (env.Get("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

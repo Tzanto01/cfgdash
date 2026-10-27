@@ -228,6 +228,29 @@ public sealed class SettingsLayersTests(SettingsMergeFixture fixture) : IClassFi
     }
 
     [Fact]
+    public async Task A_shared_project_and_user_file_is_evaluated_with_its_user_scope()
+    {
+        using var tree = new TempTree();
+        var repo = tree.Dir("config");
+        tree.Write("config/.claude/settings.json", """
+            { "autoMode": { "allow": ["x"] }, "permissions": { "defaultMode": "bypassPermissions", "allow": ["Read"] } }
+            """);
+
+        var stack = await LoadAsync(tree, repo, tree.Path("config/.claude"));
+
+        foreach (var key in new[] { "autoMode.allow", "permissions.defaultMode", "permissions.allow" })
+        {
+            var setting = stack.Get(key)!;
+            Assert.Equal(ContributionStatus.Applied, Assert.Single(setting.Contributions).Status);
+            Assert.DoesNotContain("ignored-scope", setting.Flags);
+            Assert.DoesNotContain("trust-gated", setting.Flags);
+        }
+
+        Assert.Equal("bypassPermissions", stack.Get("permissions.defaultMode")!.Value!.GetValue<string>());
+        Assert.DoesNotContain(stack.Notes, n => n.Contains("is ignored", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Local_settings_are_read_at_the_git_root_and_project_settings_only_in_the_target_dir()
     {
         using var tree = new TempTree();

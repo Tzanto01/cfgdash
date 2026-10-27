@@ -61,7 +61,7 @@ internal sealed class SystemdUserCollector(IEnvironmentReader environmentReader)
                 ["kind"] = service ? "service" : "timer",
                 ["description"] = Text(Get("Description")),
                 ["active"] = Text(Get("ActiveState") is { } active ? Get("SubState") is { } sub ? $"{active}/{sub}" : active : null),
-                ["result"] = Text(service && result is not null && status is not null ?$"{result} (exit {status})" : result),
+                ["result"] = Text(service && result is not null && status is not null ? $"{result} (exit {status})" : result),
                 ["lastRun"] = Time(service ? Get("ExecMainExitTimestamp") : Get("LastTriggerUSec")),
                 ["nextRun"] = service ? null : Time(Get("NextElapseUSecRealtime")),
                 ["triggers"] = Text(Get("Triggers")),

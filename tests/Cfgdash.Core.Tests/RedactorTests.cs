@@ -154,6 +154,71 @@ public sealed class RedactorTests
         Assert.Equal("tool " + flag + separator + R + " --verbose", output);
     }
 
+    [Theory]
+    [InlineData("tool --access-token ", " --verbose")]
+    [InlineData("tool --auth-token=", " --verbose")]
+    [InlineData("tool --client-secret ", " --verbose")]
+    [InlineData("tool --personal-access-token ", " --verbose")]
+    [InlineData("tool -pwd ", " --verbose")]
+    [InlineData("run(--credential=", " )")]
+    public void RedactText_any_flag_with_a_secret_word_redacts_its_value(string before, string after)
+    {
+        var output = redactor.RedactText(before + "q7" + "Zx9vLm" + after);
+
+        Assert.Equal(before + R + after, output);
+    }
+
+    [Theory]
+    [InlineData("DB_PASS=")]
+    [InlineData("SIGNING_KEY=")]
+    [InlineData("client-key-data: ")]
+    [InlineData("SESSION_ID=")]
+    [InlineData("Authorization: ")]
+    public void RedactText_assignment_to_a_secret_name_word_redacts_the_value(string prefix)
+    {
+        Assert.Equal(prefix + R + " end", redactor.RedactText(prefix + "q7" + "Zx9vLm end"));
+    }
+
+    [Fact]
+    public void RedactText_basic_auth_and_netrc_passwords_are_redacted()
+    {
+        var basic = "Authorization: Basic " + "dXNlcjpw" + "YXNzd29yZA==";
+        var netrc = "machine git.example login user password " + "q7" + "Zx9vLm";
+
+        Assert.Equal("Authorization: Basic " + R, redactor.RedactText(basic));
+        Assert.Equal("machine git.example login user password " + R, redactor.RedactText(netrc));
+    }
+
+    [Fact]
+    public void RedactText_pgp_private_key_block_is_removed()
+    {
+        var text = "a\n-----BEGIN PGP " + "PRIVATE KEY" + " BLOCK-----\nlQOYBF" + new string('Q', 40) + "\n-----END PGP PRIVATE KEY BLOCK-----\nb";
+
+        Assert.Equal("a\n" + R + "\nb", redactor.RedactText(text));
+    }
+
+    [Theory]
+    [InlineData("ssh-keygen -t ed25519 -f out")]
+    [InlineData("The monkey: a keyboard layout for the author, see the passthrough docs.")]
+    public void RedactText_keeps_hyphenated_commands_and_prose_without_secret_words(string text) =>
+        Assert.Equal(text, redactor.RedactText(text));
+
+    public static TheoryData<string> HostileInputs() =>
+    [
+        "x://" + new string(':', 200_000),
+        string.Concat(Enumerable.Repeat("token-", 500 * 1024 / 6)),
+    ];
+
+    [Theory]
+    [MemberData(nameof(HostileInputs))]
+    public void RedactText_runs_in_linear_time_on_hostile_input(string text)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        redactor.RedactText(text);
+
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), watch.Elapsed.ToString());
+    }
+
     [Fact]
     public void RedactText_pem_private_key_block_body_is_removed()
     {

@@ -6,6 +6,19 @@ namespace Cfgdash.Core.Tests;
 public sealed class FrontmatterTests
 {
     [Fact]
+    public void Deeply_nested_flow_frontmatter_is_refused_without_parsing()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        var result = Frontmatter.Parse("---\nx: " + new string('[', 20_000) + new string(']', 20_000) + "\n---\nbody");
+
+        Assert.Null(result.Fields);
+        Assert.Equal("frontmatter is too large or too deeply nested", result.Error);
+        Assert.Equal("body", result.Body);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), watch.Elapsed.ToString());
+    }
+
+    [Fact]
     public void Multi_line_scalars_lists_and_nested_hooks_are_parsed()
     {
         var result = Frontmatter.Parse("""

@@ -118,7 +118,7 @@ internal sealed class SnapshotSearch : ISnapshotSearch
             return true;
         }
 
-        foreach (var file in files.All)
+        foreach (var file in files.All.OrderBy(f => f.Ref.Path, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
             string content;

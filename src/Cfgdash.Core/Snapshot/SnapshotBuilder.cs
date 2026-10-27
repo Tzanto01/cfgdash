@@ -72,25 +72,32 @@ internal sealed class SnapshotBuilder(
             _ = work.ContinueWith(static t => t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             return Inactive(CollectorState.Unavailable, $"timed out after {FormatSeconds(timeout)}", stopwatch.ElapsedMilliseconds);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && cts.IsCancellationRequested)
         {
             return Inactive(CollectorState.Unavailable, $"timed out after {FormatSeconds(timeout)}", stopwatch.ElapsedMilliseconds);
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             return Inactive(CollectorState.Unavailable, OneLine(e), stopwatch.ElapsedMilliseconds);
         }
 
         var ms = stopwatch.ElapsedMilliseconds;
-        if (result.UnavailableReason is { } reason)
+        try
         {
-            return Inactive(CollectorState.Unavailable, reason, ms, result.Notes);
-        }
+            if (result.UnavailableReason is { } reason)
+            {
+                return Inactive(CollectorState.Unavailable, reason, ms, result.Notes);
+            }
 
-        var blocks = result.Blocks.Select(RedactBlock).ToList();
-        return new Outcome(
-            new CollectorStatus(manifest.Id, manifest.Title, manifest.Version, manifest.View, CollectorState.Active, null, manifest.Requirements, ms, RedactNotes(result.Notes)),
-            new Section(manifest.Id, manifest.View, manifest.Title, blocks));
+            var blocks = result.Blocks.Select(RedactBlock).ToList();
+            return new Outcome(
+                new CollectorStatus(manifest.Id, manifest.Title, manifest.Version, manifest.View, CollectorState.Active, null, manifest.Requirements, ms, RedactNotes(result.Notes)),
+                new Section(manifest.Id, manifest.View, manifest.Title, blocks));
+        }
+        catch (Exception e)
+        {
+            return Inactive(CollectorState.Unavailable, OneLine(e), ms);
+        }
     }
 
     private (CollectorState State, string Reason)? CheckRequirements(Requirements requirements)

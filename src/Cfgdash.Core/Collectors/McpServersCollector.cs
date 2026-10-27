@@ -72,7 +72,9 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
 
         var configDir = environment.Paths.FirstOrDefault(p => p.Key == PathKeys.ClaudeConfigDir);
         var claudeJson = ClaudeJson.Read(ClaudeJson.Locate(configDir?.Value, configDir?.Source, environment.HomeDir));
-        foreach (var project in claudeJson?.Projects.Where(p => PathUtil.PathEquals(p.Path, stack.TargetDir)) ?? [])
+        foreach (var project in claudeJson?.Projects.Where(p =>
+                     !string.IsNullOrWhiteSpace(p.Path) && Path.IsPathRooted(p.Path) && p.Path.IndexOfAny(Path.GetInvalidPathChars()) < 0
+                     && PathUtil.PathEquals(p.Path, stack.TargetDir)) ?? [])
         {
             Add("local:", "local", project.McpServers, () => Cell.Text(".claude.json (local)"), null);
         }

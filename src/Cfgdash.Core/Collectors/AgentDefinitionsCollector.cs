@@ -70,7 +70,7 @@ internal sealed class AgentDefinitionsCollector(SettingsLayers settings, Platfor
                     ["hooks"] = Redacted(redactor, HookSummary(fields?["hooks"])),
                     ["description"] = Redacted(redactor, CatalogText.Description(fields?["description"])),
                     ["other"] = other.Count > 0 ? redactor.RedactText(string.Join("; ", other)) : null,
-                    ["companyCore"] = prefixes.Any(p => File.Exists(Path.Combine(p, ".claude", "custom", "agents", agent.Name, "core.md"))),
+                    ["companyCore"] = CompanyCoreCollector.ValidType().IsMatch(agent.Name) && prefixes.Any(p => File.Exists(Path.Combine(p, ".claude", "custom", "agents", agent.Name, "core.md"))),
                     ["file"] = Cell.File(redactor.RedactText(PathUtil.ToJson(agent.Path!)), file?.Id),
                 },
                 flags.Count > 0 ? flags : null,

@@ -109,8 +109,9 @@ internal static partial class MachineEnvironmentDiscovery
 
         if (configRepo.Value is not null)
         {
-            foreach (var entry in ReadCompanyPrefixes(Path.Combine(configRepo.Value, ".claude", "hooks", "company-paths.psd1")))
+            foreach (var raw in ReadCompanyPrefixes(Path.Combine(configRepo.Value, ".claude", "hooks", "company-paths.psd1")))
             {
+                var entry = raw.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar);
                 var resolved = Path.IsPathRooted(entry) ? entry : workspace.Value is null ? null : Path.Combine(workspace.Value, entry);
                 if (resolved is not null && Directory.Exists(resolved) && !companyPrefixes.Any(p => PathUtil.PathEquals(p, resolved)))
                 {

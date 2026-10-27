@@ -103,6 +103,17 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
     }
 
     [Fact]
+    public async Task Own_cancellation_without_timeout_is_reported_as_an_exception()
+    {
+        var cancelling = new TestCollector("cancels", new Requirements(), (_, _) => throw new OperationCanceledException("inner operation aborted"));
+
+        var snapshot = await BuildAsync(TestEnvironments.Create(tree), null, cancelling);
+
+        Assert.Equal(CollectorState.Unavailable, snapshot.Collectors[0].State);
+        Assert.Equal("OperationCanceledException: inner operation aborted", snapshot.Collectors[0].Reason);
+    }
+
+    [Fact]
     public async Task Unavailable_reason_and_notes_are_reported_and_statuses_keep_catalog_order()
     {
         var unavailable = new TestCollector("b-unavailable", new Requirements(), (_, _) => Task.FromResult(new CollectorResult([], "git status failed: boom", ["partial"])));

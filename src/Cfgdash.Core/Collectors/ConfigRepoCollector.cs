@@ -20,7 +20,7 @@ internal sealed class ConfigRepoCollector : ICollector
         var repo = PathUtil.Full(context.Environment.GetPath(PathKeys.ConfigRepo)!);
         var redactor = context.Redactor;
 
-        var status = await context.Processes.RunAsync(git, ["--no-optional-locks", "-C", repo, "status", "--porcelain=v2", "--branch", "-z"], GitTimeout, cancellationToken);
+        var status = await context.Processes.RunAsync(git, ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "status", "--porcelain=v2", "--branch", "-z"], GitTimeout, cancellationToken);
         if (status.TimedOut || status.ExitCode != 0)
         {
             var firstLine = status.TimedOut ? "timed out" : status.StandardError.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? $"exit code {status.ExitCode}";
@@ -28,7 +28,7 @@ internal sealed class ConfigRepoCollector : ICollector
         }
 
         var parsed = ParseStatus(status.StandardOutput);
-        var log = await context.Processes.RunAsync(git, ["--no-optional-locks", "-C", repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
+        var log = await context.Processes.RunAsync(git, ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
         var commit = !log.TimedOut && log.ExitCode == 0 ? log.StandardOutput.TrimEnd('\r', '\n').Split('\u001f') : [];
 
         var source = new SourceRef("git");

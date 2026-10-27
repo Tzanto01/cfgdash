@@ -27,6 +27,9 @@ public sealed class McpFixture : IDisposable
             },
             ["projects"] = new JsonObject
             {
+                [""] = new JsonObject { ["mcpServers"] = new JsonObject { ["ghost"] = new JsonObject { ["command"] = "x" } } },
+                ["relative/proj"] = new JsonObject { ["mcpServers"] = new JsonObject { ["ghost"] = new JsonObject { ["command"] = "x" } } },
+                ["bad\0dir"] = new JsonObject { ["mcpServers"] = new JsonObject { ["ghost"] = new JsonObject { ["command"] = "x" } } },
                 [variant] = new JsonObject
                 {
                     ["mcpServers"] = new JsonObject
@@ -118,6 +121,15 @@ public sealed class McpServersCollectorTests(McpFixture fixture) : IClassFixture
             servers.Rows.Select(r => (r.Id, Text(r.Cells["status"]))));
         Assert.Contains("overridden", Row(servers, "user:shared").Flags!);
         Assert.Equal("local-cmd --token [redacted]", Text(Row(servers, "local:shared").Cells["target"]));
+    }
+
+    [Fact]
+    public async Task Empty_relative_and_invalid_project_keys_are_skipped_without_failing_the_collector()
+    {
+        var (servers, snapshot) = await fixture.BuildAsync();
+
+        Assert.Equal(CollectorState.Active, snapshot.Collectors[0].State);
+        Assert.DoesNotContain(servers.Rows, r => r.Id.EndsWith(":ghost", StringComparison.Ordinal));
     }
 
     [Fact]

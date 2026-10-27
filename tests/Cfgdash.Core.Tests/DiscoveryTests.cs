@@ -21,6 +21,29 @@ public sealed class DiscoveryTests
     private static void MakeConfigRepo(TempTree tree, string repo) => tree.Write(repo + "/.claude/hooks/lib/agent-core.ps1", "# core");
 
     [Fact]
+    public void Tool_probe_ignores_relative_path_entries()
+    {
+        using var tree = new TempTree();
+        var relative = "probe-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(relative);
+        try
+        {
+            File.WriteAllText(Path.Combine(relative, "git"), string.Empty);
+            File.WriteAllText(Path.Combine(relative, "git.exe"), string.Empty);
+            var env = new FakeEnvironmentReader();
+            env.Process["PATH"] = relative + Path.PathSeparator + tree.Dir("bin");
+
+            var tools = ToolProbe.Probe(env, OperatingSystem.IsWindows() ? OsFamily.Windows : OsFamily.Linux, tree.Dir("home/user"), null);
+
+            Assert.False(tools.ContainsKey("git"));
+        }
+        finally
+        {
+            Directory.Delete(relative, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Process_env_wins_over_user_scope_which_wins_over_machine_scope()
     {
         using var tree = new TempTree();
@@ -125,15 +148,16 @@ public sealed class DiscoveryTests
         using var tree = new TempTree();
         MakeConfigRepo(tree, "ws/config");
         tree.Dir("ws/acme");
+        tree.Dir("ws/beta/sub");
         var absolute = tree.Dir("elsewhere/corp");
         tree.Dir("ws/commented");
-        tree.Write("ws/config/.claude/hooks/company-paths.psd1", $"@{{\n    CompanyPathPrefixes = @(\n        'missing'\n        # 'commented'\n        'acme',\n        \"{absolute}\"\n    )\n}}\n");
+        tree.Write("ws/config/.claude/hooks/company-paths.psd1", $"@{{\n    CompanyPathPrefixes = @(\n        'missing'\n        # 'commented'\n        'acme',\n        'beta\\sub',\n        \"{absolute}\"\n    )\n}}\n");
         var env = new FakeEnvironmentReader();
         env.Process["CLAUDE_CONFIG_DIR"] = tree.Path("ws/config/.claude");
 
         var environment = await Discover(tree, env);
 
-        Assert.Equal([Json(tree.Path("ws/acme")), Json(absolute)], environment.CompanyPrefixes);
+        Assert.Equal([Json(tree.Path("ws/acme")), Json(tree.Path("ws/beta/sub")), Json(absolute)], environment.CompanyPrefixes);
         var company = PathOf(environment, PathKeys.CompanyLayer);
         Assert.Equal((Json(tree.Path("ws/acme")), "file:company-paths.psd1", true), (company.Value, company.Source, company.Exists));
     }

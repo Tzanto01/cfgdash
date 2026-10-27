@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Cfgdash.Core.Collectors;
@@ -41,7 +42,17 @@ internal static class ScheduledTaskReader
             {
                 foreach (var task in folder.GetTasks(IncludeHidden))
                 {
-                    tasks.Add(ReadTask(task));
+                    try
+                    {
+                        tasks.Add(ReadTask(task));
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        accessDenied = true;
+                    }
+                    catch (COMException)
+                    {
+                    }
                 }
             }
             catch (UnauthorizedAccessException)

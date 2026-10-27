@@ -64,7 +64,7 @@ internal static class SettingsMerge
         var trustGated = false;
         foreach (var (key, (segments, items)) in leaves.OrderBy(l => l.Key, StringComparer.Ordinal))
         {
-            var reasons = items.Select(i => IgnoredReason(key, i.Value, i.Layer.Scope)).ToList();
+            var reasons = items.Select(i => IgnoredReason(key, i.Value, i.Layer)).ToList();
             var valid = items.Where((_, i) => reasons[i] is null).ToList();
             var asArray = valid.Count > 0
                 && !Atomic.Contains(key)
@@ -118,7 +118,8 @@ internal static class SettingsMerge
                 flags.Add("ignored-scope");
             }
 
-            if (TrustGated.Any(p => HasPrefix(key, p)) && items.Any(i => i.Layer.Scope is "local" or "project"))
+            if (TrustGated.Any(p => HasPrefix(key, p))
+                && items.Any(i => i.Layer.Scope is "local" or "project" && i.Layer.ExtraScopes.All(s => s is "local" or "project")))
             {
                 flags.Add("trust-gated");
                 trustGated = true;
@@ -150,6 +151,9 @@ internal static class SettingsMerge
             }
         }
     }
+
+    private static string? IgnoredReason(string key, JsonNode? value, SettingsLayer layer) =>
+        layer.ExtraScopes.Any(s => IgnoredReason(key, value, s) is null) ? null : IgnoredReason(key, value, layer.Scope);
 
     private static string? IgnoredReason(string key, JsonNode? value, string scope)
     {

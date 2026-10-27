@@ -160,5 +160,5 @@ internal sealed partial class CompanyCoreCollector : ICollector
     private static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     [GeneratedRegex(@"^[A-Za-z0-9_:-]+\z")]
-    private static partial Regex ValidType();
+    internal static partial Regex ValidType();
 }

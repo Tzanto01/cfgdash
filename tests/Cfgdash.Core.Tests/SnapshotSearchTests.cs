@@ -39,14 +39,14 @@ public sealed class SnapshotSearchTests(TempTree tree) : IClassFixture<TempTree>
             h => Assert.Equal(("node", "chain", "n1.1", (string?)null), (h.Kind, h.BlockId, h.ItemId, h.FileId)),
             h =>
             {
-                Assert.Equal(("file", owned.Id, 2), (h.Kind, h.FileId, h.Line));
-                Assert.Equal(("agents", "c1", "t", "row-1"), (h.View, h.CollectorId, h.BlockId, h.ItemId));
-                Assert.Equal("the Needle line", h.Snippet);
+                Assert.Equal(("file", loose.Id, 1), (h.Kind, h.FileId, h.Line));
+                Assert.Equal(("files", "", ""), (h.View, h.CollectorId, h.BlockId));
             },
             h =>
             {
-                Assert.Equal(("file", loose.Id, 1), (h.Kind, h.FileId, h.Line));
-                Assert.Equal(("files", "", ""), (h.View, h.CollectorId, h.BlockId));
+                Assert.Equal(("file", owned.Id, 2), (h.Kind, h.FileId, h.Line));
+                Assert.Equal(("agents", "c1", "t", "row-1"), (h.View, h.CollectorId, h.BlockId, h.ItemId));
+                Assert.Equal("the Needle line", h.Snippet);
             });
     }
 

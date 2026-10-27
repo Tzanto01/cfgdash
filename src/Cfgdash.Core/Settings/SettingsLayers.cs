@@ -12,7 +12,11 @@ internal enum LayerStatus { Loaded, NotPresent, Error, Ignored, Duplicate, NotOb
 /// One settings source row. <see cref="Root"/> is the parsed, UNREDACTED object: consumers redact before emitting.
 /// <see cref="Detail"/> holds the error text, "duplicate of &lt;label&gt;", the ignore reason or a note.
 /// </summary>
-internal sealed record SettingsLayer(string Id, string Scope, string Label, string? Path, string? FileId, LayerStatus Status, JsonObject? Root, string? Detail);
+internal sealed record SettingsLayer(string Id, string Scope, string Label, string? Path, string? FileId, LayerStatus Status, JsonObject? Root, string? Detail)
+{
+    /// <summary>Scopes of lower layers that are the same physical file and were skipped as duplicates of this one.</summary>
+    public IReadOnlyList<string> ExtraScopes { get; init; } = [];
+}
 
 internal sealed record SettingContribution(JsonNode? Value, SettingsLayer Layer, ContributionStatus Status, bool IgnoredScope = false);
 
@@ -83,6 +87,15 @@ internal sealed class SettingsLayers(PlatformLocations locations)
         layers.Add(configDir is null
             ? new SettingsLayer("user", "user", "user", null, null, LayerStatus.NotPresent, null, "no claudeConfigDir")
             : FileLayer(context, "user", "user", Path.Combine(configDir, "settings.json"), seen));
+        foreach (var duplicate in layers.Where(l => l.Status == LayerStatus.Duplicate).ToList())
+        {
+            var real = PathUtil.RealPath(duplicate.Path!);
+            var index = layers.FindIndex(l => l.Status == LayerStatus.Loaded && l.Path is not null && PathUtil.PathEquals(PathUtil.RealPath(l.Path), real));
+            if (index >= 0)
+            {
+                layers[index] = layers[index] with { ExtraScopes = [.. layers[index].ExtraScopes, duplicate.Scope] };
+            }
+        }
 
         var merged = SettingsMerge.Merge([.. layers.Where(l => l.Status == LayerStatus.Loaded)], notes);
         return new SettingsStack(target, projectRoot, layers, merged, notes);

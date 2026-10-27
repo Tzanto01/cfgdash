@@ -107,6 +107,8 @@ public sealed class HookResolutionTests(HooksSnapshotFixture fixture) : IClassFi
     [InlineData("%CLAUDE_CONFIG_DIR%\\hooks\\a.ps1", "cfg/hooks/a.ps1")]
     [InlineData("$CLAUDE_PROJECT_DIR/.claude/b.sh", "proj/.claude/b.sh")]
     [InlineData("${CLAUDE_PROJECT_DIR}/b.sh", "proj/b.sh")]
+    [InlineData("$env:CLAUDE_CONFIG_DIR\\hooks\\a.ps1", "cfg/hooks/a.ps1")]
+    [InlineData("$env:CLAUDE_PROJECT_DIR/b.ps1", "proj/b.ps1")]
     [InlineData("${CLAUDE_PLUGIN_ROOT}/scripts/c.mjs", "plug/scripts/c.mjs")]
     [InlineData("~/scripts/d.py", "home/scripts/d.py")]
     [InlineData("scripts/e.sh", "proj/scripts/e.sh")]

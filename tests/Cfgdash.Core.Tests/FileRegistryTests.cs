@@ -58,6 +58,13 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
     [InlineData(".claude.json.backup")]
     [InlineData(".ssh/config")]
     [InlineData("nested/.gnupg/pubring.kbx")]
+    [InlineData(".aws/config")]
+    [InlineData(".kube/config")]
+    [InlineData(".config/gh/hosts.yml")]
+    [InlineData(".npmrc")]
+    [InlineData("credentials")]
+    [InlineData("putty.ppk")]
+    [InlineData("infra/prod.tfstate.backup")]
     public void Register_refuses_never_read_files(string relative)
     {
         var path = tree.Write($"never/{Guid.NewGuid():N}/{relative}", "content");
@@ -112,6 +119,26 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
         var registry = new FileRegistry([]);
 
         Assert.Null(registry.Register(Path.Combine(link, "config"), "other"));
+    }
+
+    [WindowsFact]
+    public void Register_refuses_an_alternate_data_stream_path()
+    {
+        var path = tree.Write("ads/notes.md", "x");
+
+        Assert.True(FileRegistry.IsNeverRead(path + "::$DATA"));
+        Assert.Null(new FileRegistry([]).Register(path + "::$DATA", "other"));
+    }
+
+    [Fact]
+    public void Company_flag_follows_a_link_into_a_company_prefix()
+    {
+        var companyDir = tree.Dir("company-link/acme");
+        tree.Write("company-link/acme/rules.md", "x");
+        var link = tree.Path("company-link/alias");
+        CatalogSnapshotFixture.CreateDirectoryLink(link, companyDir);
+
+        Assert.True(new FileRegistry([companyDir]).Register(Path.Combine(link, "rules.md"), "instruction")!.Company);
     }
 
     [Fact]

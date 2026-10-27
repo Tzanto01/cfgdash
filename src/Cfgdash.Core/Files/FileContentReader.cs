@@ -30,6 +30,11 @@ internal sealed class FileContentReader(IRedactor redactor) : IFileContentReader
         }
 
         var text = new UTF8Encoding(false).GetString(buffer).TrimStart('﻿');
+        if (truncated)
+        {
+            text = text[..(text.LastIndexOf('\n') + 1)];
+        }
+
         var extension = Path.GetExtension(file.FullPath).ToLowerInvariant();
         var contentType = extension switch
         {

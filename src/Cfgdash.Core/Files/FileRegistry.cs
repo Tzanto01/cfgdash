@@ -11,10 +11,20 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
 {
     private const int MaxTokenReadBytes = 2 * 1024 * 1024;
 
-    private static readonly string[] NeverReadExtensions = [".pem", ".key", ".pfx", ".p12", ".kdbx"];
+    private static readonly string[] NeverReadExtensions =
+    [
+        ".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk", ".gpg", ".asc", ".jks", ".keystore", ".p8", ".tfstate", ".tfvars", ".tfstate.backup",
+    ];
+
     private static readonly string[] NeverReadPrefixes = ["id_rsa", "id_ecdsa", "id_ed25519", ".claude.json"];
-    private static readonly string[] NeverReadNames = [".credentials.json", ".env", ".netrc", "_netrc", ".git-credentials"];
-    private static readonly string[] NeverReadSegments = [".ssh", ".gnupg"];
+
+    private static readonly string[] NeverReadNames =
+    [
+        ".credentials.json", ".env", ".netrc", "_netrc", ".git-credentials", ".npmrc", ".pypirc", ".pgpass", ".envrc", "credentials", "credentials.json",
+    ];
+
+    private static readonly string[] NeverReadSegments = [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"];
+    private static readonly string[] NeverReadConfigDirs = ["gh", "gcloud"];
 
     private readonly Lock gate = new();
     private readonly Dictionary<string, RegisteredFile> files = new(StringComparer.Ordinal);
@@ -63,7 +73,8 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         var size = new FileInfo(full).Length;
         var text = size <= MaxTokenReadBytes ? HarnessFiles.ReadText(full, MaxTokenReadBytes) : null;
         var chars = text?.Length ?? size;
-        var isCompany = company ?? companyPrefixes.Any(prefix => PathUtil.IsUnder(full, prefix));
+        var real = PathUtil.RealPath(full);
+        var isCompany = company ?? companyPrefixes.Any(prefix => PathUtil.IsUnder(full, prefix) || PathUtil.IsUnder(real, prefix));
         var registered = new RegisteredFile(new FileRef(id, PathUtil.ToJson(full), kind, size, HarnessFiles.Tokens(chars), isCompany), full);
         lock (gate)
         {
@@ -92,6 +103,11 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
     public static bool IsNeverRead(string path)
     {
         var full = PathUtil.Full(path);
+        if (OperatingSystem.IsWindows() && full.IndexOf(':', (Path.GetPathRoot(full) ?? string.Empty).Length) >= 0)
+        {
+            return true;
+        }
+
         return IsNeverReadName(full) || IsNeverReadName(PathUtil.RealPath(full));
     }
 
@@ -108,6 +124,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         }
 
         var segments = full.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return segments.Any(s => NeverReadSegments.Any(n => s.Equals(n, comparison)));
+        return segments.Any(s => NeverReadSegments.Any(n => s.Equals(n, comparison)))
+            || segments.Skip(1).Where((s, i) => segments[i].Equals(".config", comparison) && NeverReadConfigDirs.Any(n => s.Equals(n, comparison))).Any();
     }
 }

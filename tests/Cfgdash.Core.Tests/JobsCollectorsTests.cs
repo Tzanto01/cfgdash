@@ -121,14 +121,22 @@ public sealed class JobsCollectorsTests : IDisposable
         Assert.Equal("Task Scheduler not reachable: RPC server unavailable", result.UnavailableReason);
     }
 
+    [Fact]
+    public async Task Windows_tasks_match_a_root_only_at_a_path_boundary()
+    {
+        var sibling = tree.Path("ws") + "2";
+
+        var result = await CollectTasks(
+            ScheduledTask(@"\Sibling", new ScheduledTaskAction(sibling + @"\job.cmd", null, null)),
+            ScheduledTask(@"\Quoted", new ScheduledTaskAction("pwsh.exe", "-WorkingDirectory \"" + tree.Path("ws") + "\" -File x.ps1", null)));
+
+        Assert.Equal([@"\Quoted"], Table(result).Rows.Select(r => r.Id).ToArray());
+    }
+
     [WindowsFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void Real_task_scheduler_walk_reads_without_throwing()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var tasks = ScheduledTaskReader.Read(out _);
 
         Assert.Contains(tasks, t => t.Actions.Count > 0);

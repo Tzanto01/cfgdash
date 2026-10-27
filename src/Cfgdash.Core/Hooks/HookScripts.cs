@@ -32,11 +32,13 @@ internal static class HookScripts
         {
             result = result.Replace("${CLAUDE_CONFIG_DIR}", configDir, StringComparison.Ordinal)
                 .Replace("%CLAUDE_CONFIG_DIR%", configDir, StringComparison.OrdinalIgnoreCase)
+                .Replace("$env:CLAUDE_CONFIG_DIR", configDir, StringComparison.OrdinalIgnoreCase)
                 .Replace("$CLAUDE_CONFIG_DIR", configDir, StringComparison.Ordinal);
         }
 
         result = result.Replace("${CLAUDE_PROJECT_DIR}", targetDir, StringComparison.Ordinal)
             .Replace("%CLAUDE_PROJECT_DIR%", targetDir, StringComparison.OrdinalIgnoreCase)
+            .Replace("$env:CLAUDE_PROJECT_DIR", targetDir, StringComparison.OrdinalIgnoreCase)
             .Replace("$CLAUDE_PROJECT_DIR", targetDir, StringComparison.Ordinal);
         if (pluginDir is not null)
         {
