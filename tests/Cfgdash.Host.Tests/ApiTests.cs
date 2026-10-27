@@ -1,0 +1,285 @@
+using Cfgdash.Core;
+using Cfgdash.Core.Snapshot;
+using Microsoft.Extensions.FileProviders;
+
+namespace Cfgdash.Host.Tests;
+
+public sealed class ApiFixture : IAsyncLifetime
+{
+    private readonly TempDir temp = new();
+
+    internal ServerHost Host { get; private set; } = null!;
+
+    internal string Tree { get; private set; } = null!;
+
+    internal string Workspace { get; private set; } = null!;
+
+    internal string Home { get; private set; } = null!;
+
+    internal string Project { get; private set; } = null!;
+
+    internal string Missing => temp.Combine("missing");
+
+    public async Task InitializeAsync()
+    {
+        Tree = temp.Sub("tree");
+        foreach (var name in new[] { "Beta", "alpha", ".hidden", "gamma-2" })
+        {
+            Directory.CreateDirectory(Path.Combine(Tree, name));
+        }
+
+        File.WriteAllText(Path.Combine(Tree, "x.txt"), "file, not a directory");
+        Workspace = CfgdashServer.NormalizeDir(temp.Sub("ws"))!;
+        Home = CfgdashServer.NormalizeDir(temp.Sub("home"))!;
+        Project = CfgdashServer.NormalizeDir(temp.Sub("proj"))!;
+        var environment = TestCore.Machine(
+            home: Home,
+            paths: [new ContextPath(PathKeys.WorkspaceRoot, Workspace, null, true)],
+            projects: [Workspace, Missing, Project]);
+        Host = await ServerHost.StartAsync(environment: environment);
+    }
+
+    public async Task DisposeAsync()
+    {
+        await Host.DisposeAsync();
+        temp.Dispose();
+    }
+
+    internal string NewDir() => CfgdashServer.NormalizeDir(temp.Sub(Guid.NewGuid().ToString("N")))!;
+}
+
+public sealed class ApiTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+{
+    private ServerHost Host => fixture.Host;
+
+    private static string Slash(string path) => path.Replace('\\', '/');
+
+    private static string Dir(string path) => "dir=" + Uri.EscapeDataString(path);
+
+    [Fact]
+    public async Task Health_reports_status_version_and_schema_version()
+    {
+        var response = await Host.GetAsync("/api/v1/health");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal("ok", response.Json.GetProperty("status").GetString());
+        Assert.Equal(HostDependencies.Version, response.Json.GetProperty("version").GetString());
+        Assert.Equal(HarnessSnapshot.CurrentSchemaVersion, response.Json.GetProperty("schemaVersion").GetInt32());
+    }
+
+    [Fact]
+    public async Task Snapshot_without_dir_is_built_for_the_start_dir()
+    {
+        var response = await Host.GetAsync("/api/v1/snapshot");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal(1, response.Json.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(Host.StartDir, response.Json.GetProperty("context").GetProperty("targetDir").GetString());
+        Assert.True(Host.Snapshots.CountFor(Host.StartDir) >= 1);
+    }
+
+    [Fact]
+    public async Task Snapshot_uses_the_requested_dir()
+    {
+        var dir = fixture.NewDir();
+
+        var response = await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal(dir, response.Json.GetProperty("context").GetProperty("targetDir").GetString());
+    }
+
+    [Theory]
+    [InlineData("relative/path")]
+    [InlineData("MISSING")]
+    [InlineData("FILE")]
+    public async Task Snapshot_rejects_relative_missing_and_non_directory_dirs(string kind)
+    {
+        var dir = kind switch
+        {
+            "MISSING" => fixture.Missing,
+            "FILE" => Path.Combine(fixture.Tree, "x.txt"),
+            _ => kind,
+        };
+
+        var response = await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("bad-dir", response.Error);
+    }
+
+    [Fact]
+    public async Task Snapshot_is_cached_per_dir_until_refresh_is_requested()
+    {
+        var dir = fixture.NewDir();
+        var other = fixture.NewDir();
+
+        await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+        await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+        var cachedCount = Host.Snapshots.CountFor(dir);
+        await Host.GetAsync($"/api/v1/snapshot?{Dir(other)}");
+        await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}&refresh=true");
+        await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+
+        Assert.Equal(1, cachedCount);
+        Assert.Equal(1, Host.Snapshots.CountFor(other));
+        Assert.Equal(2, Host.Snapshots.CountFor(dir));
+    }
+
+    [Fact]
+    public async Task Failed_snapshot_build_answers_500_and_the_next_request_retries()
+    {
+        var dir = fixture.NewDir();
+        Host.Snapshots.FailWith = (d, n) => d == dir && n == 1 ? new InvalidOperationException("collector exploded") : null;
+
+        var failed = await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+        var retried = await Host.GetAsync($"/api/v1/snapshot?{Dir(dir)}");
+
+        Assert.Equal(500, failed.Status);
+        Assert.Equal("snapshot-failed", failed.Error);
+        Assert.DoesNotContain("collector exploded", failed.Body);
+        Assert.Equal(200, retried.Status);
+        Assert.Equal(2, Host.Snapshots.CountFor(dir));
+    }
+
+    [Fact]
+    public async Task File_known_to_the_snapshot_returns_its_content()
+    {
+        var response = await Host.GetAsync("/api/v1/files/f1");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal("f1", response.Json.GetProperty("id").GetString());
+        Assert.Equal("memory/notes.md", response.Json.GetProperty("path").GetString());
+        Assert.Equal("markdown", response.Json.GetProperty("contentType").GetString());
+        Assert.Equal("content of f1", response.Json.GetProperty("content").GetString());
+        Assert.False(response.Json.GetProperty("truncated").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("unknown-id")]
+    [InlineData("gone")]
+    public async Task Unknown_file_ids_and_files_deleted_since_the_snapshot_answer_404(string id)
+    {
+        var response = await Host.GetAsync($"/api/v1/files/{id}");
+
+        Assert.Equal(404, response.Status);
+        Assert.Equal("not-found", response.Error);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("?q=")]
+    [InlineData("?q=a")]
+    public async Task Search_needs_at_least_two_characters(string query)
+    {
+        var response = await Host.GetAsync("/api/v1/search" + query);
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("bad-query", response.Error);
+    }
+
+    [Fact]
+    public async Task Search_returns_the_search_services_response()
+    {
+        var response = await Host.GetAsync("/api/v1/search?q=ab");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal("ab", response.Json.GetProperty("query").GetString());
+        Assert.Equal("snippet for ab", response.Json.GetProperty("results")[0].GetProperty("snippet").GetString());
+    }
+
+    [Fact]
+    public async Task Dirs_lists_only_directories_including_hidden_sorted_case_insensitively_with_forward_slashes()
+    {
+        var response = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(fixture.Tree)}");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal(Slash(fixture.Tree), response.Json.GetProperty("path").GetString());
+        Assert.Equal(Slash(Directory.GetParent(fixture.Tree)!.FullName), response.Json.GetProperty("parent").GetString());
+        var entries = response.Json.GetProperty("entries").EnumerateArray().ToList();
+        Assert.Equal([".hidden", "alpha", "Beta", "gamma-2"], entries.Select(e => e.GetProperty("name").GetString()));
+        Assert.Equal(Slash(Path.Combine(fixture.Tree, "alpha")), entries[1].GetProperty("path").GetString());
+    }
+
+    [Fact]
+    public async Task Dirs_without_a_path_answers_for_the_start_dir()
+    {
+        var response = await Host.GetAsync("/api/v1/dirs");
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal(Slash(Host.StartDir), response.Json.GetProperty("path").GetString());
+    }
+
+    [Theory]
+    [InlineData("relative/path")]
+    [InlineData("MISSING")]
+    public async Task Dirs_rejects_relative_and_missing_paths(string kind)
+    {
+        var path = kind == "MISSING" ? fixture.Missing : kind;
+
+        var response = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(path)}");
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("bad-dir", response.Error);
+    }
+
+    [WindowsFact]
+    public async Task Dirs_rejects_unc_paths_without_touching_the_network()
+    {
+        var response = await Host.GetAsync($"/api/v1/dirs?path={Uri.EscapeDataString(@"\\server.example\share")}");
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("bad-dir", response.Error);
+    }
+
+    [Fact]
+    public async Task Dirs_suggests_each_existing_known_directory_once()
+    {
+        var response = await Host.GetAsync("/api/v1/dirs");
+
+        var suggestions = response.Json.GetProperty("suggestions").EnumerateArray().Select(s => s.GetProperty("path").GetString()).ToList();
+        Assert.Equal([Slash(Host.StartDir), Slash(fixture.Workspace), Slash(fixture.Home), Slash(fixture.Project)], suggestions);
+    }
+
+    [Fact]
+    public async Task Unknown_api_path_answers_a_json_404()
+    {
+        var response = await Host.GetAsync("/api/v1/nope");
+
+        Assert.Equal(404, response.Status);
+        Assert.Equal("not-found", response.Error);
+        Assert.StartsWith("application/json", response.Header("Content-Type"));
+    }
+
+    [Fact]
+    public async Task Without_built_ui_non_api_paths_show_the_not_built_page()
+    {
+        var response = await Host.GetAsync("/settings/mcp", null);
+
+        Assert.Equal(200, response.Status);
+        Assert.StartsWith("text/html", response.Header("Content-Type"));
+        Assert.Contains("cfgdash UI not built", response.Body);
+    }
+
+    [Fact]
+    public async Task Built_ui_serves_assets_and_falls_back_to_index_html_but_never_for_api_paths()
+    {
+        using var ui = new TempDir();
+        File.WriteAllText(Path.Combine(ui.Root, "index.html"), "<html>spa-index-marker</html>");
+        File.WriteAllText(Path.Combine(ui.Root, "app.js"), "console.log('asset-marker')");
+        using var files = new PhysicalFileProvider(ui.Root);
+        await using var host = await ServerHost.StartAsync(ui: files);
+
+        var route = await host.GetAsync("/settings/mcp", null);
+        var root = await host.GetAsync("/", null);
+        var asset = await host.GetAsync("/app.js", null);
+        var api = await host.GetAsync("/api/v1/nope");
+
+        Assert.Contains("spa-index-marker", route.Body);
+        Assert.Contains("spa-index-marker", root.Body);
+        Assert.Contains("asset-marker", asset.Body);
+        Assert.Equal("no-referrer", asset.Header("Referrer-Policy"));
+        Assert.Equal(404, api.Status);
+        Assert.DoesNotContain("spa-index-marker", api.Body);
+    }
+}
