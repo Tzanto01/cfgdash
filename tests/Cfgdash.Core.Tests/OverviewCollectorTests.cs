@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Cfgdash.Core.Collectors;
 using Cfgdash.Core.Environment;
@@ -16,30 +15,10 @@ public sealed class GitRepoFixture : IDisposable
     {
         Repo = Tree.Dir("repo");
         var globalConfig = Tree.Write("gitconfig", string.Empty);
-        void Git(params string[] args)
-        {
-            var info = new ProcessStartInfo("git") { WorkingDirectory = Repo, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-            foreach (var arg in new[] { "-c", "user.name=user", "-c", "user.email=user@host.example" }.Concat(args))
-            {
-                info.ArgumentList.Add(arg);
-            }
-
-            info.Environment["GIT_CONFIG_GLOBAL"] = globalConfig;
-            info.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
-            using var process = Process.Start(info)!;
-            var stderr = process.StandardError.ReadToEndAsync();
-            process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-            {
-                throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {stderr.Result}");
-            }
-        }
-
-        Git("init", "-q", "-b", "main");
+        TestGit.Run(Repo, globalConfig, "init", "-q", "-b", "main");
         Tree.Write("repo/tracked.md", "one\n");
-        Git("add", "tracked.md");
-        Git("commit", "-q", "-m", "initial commit");
+        TestGit.Run(Repo, globalConfig, "add", "tracked.md");
+        TestGit.Run(Repo, globalConfig, "commit", "-q", "-m", "initial commit");
         Tree.Write("repo/tracked.md", "two\n");
         Tree.Write("repo/new.txt", "new\n");
     }
@@ -65,10 +44,13 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
     private static Dictionary<string, JsonNode?> Rows(CollectorResult result) =>
         ((KvBlock)result.Blocks[0]).Rows.ToDictionary(r => r.Key, r => r.Value);
 
-    private MachineEnvironment RepoEnvironment(string git) => TestEnvironments.Create(
+    private MachineEnvironment RepoEnvironment(string git, string? repo = null) => TestEnvironments.Create(
         fixture.Tree,
-        paths: [TestEnvironments.ContextPath(PathKeys.ConfigRepo, fixture.Repo)],
+        paths: [TestEnvironments.ContextPath(PathKeys.ConfigRepo, repo ?? fixture.Repo)],
         tools: new Dictionary<string, string> { ["git"] = git });
+
+    private static string[] Git(string repo, params string[] command) =>
+        ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=", "--git-dir=" + Path.Combine(repo, ".git"), "--work-tree=" + repo, .. command];
 
     [Fact]
     public async Task Config_repo_reports_branch_dirty_files_and_last_commit_of_a_real_repo()
@@ -101,8 +83,8 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
             "docs/old name.md",
             "? untracked.txt") + "\0";
         var processes = new FakeProcessRunner()
-            .On("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "status", "--porcelain=v2", "--branch", "-z"], status)
-            .On("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"], "abc123\u001f2026-01-01T00:00:00+00:00\u001fsubject line\n");
+            .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), status)
+            .On("git", Git(repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"), "abc123\u001f2026-01-01T00:00:00+00:00\u001fsubject line\n");
 
         var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
 
@@ -118,11 +100,22 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
     {
         var repo = Path.GetFullPath(fixture.Repo);
         var processes = new FakeProcessRunner()
-            .On("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "status", "--porcelain=v2", "--branch", "-z"], string.Empty, 128, "fatal: not a git repository\nhint: more");
+            .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), string.Empty, 128, "fatal: not a git repository\nhint: more");
 
         var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
 
         Assert.Equal("git status failed: fatal: not a git repository", result.UnavailableReason);
+    }
+
+    [Fact]
+    public async Task Config_repo_path_without_its_own_git_dir_is_unavailable_instead_of_reporting_the_enclosing_repo()
+    {
+        var nested = fixture.Tree.Dir("repo/nested-config");
+
+        var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git", nested), new ProcessRunner()), CancellationToken.None);
+
+        Assert.StartsWith("git status failed: fatal: not a git repository", result.UnavailableReason);
+        Assert.Empty(result.Blocks);
     }
 
     [Fact]

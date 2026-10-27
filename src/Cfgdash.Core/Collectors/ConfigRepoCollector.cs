@@ -4,7 +4,10 @@ using Cfgdash.Core.Snapshot;
 
 namespace Cfgdash.Core.Collectors;
 
-/// <summary><c>overview.config-repo</c>: branch, upstream, ahead/behind, dirty files and last commit of the config repo (read-only git).</summary>
+/// <summary>
+/// <c>overview.config-repo</c>: branch, upstream, ahead/behind, dirty files and last commit of the config repo (read-only git).
+/// Git runs only against the config repo's own <c>.git</c> (no repository discovery) with fsmonitor, hooks and optional locks off; never in the target dir.
+/// </summary>
 internal sealed class ConfigRepoCollector : ICollector
 {
     public const int MaxRows = 500;
@@ -19,8 +22,9 @@ internal sealed class ConfigRepoCollector : ICollector
         var git = context.Environment.Tools["git"];
         var repo = PathUtil.Full(context.Environment.GetPath(PathKeys.ConfigRepo)!);
         var redactor = context.Redactor;
+        string[] pinned = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=", "--git-dir=" + Path.Combine(repo, ".git"), "--work-tree=" + repo];
 
-        var status = await context.Processes.RunAsync(git, ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "status", "--porcelain=v2", "--branch", "-z"], GitTimeout, cancellationToken);
+        var status = await context.Processes.RunAsync(git, [.. pinned, "status", "--porcelain=v2", "--branch", "-z"], GitTimeout, cancellationToken);
         if (status.TimedOut || status.ExitCode != 0)
         {
             var firstLine = status.TimedOut ? "timed out" : status.StandardError.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? $"exit code {status.ExitCode}";
@@ -28,7 +32,7 @@ internal sealed class ConfigRepoCollector : ICollector
         }
 
         var parsed = ParseStatus(status.StandardOutput);
-        var log = await context.Processes.RunAsync(git, ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, "log", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
+        var log = await context.Processes.RunAsync(git, [.. pinned, "log", "-1", "--format=%H%x1f%cI%x1f%s"], GitTimeout, cancellationToken);
         var commit = !log.TimedOut && log.ExitCode == 0 ? log.StandardOutput.TrimEnd('\r', '\n').Split('\u001f') : [];
 
         var source = new SourceRef("git");
