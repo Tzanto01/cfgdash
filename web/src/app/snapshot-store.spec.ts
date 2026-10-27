@@ -45,6 +45,14 @@ describe('snapshot store', () => {
     expect(h.text()).toContain('otherbox');
   });
 
+  it('links "Back to the start folder" without dir but with the search query', async () => {
+    const h = await startApp('/search?q=sonnet&dir=D%3A%2Fgone', null);
+    await h.answer('/api/v1/snapshot', { error: 'bad-dir' }, 400);
+    const link = [...h.el.querySelectorAll('a')].find((a) => a.textContent?.trim() === 'Back to the start folder');
+
+    expect(link?.getAttribute('href')).toBe('/search?q=sonnet');
+  });
+
   it('keeps the content and says "Couldn\'t refresh" when a refresh fails', async () => {
     const h = await startApp('/overview');
     await h.click(h.buttons('Refresh')[0]);
