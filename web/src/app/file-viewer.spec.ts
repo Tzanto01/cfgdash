@@ -31,6 +31,16 @@ describe('file viewer', () => {
     expect(h.text()).toContain('Showing the first 512 KB; the rest of the file is cut off.');
   });
 
+  it('ignores the "/" search shortcut while the viewer is open', async () => {
+    const h = await startApp(`/overview?file=${FILE_USER}`);
+    await h.answer(filePath, content());
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '/' }));
+    await h.settle();
+
+    expect(h.router.url).toBe(`/overview?file=${FILE_USER}`);
+  });
+
   it('explains a 404', async () => {
     const h = await startApp(`/overview?file=${FILE_USER}`);
     await h.answer(filePath, { error: 'not-found' }, 404);

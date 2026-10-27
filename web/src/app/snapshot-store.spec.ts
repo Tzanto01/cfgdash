@@ -9,6 +9,7 @@ describe('access problems', () => {
     await h.answer('/api/v1/snapshot', { error: 'unauthenticated' }, 401);
 
     expect(h.el.querySelector('h1')?.textContent).toContain('Open the link printed in your terminal');
+    expect(document.activeElement).toBe(h.el.querySelector('h1'));
   });
 
   it('shows the forbidden heading with the reason on 403', async () => {
@@ -54,5 +55,8 @@ describe('snapshot store', () => {
     expect(h.text()).toContain("Couldn't refresh");
     expect(h.text()).toContain('devbox');
     expect(h.text()).not.toContain("cfgdash isn't answering");
+
+    await h.click(h.button('Try again'));
+    expect(document.activeElement?.textContent?.trim()).toBe('devbox');
   });
 });

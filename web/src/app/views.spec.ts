@@ -9,6 +9,13 @@ describe('views', () => {
     expect(labels).not.toContain('Jobs');
   });
 
+  it('sends an unknown deep path to the overview', async () => {
+    const h = await startApp('/a/b');
+
+    expect(h.router.url).toBe('/overview');
+    expect(h.el.querySelector('h1')?.textContent?.trim()).toBe('devbox');
+  });
+
   it('shows an unavailable collector with its reason', async () => {
     const h = await startApp('/agents');
 

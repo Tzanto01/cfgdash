@@ -72,7 +72,7 @@
                 @let all = expandedFiles().has(file.fileId);
                 <section class="file-hits">
                   <h3 class="mono">{{ file.path }} <span class="muted tabular">({{ file.hits.length }} {{ file.hits.length === 1 ? 'match' : 'matches' }})</span></h3>
-                  <ul class="hits">
+                  <ul class="hits" #fileHits>
                     @for (h of all ? file.hits : file.hits.slice(0, filePreview); track $index) {
                       <li>
                         <button type="button" class="hit" (click)="url.openFile(file.fileId, h.hit.line)">
@@ -83,7 +83,7 @@
                     }
                   </ul>
                   @if (!all && file.hits.length > filePreview) {
-                    <button type="button" class="link-button show-all" (click)="showAllInFile(file.fileId)">
+                    <button type="button" class="link-button show-all" (click)="showAllInFile(file.fileId, fileHits)">
                       Show all {{ file.hits.length }} in this file
                     </button>
                   }

@@ -17,7 +17,8 @@ const results: SearchHit[] = [
   hit({ view: 'zeta', collectorId: 'zeta.things', blockId: 'c1', snippet: 'a sonnet chart' }),
   hit({ itemId: 'model', snippet: 'Uses Sonnet here' }),
   hit({ kind: 'file', view: 'settings', fileId: FILE_USER, line: 9, snippet: 'sonnet again' }),
-  hit({ kind: 'node', view: 'instructions', collectorId: 'instructions.chain', blockId: 'chain', itemId: 'n2.1', snippet: 'sonnet node' })
+  hit({ kind: 'file', view: 'settings', line: 4, snippet: 'sonnet in a file without id' }),
+  hit({ kind: 'node', view: 'instructions', collectorId: 'instructions.chain', blockId: 'chain', itemId: 'n2.1', snippet: 'İİ sonnet node' })
 ];
 
 describe('search page', () => {
@@ -32,7 +33,28 @@ describe('search page', () => {
 
     expect(req.request.params.get('q')).toBe('sonnet');
     const headings = [...h.el.querySelectorAll('.search-results h2')].map((n) => n.textContent?.trim());
-    expect(headings).toEqual(['Settings (1)', 'Instructions (1)', 'Hooks (1)', 'Other (1)', 'File contents (2)']);
+    expect(headings).toEqual(['Settings (2)', 'Instructions (1)', 'Hooks (1)', 'Other (1)', 'File contents (2)']);
+  });
+
+  it('uses the first q when the URL repeats it', async () => {
+    const h = await startApp('/search?q=sonnet&q=opus');
+    const req = await h.answer('/api/v1/search', { query: 'sonnet', results, truncated: false });
+
+    expect(req.request.params.get('q')).toBe('sonnet');
+    expect(h.text()).toContain('7 results for "sonnet"');
+  });
+
+  it('previews 5 hits per file and moves focus to the first revealed hit on "Show all"', async () => {
+    const h = await startApp('/search?q=sonnet');
+    const many = [1, 2, 3, 4, 5, 6, 7].map((line) => hit({ kind: 'file', fileId: FILE_USER, line, snippet: `sonnet ${line}` }));
+    await h.answer('/api/v1/search', { query: 'sonnet', results: many, truncated: false });
+    const fileHits = () => [...h.el.querySelectorAll<HTMLButtonElement>('.file-hits button.hit')];
+
+    expect(fileHits().length).toBe(5);
+    await h.click(h.button('Show all 7 in this file'));
+
+    expect(fileHits().length).toBe(7);
+    expect(document.activeElement).toBe(fileHits()[5]);
   });
 
   it('groups file hits per file under its path', async () => {

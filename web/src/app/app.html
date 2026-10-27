@@ -137,7 +137,14 @@
                   <h1 tabindex="-1">This folder can't be used</h1>
                   <p class="muted mono">{{ url.dir() }}</p>
                   <div class="panel-actions">
-                    <a class="button" [routerLink]="'/' + url.path()">Back to the start folder</a>
+                    <a
+                      class="button"
+                      [routerLink]="'/' + url.path()"
+                      [queryParams]="{ dir: null, file: null, line: null }"
+                      queryParamsHandling="merge"
+                    >
+                      Back to the start folder
+                    </a>
                     <button type="button" class="button" (click)="chooseFolder()">Choose another folder</button>
                   </div>
                 } @else if (st.kind === 'unreachable') {
@@ -155,7 +162,7 @@
             @if (store.refreshFailed()) {
               <div class="notice refresh-notice">
                 <p>Couldn't refresh. Showing the snapshot from {{ collectedTime() }}.</p>
-                <button type="button" class="button button-quiet" (click)="store.refresh()">Try again</button>
+                <button type="button" class="button button-quiet" (click)="retryRefresh()">Try again</button>
               </div>
             }
             <router-outlet />

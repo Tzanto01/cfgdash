@@ -133,6 +133,11 @@ export class App {
     this.store.reload();
   }
 
+  protected retryRefresh(): void {
+    this.store.refresh();
+    focusMainHeading();
+  }
+
   protected chooseFolder(): void {
     this.picker.open.set(true);
   }

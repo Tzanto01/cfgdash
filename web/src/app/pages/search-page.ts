@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, linkedSignal, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  Injector,
+  input,
+  linkedSignal,
+  signal
+} from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, map, of, startWith, switchMap } from 'rxjs';
@@ -56,6 +68,7 @@ export class SearchPage {
   private readonly router = inject(Router);
   private readonly store = inject(SnapshotStore);
   private readonly announcer = inject(Announcer);
+  private readonly injector = inject(Injector);
   protected readonly url = inject(UrlState);
   private timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -105,7 +118,7 @@ export class SearchPage {
       id: definition.id,
       label: definition.label,
       hits: response.results
-        .filter((hit) => hit.kind !== 'file' && navViewId(hit.view) === definition.id)
+        .filter((hit) => !(hit.kind === 'file' && hit.fileId) && navViewId(hit.view) === definition.id)
         .map((hit) => this.toView(hit, response.query))
     })).filter((group) => group.hits.length > 0);
   });
@@ -158,8 +171,9 @@ export class SearchPage {
     this.commit(this.text());
   }
 
-  protected showAllInFile(fileId: string): void {
+  protected showAllInFile(fileId: string, list: HTMLElement): void {
     this.expandedFiles.set(new Set(this.expandedFiles()).add(fileId));
+    afterNextRender(() => list.querySelectorAll<HTMLElement>('.hit')[FILE_PREVIEW]?.focus(), { injector: this.injector });
   }
 
   protected retry(): void {

@@ -25,7 +25,7 @@ export class SnapshotStore {
   readonly refreshing = signal(false);
   /** True when the last refresh failed and the previous content is still shown. */
   readonly refreshFailed = signal(false);
-  /** Increments after each load caused by a folder change completes. */
+  /** Increments after each load caused by a folder change settles, with content or an error. */
   readonly dirLoads = signal(0);
   readonly snapshot = computed(() => {
     const state = this.request();
@@ -106,6 +106,9 @@ export class SnapshotStore {
           return;
         }
         this.request.set({ phase: 'error', kind });
+        if (dirChanged) {
+          this.dirLoads.update((n) => n + 1);
+        }
         this.announcer.announce(
           kind === 'bad-dir'
             ? "This folder can't be used."
