@@ -1,6 +1,1 @@
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
-
-app.MapGet("/", () => "Hello World!");
-
-app.Run();
+return await Cfgdash.Host.CfgdashCli.RunAsync(args, Cfgdash.Host.HostDependencies.CreateDefault());
