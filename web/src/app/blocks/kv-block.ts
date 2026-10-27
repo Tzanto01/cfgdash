@@ -19,7 +19,13 @@ import { JsonValueView } from './json-value';
               <app-json-value [value]="row.value" [redacted]="!!row.redacted" />
               @for (c of overridden(row); track $index) {
                 <p class="overrides muted">
-                  Overrides <s>{{ inline(c) }}</s> from {{ c.source.label }}
+                  Overrides
+                  @if (row.redacted) {
+                    <s><span aria-hidden="true">[redacted]</span><span class="sr-only">a redacted value</span></s>
+                  } @else {
+                    <s>{{ inline(c) }}</s>
+                  }
+                  from {{ c.source.label }}
                 </p>
               }
               @if ((row.contributions?.length ?? 0) > 1) {

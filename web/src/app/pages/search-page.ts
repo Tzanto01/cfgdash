@@ -31,6 +31,19 @@ interface HitGroup {
   hits: HitView[];
 }
 
+interface FileGroup {
+  fileId: string;
+  path: string;
+  hits: HitView[];
+}
+
+const FILE_PREVIEW = 5;
+
+function queryParam(value: unknown): string | undefined {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === 'string' ? first : undefined;
+}
+
 /** Search page: `q` in the URL, debounced typing, results grouped by view in nav order. */
 @Component({
   selector: 'app-search-page',
@@ -46,7 +59,7 @@ export class SearchPage {
   protected readonly url = inject(UrlState);
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  readonly q = input<string | undefined>();
+  readonly q = input<string | undefined, unknown>(undefined, { transform: queryParam });
   private committed: string | undefined;
   protected readonly text = linkedSignal<string | undefined, string>({
     source: this.q,
@@ -92,10 +105,31 @@ export class SearchPage {
       id: definition.id,
       label: definition.label,
       hits: response.results
-        .filter((hit) => navViewId(hit.view) === definition.id)
+        .filter((hit) => hit.kind !== 'file' && navViewId(hit.view) === definition.id)
         .map((hit) => this.toView(hit, response.query))
     })).filter((group) => group.hits.length > 0);
   });
+
+  /** File-content hits, one group per file in first-hit order. */
+  protected readonly fileGroups = computed<FileGroup[]>(() => {
+    const response = this.response();
+    const groups = new Map<string, FileGroup>();
+    for (const hit of response?.results ?? []) {
+      if (hit.kind !== 'file' || !hit.fileId) {
+        continue;
+      }
+      let group = groups.get(hit.fileId);
+      if (!group) {
+        group = { fileId: hit.fileId, path: this.store.file(hit.fileId)?.path ?? hit.fileId, hits: [] };
+        groups.set(hit.fileId, group);
+      }
+      group.hits.push(this.toView(hit, response?.query ?? ''));
+    }
+    return [...groups.values()];
+  });
+  protected readonly fileHitCount = computed(() => this.fileGroups().reduce((sum, g) => sum + g.hits.length, 0));
+  protected readonly expandedFiles = linkedSignal({ source: this.response, computation: () => new Set<string>() });
+  protected readonly filePreview = FILE_PREVIEW;
 
   constructor() {
     effect(() => {
@@ -124,6 +158,10 @@ export class SearchPage {
     this.commit(this.text());
   }
 
+  protected showAllInFile(fileId: string): void {
+    this.expandedFiles.set(new Set(this.expandedFiles()).add(fileId));
+  }
+
   protected retry(): void {
     this.retryCount.update((n) => n + 1);
   }
@@ -141,7 +179,7 @@ export class SearchPage {
     return {
       hit,
       location: this.location(hit),
-      segments: highlight(hit.snippet, query),
+      segments: highlight(hit.snippet.trim(), query),
       link: `/${navViewId(hit.view)}`,
       fragment: hit.itemId ? itemDomId(hit.collectorId, hit.blockId, hit.itemId) : `${hit.collectorId}/${hit.blockId}`
     };
@@ -149,8 +187,7 @@ export class SearchPage {
 
   private location(hit: SearchHit): string {
     if (hit.kind === 'file') {
-      const path = this.store.file(hit.fileId)?.path ?? hit.fileId ?? 'File';
-      return hit.line ? `${path} · line ${hit.line}` : path;
+      return hit.line ? `line ${hit.line}` : 'File';
     }
     const section = this.store.snapshot()?.sections.find((s) => s.collectorId === hit.collectorId);
     const block = section?.blocks.find((b) => b.id === hit.blockId);

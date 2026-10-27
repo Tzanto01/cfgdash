@@ -1,4 +1,4 @@
-<dialog #dialog class="sheet sheet-center" aria-labelledby="folder-picker-title" (cancel)="onCancel($event)">
+<dialog #dialog class="sheet sheet-center" aria-labelledby="folder-picker-title" (cancel)="onCancel($event)" (close)="onClosed()">
   <div class="sheet-header">
     <h2 id="folder-picker-title" #heading tabindex="-1">Choose a folder</h2>
     <button type="button" class="icon-button" aria-label="Close" (click)="cancel()">
@@ -32,7 +32,7 @@
       <section class="picker-part" aria-labelledby="picker-suggestions-title">
         <h3 id="picker-suggestions-title">Suggestions</h3>
         <ul class="picker-list">
-          @for (s of current()!.suggestions; track s.path) {
+          @for (s of current()!.suggestions; track $index) {
             <li>
               <button type="button" class="picker-item" (click)="browse(s.path)">
                 <span>{{ s.label }}</span>

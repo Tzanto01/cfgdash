@@ -11,10 +11,12 @@ import { TreeBlockView } from './tree-block';
   imports: [KvBlockView, TableBlockView, TreeBlockView],
   template: `
     <div class="block" [id]="anchor()" tabindex="-1">
-      @if (headingLevel() === 4) {
-        <h4 class="block-title">{{ block().title }}</h4>
-      } @else {
-        <h3 class="block-title">{{ block().title }}</h3>
+      @if (showTitle()) {
+        @if (headingLevel() === 4) {
+          <h4 class="block-title">{{ block().title }}</h4>
+        } @else {
+          <h3 class="block-title">{{ block().title }}</h3>
+        }
       }
       @if (block().description) {
         <p class="block-description muted">{{ block().description }}</p>
@@ -36,6 +38,8 @@ export class BlockView {
   readonly collectorId = input.required<string>();
   readonly revealItemId = input<string | undefined>();
   readonly headingLevel = input<3 | 4>(3);
+  /** False when the block title repeats its section title. */
+  readonly showTitle = input(true);
 
   protected readonly anchor = computed(() => `${this.collectorId()}/${this.block().id}`);
   protected readonly kv = computed(() => (this.block().type === 'kv' ? (this.block() as KvBlock) : null));

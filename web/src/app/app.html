@@ -5,21 +5,21 @@
       <p class="brand"><app-icon name="mark" /><span class="brand-name">cfgdash</span></p>
       @switch (problem.kind) {
         @case ('signed-out') {
-          <h1>Open the link printed in your terminal</h1>
+          <h1 tabindex="-1">Open the link printed in your terminal</h1>
           <p>
             Each run of cfgdash prints a new link with a one-time token; old links stop working when cfgdash restarts
             or stops after 30 idle minutes.
           </p>
         }
         @case ('forbidden') {
-          <h1>This device or account isn't allowed</h1>
+          <h1 tabindex="-1">This device or account isn't allowed</h1>
           <p>Over the tailnet, cfgdash only answers the owner's logins and tagged devices of the same tailnet.</p>
           @if (problem.kind === 'forbidden') {
             <p class="muted">Reason: <code>{{ problem.reason }}</code></p>
           }
         }
         @case ('bad-host') {
-          <h1>Use the address cfgdash printed</h1>
+          <h1 tabindex="-1">Use the address cfgdash printed</h1>
           <p>Open cfgdash through the address it printed (127.0.0.1 or the tailnet name).</p>
         }
       }
@@ -152,6 +152,12 @@
             }
           }
           @case ('content') {
+            @if (store.refreshFailed()) {
+              <div class="notice refresh-notice">
+                <p>Couldn't refresh. Showing the snapshot from {{ collectedTime() }}.</p>
+                <button type="button" class="button button-quiet" (click)="store.refresh()">Try again</button>
+              </div>
+            }
             <router-outlet />
           }
         }

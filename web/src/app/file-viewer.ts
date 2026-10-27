@@ -42,7 +42,7 @@ export class FileViewer {
 
   protected readonly state = signal<RequestState<FileContent>>({ phase: 'loading' });
   protected readonly wrap = signal(true);
-  protected readonly copied = signal(false);
+  protected readonly copied = signal('');
   protected readonly ref = computed(() => this.store.file(this.url.file()));
   protected readonly path = computed(() => {
     const state = this.state();
@@ -106,13 +106,24 @@ export class FileViewer {
     }
   }
 
+  protected onClosed(): void {
+    if (this.url.file()) {
+      this.close();
+    }
+  }
+
   protected copyPath(): void {
-    const path = this.path();
-    void navigator.clipboard?.writeText(path).then(() => {
-      this.copied.set(true);
-      clearTimeout(this.copyTimer);
-      this.copyTimer = setTimeout(() => this.copied.set(false), 2000);
-    });
+    const write = navigator.clipboard?.writeText(this.path()) ?? Promise.reject(new Error('no clipboard'));
+    write.then(
+      () => this.showCopyFeedback('Copied'),
+      () => this.showCopyFeedback("Couldn't copy")
+    );
+  }
+
+  private showCopyFeedback(text: string): void {
+    this.copied.set(text);
+    clearTimeout(this.copyTimer);
+    this.copyTimer = setTimeout(() => this.copied.set(''), 2000);
   }
 
   private show(fileId: string): void {
@@ -142,7 +153,7 @@ export class FileViewer {
   private load(fileId: string): void {
     this.subscription?.unsubscribe();
     this.state.set({ phase: 'loading' });
-    this.copied.set(false);
+    this.copied.set('');
     this.subscription = this.api.file(fileId, this.url.dir()).subscribe({
       next: (value) => this.state.set({ phase: 'content', value }),
       error: (error: unknown) => this.state.set({ phase: 'error', kind: classifyError(error) })

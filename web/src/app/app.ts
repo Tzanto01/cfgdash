@@ -53,23 +53,37 @@ export class App {
     return at ? `Collected ${formatTime(at)} · ${formatRelative(at, this.clock.now())}` : '';
   });
 
+  protected readonly collectedTime = computed(() => formatTime(this.snapshot()?.machine.collectedAt ?? ''));
+
   constructor() {
+    effect(() => {
+      if (this.store.dirLoads() > 0) {
+        afterNextRender(() => focusMainHeading(), { injector: this.injector });
+      }
+    });
+    effect(() => {
+      if (this.access.problem()) {
+        untracked(() => this.picker.open.set(false));
+        afterNextRender(() => focusMainHeading(), { injector: this.injector });
+      }
+    });
     effect(() => {
       if (!this.url.ready()) {
         return;
       }
       const path = this.url.path();
       const fragment = this.url.fragment();
+      const hasNav = !!this.snapshot();
       untracked(() => {
         const changed = this.lastPath !== null && this.lastPath !== path;
         this.lastPath = path;
         afterNextRender(
           () => {
-            document
-              .querySelector('.nav a[aria-current="page"]')
-              ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+            if (hasNav) {
+              revealCurrentNavItem(path);
+            }
             if (changed && !fragment) {
-              document.querySelector<HTMLElement>('main h1')?.focus();
+              focusMainHeading();
             }
           },
           { injector: this.injector }
@@ -92,7 +106,14 @@ export class App {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) {
+    if (
+      event.key !== '/' ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      isTyping(event.target) ||
+      document.querySelector('dialog[open]')
+    ) {
       return;
     }
     const input =
@@ -114,6 +135,24 @@ export class App {
 
   protected chooseFolder(): void {
     this.picker.open.set(true);
+  }
+}
+
+function focusMainHeading(): void {
+  document.querySelector<HTMLElement>('main h1')?.focus();
+}
+
+/** Scrolls the horizontal nav strip (phones) so the current link is fully visible, without moving the page. */
+function revealCurrentNavItem(path: string): void {
+  const link = [...document.querySelectorAll<HTMLAnchorElement>('.nav a')].find((a) => a.pathname === `/${path}`);
+  const strip = link?.closest('ul');
+  if (!link || !strip || strip.scrollWidth <= strip.clientWidth) {
+    return;
+  }
+  const linkBox = link.getBoundingClientRect();
+  const stripBox = strip.getBoundingClientRect();
+  if (linkBox.left < stripBox.left || linkBox.right > stripBox.right) {
+    strip.scrollLeft += linkBox.left - stripBox.left - 8;
   }
 }
 

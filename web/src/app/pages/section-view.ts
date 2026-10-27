@@ -35,7 +35,11 @@ export function revealFromFragment(pageKey: () => string, sections: () => Sectio
     const list = sections();
     const key = `${pageKey()}#${fragment}`;
     untracked(() => {
-      if (!fragment || !list || key === handled) {
+      if (!fragment) {
+        handled = '';
+        return;
+      }
+      if (!list || key === handled) {
         return;
       }
       handled = key;
@@ -100,6 +104,7 @@ function jumpTo(target: RevealTarget): void {
           [block]="block"
           [collectorId]="section().collectorId"
           [headingLevel]="headingLevel() === 2 ? 3 : 4"
+          [showTitle]="block.title !== section().title"
           [revealItemId]="reveal()?.blockAnchor === section().collectorId + '/' + block.id ? reveal()?.itemId : undefined"
         />
       }

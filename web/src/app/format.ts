@@ -75,24 +75,12 @@ export interface TextSegment {
 
 /** Splits text into segments where every case-insensitive occurrence of `query` is marked. */
 export function highlight(text: string, query: string): TextSegment[] {
-  const needle = query.toLowerCase();
-  if (!needle) {
+  if (!query) {
     return [{ text, match: false }];
   }
-  const haystack = text.toLowerCase();
-  const segments: TextSegment[] = [];
-  let start = 0;
-  let index = haystack.indexOf(needle);
-  while (index !== -1) {
-    if (index > start) {
-      segments.push({ text: text.slice(start, index), match: false });
-    }
-    segments.push({ text: text.slice(index, index + needle.length), match: true });
-    start = index + needle.length;
-    index = haystack.indexOf(needle, start);
-  }
-  if (start < text.length) {
-    segments.push({ text: text.slice(start), match: false });
-  }
-  return segments;
+  const pattern = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'giu');
+  return text
+    .split(pattern)
+    .map((part, index) => ({ text: part, match: index % 2 === 1 }))
+    .filter((segment) => segment.text.length > 0);
 }

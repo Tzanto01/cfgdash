@@ -1,4 +1,4 @@
-<dialog #dialog class="sheet sheet-side" aria-labelledby="file-viewer-title" (cancel)="onCancel($event)">
+<dialog #dialog class="sheet sheet-side" aria-labelledby="file-viewer-title" (cancel)="onCancel($event)" (close)="onClosed()">
   <div class="sheet-header">
     <div class="sheet-heading">
       <h2 id="file-viewer-title" #heading tabindex="-1" class="mono">{{ name() }}</h2>
@@ -20,9 +20,9 @@
     </div>
     <div class="sheet-actions">
       <button type="button" class="button button-quiet" (click)="copyPath()" [disabled]="!path()">
-        <app-icon name="copy" />{{ copied() ? 'Copied' : 'Copy path' }}
+        <app-icon name="copy" />{{ copied() || 'Copy path' }}
       </button>
-      <span class="sr-only" aria-live="polite">{{ copied() ? 'Path copied' : '' }}</span>
+      <span class="sr-only" aria-live="polite">{{ copied() }}</span>
       <button type="button" class="icon-button" aria-label="Close file" (click)="close()">
         <app-icon name="close" />
       </button>

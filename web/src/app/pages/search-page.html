@@ -44,30 +44,51 @@
         @if (!st.value.results.length) {
           <p>No results for "{{ st.value.query }}".</p>
         } @else {
-          <p class="tabular">{{ summary() }}</p>
-          @if (st.value.truncated) {
-            <p class="muted">Showing the first 200; refine the search.</p>
-          }
+          <div>
+            <p class="tabular">{{ summary() }}</p>
+            @if (st.value.truncated) {
+              <p class="muted">Showing the first 200; refine the search.</p>
+            }
+          </div>
           @for (group of groups(); track group.id) {
             <section class="hit-group">
               <h2>{{ group.label }} ({{ group.hits.length }})</h2>
               <ul class="hits">
                 @for (h of group.hits; track $index) {
                   <li>
-                    @if (h.hit.kind === 'file' && h.hit.fileId) {
-                      <button type="button" class="hit" (click)="url.openFile(h.hit.fileId, h.hit.line)">
-                        <span class="hit-location mono">{{ h.location }}</span>
-                        <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
-                      </button>
-                    } @else {
-                      <a class="hit" [routerLink]="h.link" [queryParams]="url.linkParams()" [fragment]="h.fragment">
-                        <span class="hit-location">{{ h.location }}</span>
-                        <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
-                      </a>
-                    }
+                    <a class="hit" [routerLink]="h.link" [queryParams]="url.linkParams()" [fragment]="h.fragment">
+                      <span class="hit-location">{{ h.location }}</span>
+                      <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
+                    </a>
                   </li>
                 }
               </ul>
+            </section>
+          }
+          @if (fileGroups().length) {
+            <section class="hit-group">
+              <h2>File contents ({{ fileHitCount() }})</h2>
+              @for (file of fileGroups(); track file.fileId) {
+                @let all = expandedFiles().has(file.fileId);
+                <section class="file-hits">
+                  <h3 class="mono">{{ file.path }} <span class="muted tabular">({{ file.hits.length }} {{ file.hits.length === 1 ? 'match' : 'matches' }})</span></h3>
+                  <ul class="hits">
+                    @for (h of all ? file.hits : file.hits.slice(0, filePreview); track $index) {
+                      <li>
+                        <button type="button" class="hit" (click)="url.openFile(file.fileId, h.hit.line)">
+                          <span class="hit-location">{{ h.location }}<span class="sr-only"> of {{ file.path }}</span></span>
+                          <span class="hit-snippet mono">@for (seg of h.segments; track $index) {@if (seg.match) {<mark>{{ seg.text }}</mark>} @else {<span>{{ seg.text }}</span>}}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                  @if (!all && file.hits.length > filePreview) {
+                    <button type="button" class="link-button show-all" (click)="showAllInFile(file.fileId)">
+                      Show all {{ file.hits.length }} in this file
+                    </button>
+                  }
+                </section>
+              }
             </section>
           }
         }

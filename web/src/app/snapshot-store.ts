@@ -23,6 +23,10 @@ export class SnapshotStore {
 
   readonly state = this.request.asReadonly();
   readonly refreshing = signal(false);
+  /** True when the last refresh failed and the previous content is still shown. */
+  readonly refreshFailed = signal(false);
+  /** Increments after each load caused by a folder change completes. */
+  readonly dirLoads = signal(0);
   readonly snapshot = computed(() => {
     const state = this.request();
     return state.phase === 'content' ? state.value : null;
@@ -70,6 +74,10 @@ export class SnapshotStore {
 
   private load(dir: string | undefined, refresh: boolean, dirChanged: boolean): void {
     this.subscription?.unsubscribe();
+    this.refreshFailed.set(false);
+    if (!refresh) {
+      this.refreshing.set(false);
+    }
     if (!this.refreshing()) {
       this.request.set({ phase: 'loading' });
     }
@@ -77,6 +85,9 @@ export class SnapshotStore {
       next: (value) => {
         this.request.set({ phase: 'content', value });
         this.refreshing.set(false);
+        if (dirChanged) {
+          this.dirLoads.update((n) => n + 1);
+        }
         this.announcer.announce(
           refresh
             ? 'Snapshot refreshed.'
@@ -87,8 +98,14 @@ export class SnapshotStore {
       },
       error: (error: unknown) => {
         const kind = classifyError(error);
-        this.request.set({ phase: 'error', kind });
+        const keepContent = this.refreshing() && kind !== 'access';
         this.refreshing.set(false);
+        if (keepContent) {
+          this.refreshFailed.set(true);
+          this.announcer.announce("Couldn't refresh. Showing the previous snapshot.");
+          return;
+        }
+        this.request.set({ phase: 'error', kind });
         this.announcer.announce(
           kind === 'bad-dir'
             ? "This folder can't be used."

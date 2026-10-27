@@ -21,7 +21,7 @@
   @if (unavailable().length) {
     <ul class="state-notes">
       @for (c of unavailable(); track c.id) {
-        <li><span class="dot" data-state="unavailable" aria-hidden="true"></span>{{ c.title }}: unavailable, {{ c.reason }}</li>
+        <li><span class="dot" data-state="unavailable" aria-hidden="true"></span>{{ c.title }}: unavailable{{ c.reason ? ' (' + c.reason + ')' : '' }}</li>
       }
     </ul>
   }
@@ -31,7 +31,7 @@
       @if (m.id === 'other') {
         <h2 class="group-title mono">{{ group.viewId }}</h2>
         @if (!group.sections.length) {
-          <p class="muted">Nothing to show for this view on this machine.</p>
+          <p class="muted">Nothing to show for this view.</p>
         }
       }
       @for (section of group.sections; track section.collectorId) {
@@ -44,7 +44,7 @@
       }
     }
   } @else {
-    <p class="empty muted">Nothing to show for this view on this machine.</p>
+    <p class="empty muted">Nothing to show for this view.</p>
   }
 
   @if (notPresent().length) {

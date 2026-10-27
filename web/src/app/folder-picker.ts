@@ -65,7 +65,7 @@ export class FolderPicker {
     this.browse(path, true);
   }
 
-  protected browse(path: string | undefined, fromField = false): void {
+  protected browse(path: string | undefined, fromField = false, thenUse = false): void {
     this.subscription?.unsubscribe();
     this.lastRequest = { path, fromField };
     this.loading.set(true);
@@ -77,6 +77,9 @@ export class FolderPicker {
         this.filter.set('');
         this.fieldError.set('');
         this.loading.set(false);
+        if (thenUse) {
+          this.choose(value.path);
+        }
       },
       error: (error: unknown) => {
         this.loading.set(false);
@@ -106,13 +109,30 @@ export class FolderPicker {
   }
 
   protected use(): void {
-    const path = this.current()?.path;
+    const typed = this.typed().trim();
+    if (typed && typed !== this.current()?.path) {
+      this.browse(typed, true, true);
+      return;
+    }
+    this.choose(this.current()?.path);
+  }
+
+  protected onClosed(): void {
+    if (this.picker.open()) {
+      this.picker.open.set(false);
+    }
+  }
+
+  private choose(path: string | undefined): void {
     if (!path) {
       return;
     }
     this.picker.open.set(false);
     if (path !== this.store.snapshot()?.context.targetDir) {
-      void this.router.navigate([], { queryParams: { dir: path } });
+      void this.router.navigate([], {
+        queryParams: { dir: path, file: null, line: null },
+        queryParamsHandling: 'merge'
+      });
       this.announcer.announce(`Folder changed to ${path}.`);
     }
   }

@@ -52,7 +52,7 @@ export class Badges {
     @let src = source();
     @if (src) {
       @if (src.fileId) {
-        <button type="button" class="chip chip-button" [attr.aria-label]="'Open ' + path()" (click)="url.openFile(src.fileId)">
+        <button type="button" class="chip chip-button" [attr.aria-label]="src.label + ', open ' + path()" (click)="url.openFile(src.fileId)">
           <app-icon name="file" />{{ src.label }}
         </button>
       } @else {

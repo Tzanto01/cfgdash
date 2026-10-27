@@ -18,22 +18,23 @@
     </thead>
     <tbody role="rowgroup">
       @for (row of visibleRows(); track row.id) {
+        @let rowFile = firstCellFile(row);
         <tr role="row" class="item" [id]="domId(row)" tabindex="-1">
           @for (column of block().columns; track column.key; let first = $first) {
             @let cell = row.cells[column.key];
-            @let fileId = first ? firstCellFile(row, cell) : link(cell)?.fileId;
+            @let fileId = first ? rowFile : link(cell)?.fileId === rowFile ? undefined : link(cell)?.fileId;
             <td role="cell" [attr.data-label]="column.label" [class.num]="isNumber(cell)">
               @if (fileId) {
                 <button type="button" class="link-button mono cell-link" (click)="url.openFile(fileId)">{{ text(cell) || 'Open file' }}</button>
               } @else if (isEmpty(cell)) {
                 <span class="muted" aria-hidden="true">-</span><span class="sr-only">empty</span>
               } @else {
-                <span [class.mono]="!!link(cell)">{{ text(cell) }}</span>
+                <span [class.mono]="isMono(cell)">{{ text(cell) }}</span>
               }
             </td>
           }
           @if (hasFlags()) {
-            <td role="cell" data-label="Flags"><app-badges [items]="row.flags" /></td>
+            <td role="cell" data-label="Flags" [class.no-flags]="!row.flags?.length"><app-badges [items]="row.flags" /></td>
           }
         </tr>
       }

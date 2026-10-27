@@ -71,12 +71,18 @@ export class TableBlockView {
   }
 
   /** The file the first cell opens: its own link, else the row file. */
-  protected firstCellFile(row: TableRow, cell: Cell | undefined): string | undefined {
-    return this.link(cell)?.fileId ?? row.fileId;
+  protected firstCellFile(row: TableRow): string | undefined {
+    const first = this.block().columns.at(0);
+    return this.link(first ? row.cells[first.key] : undefined)?.fileId ?? row.fileId;
   }
 
   protected text(cell: Cell | undefined): string {
     return cellText(cell);
+  }
+
+  /** Link cells and strings that look like absolute paths render in mono. */
+  protected isMono(cell: Cell | undefined): boolean {
+    return !!this.link(cell) || (typeof cell === 'string' && /^([A-Za-z]:[\\/]|\/|~\/)/.test(cell));
   }
 
   protected isNumber(cell: Cell | undefined): boolean {
