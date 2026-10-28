@@ -168,6 +168,7 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
         }
 
         var entry = index.Entries
+            .Where(e => e.Path.Length > 0 && !e.Path.Contains('\0', StringComparison.Ordinal))
             .Select(e => e with { Path = PathUtil.Full(e.Path) })
             .Where(e => string.Equals(Path.GetFileNameWithoutExtension(e.Path), key, StringComparison.Ordinal)
                 && e.Path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase)

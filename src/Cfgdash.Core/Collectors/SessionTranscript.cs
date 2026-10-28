@@ -41,7 +41,7 @@ internal sealed class TranscriptEvent(char kind, DateTimeOffset? time, string? t
 /// <summary>What one transcript file yields. Never holds tool outputs or assistant prose; kept text is redacted before it is truncated.</summary>
 internal sealed class TranscriptScan
 {
-    /// <summary>Distinct working directories in record order (at most 32); the first is the session's project.</summary>
+    /// <summary>Distinct working directories in record order (at most 32, plus any that mention <c>company</c>); the first is the session's project.</summary>
     public List<string> Cwds { get; } = [];
 
     public string? Cwd => Cwds.Count > 0 ? Cwds[0] : null;
@@ -80,6 +80,7 @@ internal static partial class SessionTranscript
     public const int ToolChars = 140;
     private const int ErrorChars = 200;
     private const int MaxCwds = 32;
+    private const int RedactionMargin = 4096;
     private const int MaxLineBytes = 64 << 20;
     private const double TokenRateSpikeMhr = 25;
     private const long TokenSpikeFloor = 12_000_000;
@@ -141,8 +142,16 @@ internal static partial class SessionTranscript
 
         public Dictionary<string, TranscriptEvent> AgentUses { get; } = new(StringComparer.Ordinal);
 
-        /// <summary>Cleaned, redacted, then cut to <paramref name="max"/> chars, so a cut never leaves part of a secret behind.</summary>
-        public string Text(string? raw, int max) => Limit(Redactor.RedactText(Limit(Clear(raw), max + 512)), max);
+        /// <summary>
+        /// Cleaned, redacted, then cut to <paramref name="max"/> chars, so a cut never leaves part of a secret behind.
+        /// Redaction sees a bounded window; when the window cuts the text, quotes are closed so a long quoted value still matches.
+        /// </summary>
+        public string Text(string? raw, int max)
+        {
+            var clean = Clear(raw);
+            var window = clean.Length > max + RedactionMargin ? clean[..(max + RedactionMargin)] + "\"'" : clean;
+            return Limit(Redactor.RedactText(window), max);
+        }
     }
 
     private static void ReadLine(ReadOnlyMemory<byte> line, Reading reading)
@@ -159,7 +168,7 @@ internal static partial class SessionTranscript
             scan.Last = time;
         }
 
-        if (header.Cwd is { Length: > 0 } cwd && scan.Cwds.Count < MaxCwds && !scan.Cwds.Contains(cwd))
+        if (header.Cwd is { Length: > 0 } cwd && (scan.Cwds.Count < MaxCwds || cwd.Contains("company", StringComparison.OrdinalIgnoreCase)) && !scan.Cwds.Contains(cwd))
         {
             scan.Cwds.Add(cwd);
         }

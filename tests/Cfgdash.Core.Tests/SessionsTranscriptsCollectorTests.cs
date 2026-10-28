@@ -173,6 +173,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
         [
             Prompt(start, cwd, "start"),
             ToolUse(start, "m1", "t1", "Bash", new JsonObject { ["command"] = new string('x', 120) + " " + Secret }),
+            ToolUse(start, "m2", "t2", "Bash", new JsonObject { ["command"] = "export API_TOKEN=\"" + new string('q', 5000) + "\"" }),
             new JsonObject
             {
                 ["type"] = "user",
@@ -196,6 +197,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
         Assert.Equal(2, Int(Table(section, "sessions").Rows.Single(), "prompts"));
         Assert.Contains("Prompt: look here", detail.Content);
         Assert.DoesNotContain("gh" + "p_", detail.Content);
+        Assert.DoesNotContain("qqqq", detail.Content);
         Assert.DoesNotContain(Prose, detail.Content);
         Assert.DoesNotContain(ToolOutput, detail.Content);
     }
@@ -232,6 +234,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
             Line(Result(start, "t5", "Permission for this action was denied", true)),
             Line(Result(start, "t6", "Permission for this action was denied", true)),
             Line(Result(start, "t7", "Permission for this action was denied", true)),
+            Line(Result(start, "t7b", "Permission for this action was denied", true)),
             Line(Result(start, "t8", "PreToolUse:Bash hook error: [guard.ps1]: deny 41", true)),
             Line(Result(start, "t9", "PreToolUse:Bash hook error: [other.ps1]: deny 42", true)),
             Line(Result(start, "t10", "PreToolUse:Bash hook error: [third.ps1]: deny 43", true)),
@@ -240,6 +243,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
         var signals = SessionTranscript.Signals(SessionTranscript.Scan(path, new Redactor(), false, CancellationToken.None));
 
         Assert.Equal(["FAILURE_LOOP", "GUARDRAIL_REPEAT", "REVIEW_REPEAT"], signals.Select(s => s.Code).Order(StringComparer.Ordinal));
+        Assert.StartsWith("Same failure repeated 3x ('pretooluse:bash hook error: deny #')", signals.Single(s => s.Code == "FAILURE_LOOP").Message);
     }
 
     [Fact]
