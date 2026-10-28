@@ -1,4 +1,6 @@
+import { makeSnapshot } from '../testing/fixtures';
 import { startApp } from '../testing/harness';
+import { buildViews } from './views';
 
 describe('views', () => {
   it('lists nav views in contract order, adds Other for unknown ids and hides notPresent-only views', async () => {
@@ -29,5 +31,16 @@ describe('views', () => {
     expect(h.el.querySelector('h2')?.textContent?.trim()).toBe('zeta');
     expect(h.text()).toContain('Zeta things');
     expect(h.text()).toContain('This block type (chart) needs a newer cfgdash UI.');
+  });
+
+  it('lists sessions.transcripts under its own Sessions view, not Other', () => {
+    const snapshot = makeSnapshot();
+    snapshot.collectors.push({ id: 'sessions.transcripts', title: 'Sessions', version: '1.0.0', view: 'sessions', state: 'active', requirements: {}, durationMs: 1 });
+    snapshot.sections.push({ collectorId: 'sessions.transcripts', view: 'sessions', title: 'Sessions', blocks: [] });
+
+    const views = buildViews(snapshot);
+
+    expect(views.find((v) => v.id === 'sessions')).toMatchObject({ label: 'Sessions', visible: true, sections: [{ collectorId: 'sessions.transcripts' }] });
+    expect(views.find((v) => v.id === 'other')?.sections.some((s) => s.view === 'sessions')).toBe(false);
   });
 });

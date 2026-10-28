@@ -65,7 +65,7 @@ JSON is camelCase, UTF-8, `null` fields omitted. Paths use forward slashes in JS
 { "collectorId": "hooks.registered", "view": "hooks", "title": "Hooks", "blocks": [Block] }
 ```
 
-`view` ids (navigation order): `overview`, `settings`, `instructions`, `agents`, `skills`, `hooks`, `mcp-permissions`, `env`, `jobs`. A collector picks one. Unknown views render under "Other" in the UI.
+`view` ids (navigation order): `overview`, `settings`, `instructions`, `agents`, `skills`, `hooks`, `mcp-permissions`, `env`, `jobs`, `sessions`, `memory`. A collector picks one. Unknown views render under "Other" in the UI.
 
 ## Blocks (the only shapes the UI renders)
 
