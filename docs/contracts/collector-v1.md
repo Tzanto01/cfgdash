@@ -57,6 +57,7 @@ Discovered once per run, then per target dir where needed:
 | `jobs.windows-tasks` | jobs | os windows, tools schtasks | table: harness scheduled tasks (action references the workspace or config repo), state, last run, last result (hex + meaning) |
 | `jobs.systemd-user` | jobs | os linux, tools systemctl | table: user services and timers, active state, last trigger, result |
 | `jobs.crontab` | jobs | os linux + macos, tools crontab | table: user crontab entries (redacted), managed-block marker, log file last write when the line redirects to one |
+| `engram.memory` | memory | paths engramDataDir | `<engramDataDir>/engram.db` opened read-only (`Mode=ReadOnly`, no pooling, parameterized queries, schema checked via `pragma_table_info`; missing optional columns are omitted, missing core columns -> unavailable "unsupported engram schema"); soft-deleted rows excluded. kv: db size, last write, user_version, counts of observations, sessions, prompts; tables: projects (observations, sessions, last activity, counts per scope), newest 500 observations (id, updated, created, project, scope, type, title, topic key, review after) with `detailId` `engram.memory:<id>` opening metadata and content as markdown, topic keys with counts. Projects starting with `company` appear (flag `company`) only with a company layer, otherwise they are excluded everywhere and a note counts them |
 
 Collectors that need the shared settings merge use one `SettingsLayers` service (owned by `core`) so all views agree.
 
