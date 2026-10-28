@@ -104,7 +104,10 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
             indexed = found.Count;
             try
             {
-                index.Save(IndexFile);
+                if (index.Changed)
+                {
+                    index.Save(IndexFile);
+                }
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

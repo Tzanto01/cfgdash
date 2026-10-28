@@ -117,6 +117,20 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
     }
 
     [Fact]
+    public async Task A_build_that_scans_nothing_leaves_the_index_alone()
+    {
+        WriteSession(SessionA, StandardSession(cwd, "claude-opus-5-5"));
+        await BuildSectionAsync();
+        var indexFile = Path.Combine(cacheDir, "sessions-index.json");
+        var before = File.ReadAllText(indexFile);
+        var emptyConfig = TestEnvironments.Create(tree, paths: [TestEnvironments.ContextPath(PathKeys.ClaudeConfigDir, tree.Dir("empty-claude"))]);
+
+        await BuildAsync(Collector(), emptyConfig);
+
+        Assert.Equal(before, File.ReadAllText(indexFile));
+    }
+
+    [Fact]
     public async Task A_spent_budget_indexes_one_new_session_per_build_and_says_so()
     {
         WriteSession(SessionA, StandardSession(cwd, "claude-opus-5-5"));

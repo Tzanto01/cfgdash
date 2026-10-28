@@ -43,6 +43,9 @@ internal sealed class SessionIndex
 
     public IEnumerable<SessionIndexEntry> Entries => entries.Values;
 
+    /// <summary>True once a summary was stored since load; only then is a save needed.</summary>
+    public bool Changed { get; private set; }
+
     public static SessionIndex Load(string file)
     {
         try
@@ -81,6 +84,7 @@ internal sealed class SessionIndex
         var entry = new SessionIndexEntry(path, length, lastWriteUtcTicks, summary);
         entries[entry.Path] = entry;
         used[entry.Path] = entry;
+        Changed = true;
     }
 
     /// <summary>Writes the used entries atomically (temp file, then replace); user-only (0700 dir, 0600 file) on Linux and macOS.</summary>
