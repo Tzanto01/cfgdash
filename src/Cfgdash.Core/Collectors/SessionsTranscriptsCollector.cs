@@ -52,7 +52,7 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
             var stopwatch = Stopwatch.StartNew();
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(budget + Overrun);
-            var scanned = 0;
+            var started = 0;
             var found = new ConcurrentBag<Session>();
             var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(System.Environment.ProcessorCount / 2, 1, 4), CancellationToken = cancellationToken };
             Parallel.ForEach(Partitioner.Create(candidates, EnumerablePartitionerOptions.NoBuffering), options, file =>
@@ -73,12 +73,12 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
                         index.Put(f, summary);
                     }
 
-                    Interlocked.Increment(ref scanned);
                     return summary;
                 }
 
                 var subagents = SubagentFiles(file);
-                if (Volatile.Read(ref scanned) > 0 && stopwatch.Elapsed > budget && (Cached(file) is null || subagents.Any(s => Cached(s) is null)))
+                var uncached = Cached(file) is null || subagents.Any(s => Cached(s) is null);
+                if (uncached && Interlocked.Increment(ref started) > 1 && stopwatch.Elapsed > budget)
                 {
                     return;
                 }

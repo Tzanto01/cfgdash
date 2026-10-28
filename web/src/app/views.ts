@@ -17,6 +17,7 @@ export const VIEW_DEFINITIONS: readonly ViewDefinition[] = [
   { id: 'mcp-permissions', label: 'MCP & permissions', description: 'MCP servers, permission rules and model settings.' },
   { id: 'env', label: 'Environment', description: 'Harness environment variables and where they are set.' },
   { id: 'jobs', label: 'Jobs', description: 'Scheduled jobs that run harness scripts.' },
+  { id: 'sessions', label: 'Sessions', description: 'Recent Claude Code sessions with tokens, estimated cost and audit signals.' },
   { id: 'other', label: 'Other', description: 'Data from sources this version of the UI has no view for.' }
 ];
 

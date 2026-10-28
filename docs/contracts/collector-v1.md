@@ -57,6 +57,7 @@ Discovered once per run, then per target dir where needed:
 | `jobs.windows-tasks` | jobs | os windows, tools schtasks | table: harness scheduled tasks (action references the workspace or config repo), state, last run, last result (hex + meaning) |
 | `jobs.systemd-user` | jobs | os linux, tools systemctl | table: user services and timers, active state, last trigger, result |
 | `jobs.crontab` | jobs | os linux + macos, tools crontab | table: user crontab entries (redacted), managed-block marker, log file last write when the line redirects to one |
+| `sessions.transcripts` | sessions | paths claudeConfigDir | kv: window (30 days), sessions listed, token totals by kind, est. cost (USD, built-in list prices with an as-of date; unknown models blank), sessions with HARD signals, index coverage; table: sessions newest first (max 500, subagents rolled into the parent) with tokens, est. cost, session-audit signals and `company`, row `detailId` opens a redacted digest (prompts, tool calls, errors, signals; never tool outputs or assistant prose); table: signal counts. Incremental index in the cache dir; without a company layer, sessions under a `company` folder are left out with a note |
 
 Collectors that need the shared settings merge use one `SettingsLayers` service (owned by `core`) so all views agree.
 
