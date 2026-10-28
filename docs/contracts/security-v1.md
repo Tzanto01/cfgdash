@@ -5,7 +5,7 @@ Owner: department lead. Every team implements its side; `security-reviewer` chec
 ## Read-only
 
 - v1 never writes, edits, deletes or moves any configuration, settings, instruction, agent, skill, hook or job file, and never changes scheduled tasks, systemd units, crontab or git state. Git is called read-only (`status`, `rev-parse`, `log`) with `--no-optional-locks`.
-- cfgdash writes only inside its own cache dir (run state, logs, exports) and, for `update`, its own install location.
+- cfgdash writes only inside its own cache dir (run state, logs, exports) and, for `update`, its own install location. Accepted exceptions (Nico, 2026-10-28): opening `engram.db` with `Mode=ReadOnly` may create the empty SQLite `-shm`/`-wal` side files next to it (they exist anyway while Engram runs; `engram.db` is never written), and the single-file exe unpacks its native SQLite library into the .NET bundle extraction dir (`%TEMP%\.net\cfgdash`, `$TMPDIR/.net/cfgdash`).
 - External processes run without a shell, arguments as a list, with timeouts, inheriting no extra environment.
 - The future write path (dry-run diff, explicit confirmation, audit log) lives behind its own `/api/v2` surface and is out of v1. `docs/architecture.md` names the seam.
 

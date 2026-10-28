@@ -10,7 +10,7 @@ Read [docs/architecture.md](docs/architecture.md) and the contracts in [docs/con
 
 ## Product rules
 
-- v1 is read-only. It never writes, edits or deletes configuration, settings, instructions, agents, skills, hooks, jobs or git state. It writes only its own cache dir (and its own binary in `update`).
+- v1 is read-only. It never writes, edits or deletes configuration, settings, instructions, agents, skills, hooks, jobs or git state. It writes only its own cache dir (and its own binary in `update`). Two exceptions Nico accepted on 2026-10-28: SQLite may create the empty `-shm`/`-wal` side files beside `engram.db` when it opens the database read-only, and the single-file exe unpacks its native SQLite library under the .NET extraction dir (`%TEMP%\.net` / `$TMPDIR/.net`). `engram.db` itself is never written.
 - Never open credential files (`.credentials.json`, keys, `.env`, `.netrc`, `.git-credentials`, `.ssh/`, `.gnupg/`). `.claude.json` is parsed for MCP servers and project keys only and never served.
 - Read environment variables only through `AllowlistEnvironmentReader`. Never enumerate them.
 - Cross-platform: no hardcoded drive letters or Windows-only paths; accept both separators; JSON paths use forward slashes. Detect capabilities, never hostnames.
