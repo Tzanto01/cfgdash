@@ -111,19 +111,19 @@ internal sealed class SnapshotBuilder(
             });
         }
 
-        foreach (var tool in requirements.Tools ?? [])
-        {
-            if (!environment.HasTool(tool))
-            {
-                return (CollectorState.Unavailable, tool + " not installed");
-            }
-        }
-
         foreach (var key in requirements.Paths ?? [])
         {
             if (environment.GetPath(key) is null)
             {
                 return (CollectorState.NotPresent, $"no {key} on this machine");
+            }
+        }
+
+        foreach (var tool in requirements.Tools ?? [])
+        {
+            if (!environment.HasTool(tool))
+            {
+                return (CollectorState.Unavailable, tool + " not installed");
             }
         }
 

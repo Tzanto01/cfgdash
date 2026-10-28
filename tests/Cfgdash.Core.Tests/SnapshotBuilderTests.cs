@@ -44,14 +44,15 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
     }
 
     [Fact]
-    public async Task Missing_tool_is_unavailable_and_checked_before_paths()
+    public async Task Missing_path_is_checked_before_missing_tool()
     {
-        var collector = new TestCollector("tool", new Requirements(Tools: ["git"], Paths: [PathKeys.ConfigRepo]), (_, _) => throw new InvalidOperationException("must not run"));
+        var collector = new TestCollector("tool", new Requirements(Tools: ["pwsh"], Paths: [PathKeys.ConfigRepo]), (_, _) => throw new InvalidOperationException("must not run"));
 
-        var snapshot = await BuildAsync(TestEnvironments.Create(tree), null, collector);
+        var withoutPath = await BuildAsync(TestEnvironments.Create(tree), null, collector);
+        var withPath = await BuildAsync(TestEnvironments.Create(tree, paths: [TestEnvironments.ContextPath(PathKeys.ConfigRepo, tree.Root)]), null, collector);
 
-        Assert.Equal(CollectorState.Unavailable, snapshot.Collectors[0].State);
-        Assert.Equal("git not installed", snapshot.Collectors[0].Reason);
+        Assert.Equal((CollectorState.NotPresent, "no configRepo on this machine"), (withoutPath.Collectors[0].State, withoutPath.Collectors[0].Reason));
+        Assert.Equal((CollectorState.Unavailable, "pwsh not installed"), (withPath.Collectors[0].State, withPath.Collectors[0].Reason));
     }
 
     [Fact]

@@ -21,7 +21,7 @@
     { "id": "overview.machine", "title": "Machine", "version": "1.0.0", "view": "overview", "state": "active", "requirements": { "targetDir": false }, "durationMs": 310 },
     { "id": "settings.effective", "title": "Effective settings", "version": "1.0.0", "view": "settings", "state": "active", "requirements": { "paths": ["claudeConfigDir"], "targetDir": true }, "durationMs": 12 },
     { "id": "instructions.chain", "title": "Instruction chain", "version": "1.0.0", "view": "instructions", "state": "active", "requirements": { "targetDir": true }, "durationMs": 20 },
-    { "id": "agents.company-core", "title": "Company agent cores", "version": "1.0.0", "view": "agents", "state": "unavailable", "reason": "pwsh not installed", "requirements": { "tools": ["pwsh"], "paths": ["configRepo", "companyLayer"], "targetDir": false }, "durationMs": 0 },
+    { "id": "agents.company-core", "title": "Company agent cores", "version": "1.0.0", "view": "agents", "state": "notPresent", "reason": "no configRepo on this machine", "requirements": { "tools": ["pwsh"], "paths": ["configRepo", "companyLayer"], "targetDir": false }, "durationMs": 0 },
     { "id": "hooks.registered", "title": "Hooks", "version": "1.0.0", "view": "hooks", "state": "active", "requirements": { "paths": ["claudeConfigDir"], "targetDir": true }, "durationMs": 9, "notes": ["1 hook script not found"] },
     { "id": "jobs.systemd-user", "title": "systemd user units", "version": "1.0.0", "view": "jobs", "state": "notPresent", "reason": "Linux only", "requirements": { "os": ["linux"], "tools": ["systemctl"], "targetDir": false }, "durationMs": 0 }
   ],

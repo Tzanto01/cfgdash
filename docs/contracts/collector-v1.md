@@ -15,7 +15,7 @@ The code in the initial commit is the contract. Signature changes go through the
 - `src/Cfgdash.Core/CfgdashPaths.cs`: cache dir, config dir, overrides file.
 ## Runner rules (`SnapshotBuilder : ISnapshotSource`)
 
-1. Evaluate requirements in this order, first failure wins: OS (`notPresent`, "Windows only"), tools (`unavailable`, "<tool> not installed"), paths (`notPresent`, "no <key> on this machine"). Missing things are a state, never an exception.
+1. Evaluate requirements in this order, first failure wins: OS (`notPresent`, "Windows only"), paths (`notPresent`, "no <key> on this machine"), tools (`unavailable`, "<tool> not installed"). Missing things are a state, never an exception.
 2. Run every remaining collector concurrently with a 20 s timeout each. Timeout or exception -> `unavailable` with a one-line reason (exception type + message, no stack, no file contents). One collector never breaks the snapshot.
 3. `CollectorResult.UnavailableReason` set -> `unavailable`. Otherwise `active` and its blocks become one section.
 4. All string values pass through the `Redactor` before they enter a block (collectors call it; the builder runs a final defensive pass over kv values and table cells).
