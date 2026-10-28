@@ -27,6 +27,10 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
 
     public async Task<CollectorResult> CollectAsync(CollectContext context, CancellationToken cancellationToken)
     {
+        var file = Path.Combine(DataDir(context.Environment), DatabaseFile);
+        var lastWrite = PathUtil.IsNetworkPath(file)
+            ? null
+            : new[] { file, file + "-wal" }.Select(f => new FileInfo(f)).Where(f => f.Exists && f.Length > 0).Select(f => (DateTime?)f.LastWriteTimeUtc).Max();
         var (db, schema, reason) = await OpenAsync(context.Environment, cancellationToken);
         if (db is null || schema is null)
         {
@@ -35,7 +39,7 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
 
         await using (db)
         {
-            return await CollectAsync(db, schema, context, cancellationToken);
+            return await CollectAsync(db, schema, file, lastWrite, context, cancellationToken);
         }
     }
 
@@ -90,7 +94,7 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
         }
     }
 
-    private static async Task<CollectorResult> CollectAsync(SqliteConnection db, Schema schema, CollectContext context, CancellationToken ct)
+    private static async Task<CollectorResult> CollectAsync(SqliteConnection db, Schema schema, string file, DateTime? lastWrite, CollectContext context, CancellationToken ct)
     {
         var redactor = context.Redactor;
         var showCompany = ShowCompany(context.Environment);
@@ -104,13 +108,11 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
         (long Visible, long Company)? sessions = schema.Sessions.Has("project") ? await CountAsync(db, "sessions", "1", showCompany, ct) : null;
         (long Visible, long Company)? prompts = schema.Prompts.Has("project") ? await CountAsync(db, "user_prompts", "1", showCompany, ct) : null;
 
-        var file = Path.Combine(DataDir(context.Environment), DatabaseFile);
-        var lastWrite = new[] { file, file + "-wal" }.Where(File.Exists).Max(File.GetLastWriteTimeUtc);
         var source = new SourceRef(DatabaseFile);
         var summary = new KvBlock("summary", "Engram database",
         [
             new("dbSizeBytes", new FileInfo(file).Length, source),
-            new("lastWrite", IsoTime.Format(new DateTimeOffset(lastWrite)), source),
+            new("lastWrite", lastWrite is { } written ? IsoTime.Format(new DateTimeOffset(written)) : null, source),
             new("userVersion", await ScalarAsync(db, "PRAGMA user_version", ct), source),
             new("observations", observations.Visible, source),
             new("sessions", sessions?.Visible, source),
@@ -131,7 +133,7 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
         if (sessions is not null)
         {
             var sessionWhere = showCompany ? "1" : "NOT " + IsCompany;
-            await foreach (var r in QueryAsync(db, $"SELECT project, count(*), {schema.Sessions.Or("started_at")} FROM sessions WHERE {sessionWhere} GROUP BY project", ct))
+            await foreach (var r in QueryAsync(db, $"SELECT project, count(*), max({schema.Sessions.Or("started_at")}) FROM sessions WHERE {sessionWhere} GROUP BY project", ct))
             {
                 var row = Project(Str(r, 0));
                 row.Sessions = r.GetInt64(1);
@@ -142,7 +144,7 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
         var projectRows = projects.Values
             .OrderByDescending(p => p.LastActivity, StringComparer.Ordinal)
             .ThenBy(p => p.Name, StringComparer.Ordinal)
-            .Select(p => new TableRow(p.Name ?? "(none)", new Dictionary<string, JsonNode?>
+            .Select(p => new TableRow(redactor.RedactText(p.Name ?? "(none)"), new Dictionary<string, JsonNode?>
             {
                 ["project"] = Text(p.Name ?? "(none)"),
                 ["observations"] = p.Observations,
@@ -213,7 +215,7 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
                 $"SELECT topic_key, project, count(*), max({activity}) FROM observations WHERE {where} AND topic_key IS NOT NULL AND topic_key <> '' " +
                 $"GROUP BY topic_key, project ORDER BY 4 DESC, 1 LIMIT {MaxRows + 1}", ct))
             {
-                topicRows.Add(new TableRow($"{Str(r, 1)}|{Str(r, 0)}", new Dictionary<string, JsonNode?>
+                topicRows.Add(new TableRow(redactor.RedactText($"{Str(r, 1)}|{Str(r, 0)}"), new Dictionary<string, JsonNode?>
                 {
                     ["topicKey"] = Text(Str(r, 0)),
                     ["project"] = Text(Str(r, 1)),
@@ -288,6 +290,11 @@ internal sealed class EngramMemoryCollector : ICollector, IDetailProvider
         {
             await db.DisposeAsync();
             return (null, null, $"{DatabaseFile} is unreadable: {e.Message.Split('\n')[0].Trim()}");
+        }
+        catch
+        {
+            await db.DisposeAsync();
+            throw;
         }
     }
 

@@ -40,13 +40,15 @@ public sealed class EngramMemoryCollectorTests : IDisposable
     {
         Exec("PRAGMA journal_mode = WAL;" + FullSchema + """
             INSERT INTO sessions (id, project, directory, started_at) VALUES
-              ('s1', 'cfgdash', '/home/user/cfgdash', '2026-10-01 08:00:00'),
-              ('s2', 'company/example-app', '/home/user/company', '2026-10-02 08:00:00');
+              ('s1', 'cfgdash', '/home/user/cfgdash', '2026-10-10 08:00:00'),
+              ('s2', 'company/example-app', '/home/user/company', '2026-10-02 08:00:00'),
+              ('s3', 'cfgdash', '/home/user/cfgdash', '2026-09-01 08:00:00');
             INSERT INTO observations (id, session_id, type, title, content, project, scope, topic_key, created_at, updated_at, deleted_at, review_after, revision_count) VALUES
               (1, 's1', 'decision', 'Pick sqlite', 'Use **sqlite** read-only.', 'cfgdash', 'project', 'architecture/storage', '2026-10-01 09:00:00', '2026-10-03 09:00:00', NULL, '2027-01-01 00:00:00', 3),
               (2, 's1', 'preference', 'Short answers', 'Keep it short.', 'cfgdash', 'personal', NULL, '2026-10-01 10:00:00', '2026-10-01 10:00:00', NULL, NULL, 1),
               (3, 's1', 'bugfix', 'Old note', 'Gone.', 'cfgdash', 'project', 'architecture/storage', '2026-10-01 11:00:00', '2026-10-01 11:00:00', '2026-10-05 00:00:00', NULL, 1),
-              (4, 's2', 'decision', 'Company rule', 'Confidential company content.', 'company/example-app', 'project', 'company/rules', '2026-10-02 09:00:00', '2026-10-04 09:00:00', NULL, NULL, 1);
+              (4, 's2', 'decision', 'Company rule', 'Confidential company content.', 'company/example-app', 'project', 'company/rules', '2026-10-02 09:00:00', '2026-10-04 09:00:00', NULL, NULL, 1),
+              (5, 's2', 'decision', 'Other company rule', 'More company content.', char(9) || ' COMPANY/Other', 'global', NULL, '2026-10-02 09:00:00', '2026-10-02 09:00:00', NULL, NULL, 1);
             INSERT INTO user_prompts (session_id, content, project, created_at) VALUES ('s1', 'hi', 'cfgdash', '2026-10-01 08:01:00'), ('s2', 'hi', 'company/example-app', '2026-10-02 08:01:00');
             """);
     }
@@ -73,9 +75,9 @@ public sealed class EngramMemoryCollectorTests : IDisposable
         Assert.Equal(["1", "2"], Table(result, "observations").Rows.Select(r => r.Id).Order());
         Assert.Equal(["cfgdash"], Table(result, "projects").Rows.Select(r => r.Id));
         Assert.Equal(["cfgdash|architecture/storage"], Table(result, "topics").Rows.Select(r => r.Id));
-        Assert.Equal(("2", "1", "1"), (Kv(result, "observations"), Kv(result, "sessions"), Kv(result, "prompts")));
+        Assert.Equal(("2", "2", "1"), (Kv(result, "observations"), Kv(result, "sessions"), Kv(result, "prompts")));
         Assert.Null(detail);
-        Assert.Contains("1 company observations, 1 sessions and 1 prompts hidden: this machine has no company layer", result.Notes!);
+        Assert.Contains("2 company observations, 1 sessions and 1 prompts hidden: this machine has no company layer", result.Notes!);
         Assert.DoesNotContain("company/example-app", System.Text.Json.JsonSerializer.Serialize(result.Blocks, SnapshotJson.Options));
     }
 
@@ -91,7 +93,7 @@ public sealed class EngramMemoryCollectorTests : IDisposable
         var company = Table(result, "observations").Rows.Single(r => r.Id == "4");
         Assert.Equal(["company"], company.Flags);
         Assert.Equal(["company"], Table(result, "projects").Rows.Single(r => r.Id == "company/example-app").Flags);
-        Assert.Equal("3", Kv(result, "observations"));
+        Assert.Equal("4", Kv(result, "observations"));
         Assert.Null(result.Notes);
         Assert.Contains("Confidential company content.", detail!.Content);
     }
@@ -111,7 +113,8 @@ public sealed class EngramMemoryCollectorTests : IDisposable
         Assert.Equal("2027-01-01T00:00:00Z", rows[0].Cells["reviewAfter"]!.GetValue<string>());
         Assert.Equal(1L, Table(result, "topics").Rows.Single().Cells["observations"]!.GetValue<long>());
         var project = Table(result, "projects").Rows.Single().Cells;
-        Assert.Equal((2L, 1L, 1L, 1L), (project["observations"]!.GetValue<long>(), project["project-scope"]!.GetValue<long>(), project["personal-scope"]!.GetValue<long>(), project["sessions"]!.GetValue<long>()));
+        Assert.Equal((2L, 1L, 1L, 2L), (project["observations"]!.GetValue<long>(), project["project-scope"]!.GetValue<long>(), project["personal-scope"]!.GetValue<long>(), project["sessions"]!.GetValue<long>()));
+        Assert.Equal("2026-10-10T08:00:00Z", project["lastActivity"]!.GetValue<string>());
         Assert.Null(deleted);
     }
 
@@ -189,8 +192,8 @@ public sealed class EngramMemoryCollectorTests : IDisposable
         Exec(FullSchema + """
             INSERT INTO sessions (id, project, directory) VALUES ('s1', 'cfgdash', '/home/user/cfgdash');
             WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 501)
-            INSERT INTO observations (id, session_id, type, title, content, project, created_at, updated_at)
-            SELECT i, 's1', 'discovery', 'Note ' || i, 'Body', 'cfgdash', '2026-10-01 00:00:00', printf('2026-10-01 %02d:%02d:00', i / 60, i % 60) FROM n;
+            INSERT INTO observations (id, session_id, type, title, content, project, topic_key, created_at, updated_at)
+            SELECT i, 's1', 'discovery', 'Note ' || i, 'Body', 'cfgdash', 'topic/' || i, '2026-10-01 00:00:00', printf('2026-10-01 %02d:%02d:00', i / 60, i % 60) FROM n;
             """);
 
         var result = await collector.CollectAsync(Context(), CancellationToken.None);
@@ -200,6 +203,8 @@ public sealed class EngramMemoryCollectorTests : IDisposable
         Assert.Equal("501", rows[0].Id);
         Assert.DoesNotContain(rows, r => r.Id == "1");
         Assert.Contains("showing the newest 500 of 501 observations", result.Notes!);
+        Assert.Equal(500, Table(result, "topics").Rows.Count);
+        Assert.Contains("showing the 500 most recent topic keys", result.Notes!);
     }
 
     [Fact]
