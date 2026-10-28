@@ -10,7 +10,7 @@ A request is authenticated when it carries the per-run token as `Authorization: 
 
 | Method + path | Answer |
 | --- | --- |
-| `GET /api/v1/health` | `{ "status": "ok", "version": "0.1.0", "schemaVersion": 1 }` |
+| `GET /api/v1/health` | `{ "status": "ok", "version": "0.1.0", "schemaVersion": 1, "edits": bool }` (`edits` true only on the UI listener, see [edits-v1](edits-v1.md)) |
 | `GET /api/v1/snapshot?dir=<abs path>&refresh=true` | the [snapshot](snapshot-v1.md) for `dir` (default: the run's start dir). Cached per dir until `refresh=true`. `dir` must be an existing absolute directory, else `400 {"error":"bad-dir"}` |
 | `GET /api/v1/files/{id}?dir=<abs path>` | `{ "id", "path", "kind", "contentType": "markdown" \| "json" \| "text", "content", "truncated": bool }` for a file registered by the snapshot of `dir`. JSON files are re-serialized after redaction; text passes value-pattern redaction. Max 512 KiB, then `truncated: true`. Unknown id: `404 {"error":"not-found"}` |
 | `GET /api/v1/details/{detailId}?dir=<abs path>` | `{ "id", "title", "contentType": "markdown" \| "json" \| "text", "content", "truncated": bool }` for a `detailId` emitted by the cached snapshot of `dir` (URL-encoded; form `<collectorId>:<key>`). The owning collector resolves it on demand; the core redacts (JSON re-serialized after redaction, text value-pattern redaction), caps at 512 KiB (`truncated: true`) and times out after 20 s (`503 {"error":"unavailable"}`). Id not in that snapshot or unknown to the collector: `404 {"error":"not-found"}`. Details are not part of search |
@@ -18,7 +18,7 @@ A request is authenticated when it carries the per-run token as `Authorization: 
 | `GET /api/v1/dirs?path=<abs path>` | `{ "path", "parent", "entries": [ { "name", "path" } ], "suggestions": [ { "label", "path" } ] }`. Directories only, sorted, max 500, hidden dirs included. `suggestions`: start dir, workspace root, home, config repo, project dirs Claude Code knows (keys of `projects` in `.claude.json`, existing ones only). Missing `path`: answers for the start dir |
 | `POST /api/v1/shutdown` | `202`, then graceful stop. Bearer header only (cookie rejected) |
 
-Every other method or path under `/api/` answers 404/405. No endpoint writes, edits or deletes configuration. Responses carry `Cache-Control: no-store`.
+Every other method or path under `/api/` answers 404/405. No `/api/v1` endpoint writes, edits or deletes configuration; guarded edits live under `/api/v2` ([edits-v1](edits-v1.md)). Responses carry `Cache-Control: no-store`.
 
 ## CLI (`cfgdash`)
 
