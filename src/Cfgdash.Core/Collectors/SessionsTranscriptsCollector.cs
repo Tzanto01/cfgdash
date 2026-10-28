@@ -31,12 +31,15 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
 
     public async Task<CollectorResult> CollectAsync(CollectContext context, CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(budget + Overrun);
         var since = DateTimeOffset.UtcNow - Window;
         var projects = ProjectsDir(context);
         var candidates = projects is null
             ? []
-            : new DirectoryInfo(projects).EnumerateDirectories()
-                .SelectMany(d => d.EnumerateFiles("*.jsonl"))
+            : new DirectoryInfo(projects).EnumerateDirectories("*", new EnumerationOptions())
+                .SelectMany(JsonlFiles)
                 .Where(f => f.LastWriteTimeUtc >= since.UtcDateTime)
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .ToList();
@@ -49,9 +52,6 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
         try
         {
             var index = SessionIndex.Load(IndexFile);
-            var stopwatch = Stopwatch.StartNew();
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(budget + Overrun);
             var started = 0;
             var found = new ConcurrentBag<Session>();
             var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(System.Environment.ProcessorCount / 2, 1, 4), CancellationToken = cancellationToken };
@@ -67,16 +67,18 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
 
                 SessionFileSummary Scan(FileInfo f, bool withSignals)
                 {
-                    var summary = Summarize(SessionTranscript.Scan(f.FullName, false, deadline.Token), context, withSignals);
+                    var length = f.Length;
+                    var ticks = f.LastWriteTimeUtc.Ticks;
+                    var summary = Summarize(SessionTranscript.Scan(f.FullName, context.Redactor, false, deadline.Token), context, withSignals);
                     lock (index)
                     {
-                        index.Put(f, summary);
+                        index.Put(f.FullName, length, ticks, summary);
                     }
 
                     return summary;
                 }
 
-                var subagents = SubagentFiles(file);
+                var subagents = JsonlFiles(SubagentDir(file));
                 var uncached = Cached(file) is null || subagents.Any(s => Cached(s) is null);
                 if (uncached && Interlocked.Increment(ref started) > 1 && stopwatch.Elapsed > budget)
                 {
@@ -166,6 +168,7 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
         }
 
         var entry = index.Entries
+            .Select(e => e with { Path = PathUtil.Full(e.Path) })
             .Where(e => string.Equals(Path.GetFileNameWithoutExtension(e.Path), key, StringComparison.Ordinal)
                 && e.Path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase)
                 && Path.GetDirectoryName(Path.GetDirectoryName(e.Path)) is { } root && PathUtil.PathEquals(root, projects)
@@ -177,7 +180,8 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
         }
 
         var file = new FileInfo(entry.Path);
-        var children = SubagentFiles(file).Select(f => index.Entries.FirstOrDefault(e => e.Path == f.FullName)?.Summary).OfType<SessionFileSummary>().ToList();
+        var subagents = JsonlFiles(SubagentDir(file));
+        var children = subagents.Select(f => index.Entries.FirstOrDefault(e => e.Path == f.FullName)?.Summary).OfType<SessionFileSummary>().ToList();
         var session = Assemble(file, entry.Summary, children);
         var companyPrefixes = context.Environment.CompanyPrefixes;
         if (companyPrefixes.Count == 0 && HasCompanySegment(session))
@@ -185,8 +189,13 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
             return null;
         }
 
-        var scan = SessionTranscript.Scan(entry.Path, true, cancellationToken);
-        return new DetailContent("Session " + key, "markdown", Digest(session, scan, IsCompany(session, companyPrefixes), SubagentFiles(file).Count));
+        var scan = SessionTranscript.Scan(entry.Path, context.Redactor, true, cancellationToken);
+        if (companyPrefixes.Count == 0 && scan.Cwds.Any(HasCompanySegment))
+        {
+            return null;
+        }
+
+        return new DetailContent("Session " + key, "markdown", Digest(session, scan, IsCompany(session, companyPrefixes), subagents.Count));
     }
 
     private sealed record Session(string Id, string Slug, SessionFileSummary Parent, int Subagents, TokenCounts Tokens, double? CostUsd, IReadOnlyList<string> Models);
@@ -196,14 +205,24 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
             ? PathUtil.Full(projects)
             : null;
 
-    private static List<FileInfo> SubagentFiles(FileInfo session)
+    private static DirectoryInfo SubagentDir(FileInfo session) =>
+        new(Path.Combine(session.DirectoryName!, Path.GetFileNameWithoutExtension(session.Name), "subagents"));
+
+    /// <summary>The <c>.jsonl</c> files of a folder; empty when it is missing, vanishes or cannot be read.</summary>
+    private static List<FileInfo> JsonlFiles(DirectoryInfo dir)
     {
-        var dir = new DirectoryInfo(Path.Combine(session.DirectoryName!, Path.GetFileNameWithoutExtension(session.Name), "subagents"));
-        return dir.Exists ? [.. dir.EnumerateFiles("*.jsonl")] : [];
+        try
+        {
+            return dir.Exists ? [.. dir.EnumerateFiles("*.jsonl")] : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     private static SessionFileSummary Summarize(TranscriptScan scan, CollectContext context, bool withSignals) => new(
-        scan.Cwd,
+        [.. scan.Cwds],
         scan.Started,
         scan.Last,
         scan.Prompts,
@@ -228,12 +247,15 @@ internal sealed class SessionsTranscriptsCollector(string cacheDir, TimeSpan? in
     }
 
     private static bool IsCompany(Session session, IReadOnlyList<string> prefixes) =>
-        session.Parent.Cwd is { } cwd && prefixes.Any(p => PathUtil.IsUnder(cwd, p));
+        session.Parent.Cwds.Any(cwd => prefixes.Any(p => PathUtil.IsUnder(cwd, p)));
 
-    /// <summary>A path segment (or project-slug token) named <c>company</c>; used to leave sessions out where no company layer exists.</summary>
+    /// <summary>Any working directory with a path segment (or a project-slug token) named <c>company</c>; used to leave sessions out where no company layer exists.</summary>
     private static bool HasCompanySegment(Session session) =>
-        (session.Parent.Cwd ?? string.Empty).Split('/', '\\').Any(s => s.Equals("company", StringComparison.OrdinalIgnoreCase))
-        || session.Slug.Split('-').Any(s => s.Equals("company", StringComparison.OrdinalIgnoreCase));
+        session.Parent.Cwds.Any(HasCompanySegment) || session.Slug.Split('-').Any(IsCompanyWord);
+
+    private static bool HasCompanySegment(string path) => path.Split('/', '\\').Any(IsCompanyWord);
+
+    private static bool IsCompanyWord(string segment) => segment.Equals("company", StringComparison.OrdinalIgnoreCase);
 
     private static KvBlock Summary(IReadOnlyList<Session> sessions, int indexed, int candidates)
     {

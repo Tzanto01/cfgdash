@@ -82,7 +82,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
     public async Task Detail_keys_resolve_only_to_indexed_sessions_never_to_paths()
     {
         WriteSession(SessionA, StandardSession(cwd, "claude-opus-5-5"));
-        tree.Write("claude/projects/other.jsonl", Line(Prompt(start, cwd, "not a session file")));
+        WriteSubagent(SessionA, "agent-a1", [Prompt(start, cwd, "subagent prompt")]);
         await BuildSectionAsync();
         var collector = Collector();
         var context = TestContexts.Create(Environment(), tree.Root);
@@ -90,7 +90,7 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
         Assert.NotNull(await collector.GetDetailAsync(SessionA, context, CancellationToken.None));
         Assert.Null(await collector.GetDetailAsync(SessionC, context, CancellationToken.None));
         Assert.Null(await collector.GetDetailAsync("..", context, CancellationToken.None));
-        Assert.Null(await collector.GetDetailAsync("other", context, CancellationToken.None));
+        Assert.Null(await collector.GetDetailAsync("agent-a1", context, CancellationToken.None));
     }
 
     [Fact]
@@ -153,19 +153,74 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
         var companyDir = tree.Dir("work/company/app");
         WriteSession(SessionA, StandardSession(cwd, "claude-opus-5-5"));
         WriteSession(SessionB, [Prompt(start, companyDir, "company work")]);
+        WriteSession(SessionC, [Prompt(start, cwd, "start outside"), Prompt(start.AddMinutes(1), companyDir, "then inside")]);
 
         var without = await BuildAsync(Collector());
         var with = await BuildAsync(Collector(), Environment([tree.Dir("work/company")]));
 
         Assert.Equal([SessionA], Table(Section(without), "sessions").Rows.Select(r => r.Id));
-        Assert.Contains("1 sessions under a company folder left out (no company layer on this machine)", Status(without).Notes!);
+        Assert.Contains("2 sessions under a company folder left out (no company layer on this machine)", Status(without).Notes!);
+        Assert.Null(await Collector().GetDetailAsync(SessionC, TestContexts.Create(Environment(), tree.Root), CancellationToken.None));
         var flagged = Table(Section(with), "sessions").Rows.Single(r => r.Id == SessionB);
         Assert.True(flagged.Cells["company"]!.GetValue<bool>());
         Assert.Contains("company", flagged.Flags!);
     }
 
     [Fact]
-    public void Signals_follow_the_session_audit_rubric()
+    public async Task Digest_redacts_before_cutting_and_skips_compact_summaries_and_tagged_blocks()
+    {
+        WriteSession(SessionA,
+        [
+            Prompt(start, cwd, "start"),
+            ToolUse(start, "m1", "t1", "Bash", new JsonObject { ["command"] = new string('x', 120) + " " + Secret }),
+            new JsonObject
+            {
+                ["type"] = "user",
+                ["timestamp"] = Iso(start),
+                ["isCompactSummary"] = true,
+                ["message"] = new JsonObject { ["role"] = "user", ["content"] = "This session is being continued. " + Prose },
+            },
+            new JsonObject
+            {
+                ["type"] = "user",
+                ["timestamp"] = Iso(start),
+                ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(Text("look here"), Text("<ide_selection>" + ToolOutput + "</ide_selection>")) },
+            },
+        ]);
+        var section = await BuildSectionAsync();
+        var reader = new DetailReader(Environment(), [Collector()], new Redactor(), new FakeProcessRunner());
+
+        var detail = await reader.ReadAsync(tree.Root, $"sessions.transcripts:{SessionA}", CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.Equal(2, Int(Table(section, "sessions").Rows.Single(), "prompts"));
+        Assert.Contains("Prompt: look here", detail.Content);
+        Assert.DoesNotContain("gh" + "p_", detail.Content);
+        Assert.DoesNotContain(Prose, detail.Content);
+        Assert.DoesNotContain(ToolOutput, detail.Content);
+    }
+
+    [Fact]
+    public void Transcript_lines_survive_crlf_long_lines_lone_surrogates_and_a_truncated_or_unterminated_tail()
+    {
+        var bigText = new string('y', 100_000);
+        var path = tree.Write("edge.jsonl",
+            Line(Prompt(start, cwd, "first")) + "\r\n"
+            + "\n"
+            + Line(Assistant(start.AddMinutes(1), "msg-big", "claude-opus-5-5", Usage(7, 3, 0, 0), Text(bigText))) + "\n"
+            + "{\"type\":\"user\",\"timestamp\":\"" + Iso(start.AddMinutes(2)) + "\",\"message\":{\"role\":\"user\",\"content\":\"broken \\ud83d\"}}\n"
+            + "{\"type\":\"user\",\"timestamp\":\"" + Iso(start.AddMinutes(3)) + "\",\"message\":{\"role\":\n"
+            + Line(Prompt(start.AddMinutes(4), cwd, "last")));
+
+        var scan = SessionTranscript.Scan(path, new Redactor(), false, CancellationToken.None);
+
+        Assert.Equal(2, scan.Prompts);
+        Assert.Equal((7L, 3L), (scan.Tokens.Input, scan.Tokens.Output));
+        Assert.Equal(start.AddMinutes(4), scan.Last);
+    }
+
+    [Fact]
+    public void Failure_loops_count_repeated_failures_but_not_permission_denials_and_reviews_repeat_only_without_new_work()
     {
         var path = tree.Write("signals.jsonl", string.Join('\n',
         [
@@ -177,13 +232,46 @@ public sealed class SessionsTranscriptsCollectorTests : IDisposable
             Line(Result(start, "t5", "Permission for this action was denied", true)),
             Line(Result(start, "t6", "Permission for this action was denied", true)),
             Line(Result(start, "t7", "Permission for this action was denied", true)),
+            Line(Result(start, "t8", "PreToolUse:Bash hook error: [guard.ps1]: deny 41", true)),
+            Line(Result(start, "t9", "PreToolUse:Bash hook error: [other.ps1]: deny 42", true)),
+            Line(Result(start, "t10", "PreToolUse:Bash hook error: [third.ps1]: deny 43", true)),
         ]));
 
-        var signals = SessionTranscript.Signals(SessionTranscript.Scan(path, false, CancellationToken.None));
+        var signals = SessionTranscript.Signals(SessionTranscript.Scan(path, new Redactor(), false, CancellationToken.None));
 
-        Assert.Equal(["GUARDRAIL_REPEAT", "REVIEW_REPEAT"], signals.Select(s => s.Code).Order());
-        Assert.Equal("pretooluse:bash hook error: deny #", SessionTranscript.ErrorSignature("PreToolUse:Bash hook error: [guard.ps1]: deny 42"));
-        Assert.Null(SessionTranscript.ErrorSignature("Exit code 1"));
+        Assert.Equal(["FAILURE_LOOP", "GUARDRAIL_REPEAT", "REVIEW_REPEAT"], signals.Select(s => s.Code).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Timeouts_wiring_fanout_missed_gate_noise_and_token_spikes_are_detected()
+    {
+        var lines = new List<JsonObject>
+        {
+            Prompt(start, cwd, "build it"),
+            Assistant(start, "m0", "claude-opus-5-5", Usage(13_000_000, 0, 0, 0), Text(Prose)),
+            ToolUse(start, "m1", "t1", "Edit", new JsonObject { ["file_path"] = "web/app.ts" }),
+            ToolUse(start, "m2", "a1", "Agent", new JsonObject { ["subagent_type"] = "explorer" }),
+            ToolUse(start, "m3", "a2", "Agent", new JsonObject { ["subagent_type"] = "explorer" }),
+            Result(start, "a2", "Blocked: explorer not allowed here", true),
+            ToolUse(start, "m4", "r1", "Read", new JsonObject { ["file_path"] = "a.txt" }),
+            ToolUse(start, "m5", "r2", "Read", new JsonObject { ["file_path"] = "b.txt" }),
+            ToolUse(start, "m6", "r3", "Read", new JsonObject { ["file_path"] = "c.txt" }),
+            ToolUse(start, "m7", "a3", "Agent", new JsonObject { ["subagent_type"] = "explorer" }),
+            ToolUse(start, "m8", "r4", "Read", new JsonObject { ["file_path"] = "d.txt" }),
+            ToolUse(start, "m9", "a4", "Agent", new JsonObject { ["subagent_type"] = "explorer" }),
+            Result(start, "x1", "Ripgrep search timed out", true),
+            Result(start, "x2", "No agent named helper", true),
+        };
+        lines.AddRange(Enumerable.Range(0, 5).Select(i => Result(start, $"b{i}", "mcp__Claude_Browser__screenshot timed out", true)));
+        lines.AddRange(new[] { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel" }.Select(w => Result(start, w, "unexpected failure " + w, true)));
+        var path = tree.Write("signals.jsonl", string.Join('\n', lines.Select(Line)));
+
+        var signals = SessionTranscript.Signals(SessionTranscript.Scan(path, new Redactor(), false, CancellationToken.None));
+
+        Assert.Equal(
+            ["BROWSER_TIMEOUT:HARD", "FAILURE_LOOP:HARD", "MISSED_GATE:SOFT", "NOISY:SOFT", "SEARCH_TIMEOUT:HARD", "SERIAL_FANOUT:SOFT", "TOKEN_SPIKE:HARD", "WIRING_BROKEN:HARD"],
+            signals.Select(s => $"{s.Code}:{s.Severity}").Order(StringComparer.Ordinal));
+        Assert.StartsWith("3x @explorer", signals.Single(s => s.Code == "SERIAL_FANOUT").Message);
     }
 
     private static string Secret => "gh" + "p_" + new string('a', 36);

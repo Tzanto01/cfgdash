@@ -1,10 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Cfgdash.Core.Collectors;
 
 /// <summary>What the index keeps per transcript file: counts, tokens, cost and redacted signal messages. Never prompts, tool calls or outputs.</summary>
 internal sealed record SessionFileSummary(
-    string? Cwd,
+    IReadOnlyList<string> Cwds,
     DateTimeOffset? Started,
     DateTimeOffset? Last,
     int Prompts,
@@ -13,7 +14,11 @@ internal sealed record SessionFileSummary(
     TokenCounts Tokens,
     double CostUsd,
     bool Unpriced,
-    IReadOnlyList<SessionSignal> Signals);
+    IReadOnlyList<SessionSignal> Signals)
+{
+    [JsonIgnore]
+    public string? Cwd => Cwds.Count > 0 ? Cwds[0] : null;
+}
 
 internal sealed record SessionIndexEntry(string Path, long Length, long LastWriteUtcTicks, SessionFileSummary Summary);
 
@@ -23,7 +28,7 @@ internal sealed record SessionIndexEntry(string Path, long Length, long LastWrit
 /// </summary>
 internal sealed class SessionIndex
 {
-    private const int FormatVersion = 1;
+    private const int FormatVersion = 2;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -70,9 +75,10 @@ internal sealed class SessionIndex
         return entry.Summary;
     }
 
-    public void Put(FileInfo file, SessionFileSummary summary)
+    /// <summary>Stores a summary under the length and write time read before the file was scanned.</summary>
+    public void Put(string path, long length, long lastWriteUtcTicks, SessionFileSummary summary)
     {
-        var entry = new SessionIndexEntry(file.FullName, file.Length, file.LastWriteTimeUtc.Ticks, summary);
+        var entry = new SessionIndexEntry(path, length, lastWriteUtcTicks, summary);
         entries[entry.Path] = entry;
         used[entry.Path] = entry;
     }

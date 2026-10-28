@@ -38,10 +38,13 @@ internal sealed class TranscriptEvent(char kind, DateTimeOffset? time, string? t
     public bool IsAgent => Kind == 'A' && Tool is "Agent" or "Task";
 }
 
-/// <summary>What one transcript file yields. Never holds tool outputs or assistant prose.</summary>
+/// <summary>What one transcript file yields. Never holds tool outputs or assistant prose; kept text is redacted before it is truncated.</summary>
 internal sealed class TranscriptScan
 {
-    public string? Cwd { get; set; }
+    /// <summary>Distinct working directories in record order (at most 32); the first is the session's project.</summary>
+    public List<string> Cwds { get; } = [];
+
+    public string? Cwd => Cwds.Count > 0 ? Cwds[0] : null;
 
     public DateTimeOffset? Started { get; set; }
 
@@ -76,65 +79,34 @@ internal static partial class SessionTranscript
     public const int PromptChars = 2000;
     public const int ToolChars = 140;
     private const int ErrorChars = 200;
+    private const int MaxCwds = 32;
+    private const int MaxLineBytes = 64 << 20;
     private const double TokenRateSpikeMhr = 25;
     private const long TokenSpikeFloor = 12_000_000;
 
     private static readonly string[] ReviewAgents = ["momus", "council", "code-reviewer", "security-reviewer", "oracle", "healthcare-reviewer"];
     private static readonly string[] WorkflowSkills = ["coding-workflow", "feature", "feature-team", "bugfix", "refactor"];
 
-    /// <summary>Reads one transcript. With <paramref name="digest"/> the events keep their (unredacted) text for the caller to redact.</summary>
-    public static TranscriptScan Scan(string path, bool digest, CancellationToken cancellationToken)
+    /// <summary>Reads one transcript. Error texts are always kept (redacted, short) for the signals; prompts and tool summaries only with <paramref name="digest"/>.</summary>
+    public static TranscriptScan Scan(string path, IRedactor redactor, bool digest, CancellationToken cancellationToken)
     {
-        var scan = new TranscriptScan();
-        var usageById = new Dictionary<string, MessageUsage>(StringComparer.Ordinal);
-        var usageWithoutId = new List<MessageUsage>();
-        var agentUses = new Dictionary<string, TranscriptEvent>(StringComparer.Ordinal);
-
+        var reading = new Reading(new TranscriptScan(), redactor, digest);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16, FileOptions.SequentialScan);
         foreach (var line in Lines(stream))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Header(line.Span) is not { } header)
-            {
-                continue;
-            }
-
-            if (header.Time is { } time)
-            {
-                scan.Started ??= time;
-                scan.Last = time;
-            }
-
-            if (scan.Cwd is null && header.Cwd is { Length: > 0 } cwd)
-            {
-                scan.Cwd = cwd;
-            }
-
-            var needed = header.Type == "assistant"
-                || (header.Type == "user" && (!header.HasToolResult || line.Span.IndexOf("\"is_error\":true"u8) >= 0 || line.Span.IndexOf("\"is_error\": true"u8) >= 0));
-            if (!needed)
-            {
-                continue;
-            }
-
-            JsonDocument document;
             try
             {
-                document = JsonDocument.Parse(line);
+                ReadLine(line, reading);
             }
-            catch (JsonException)
+            catch (Exception e) when (e is JsonException or InvalidOperationException)
             {
-                continue;
-            }
-
-            using (document)
-            {
-                ReadRecord(document.RootElement, header.Type!, header.Time, scan, digest, usageById, usageWithoutId, agentUses);
             }
         }
 
+        var scan = reading.Scan;
         var tokens = TokenCounts.Zero;
-        foreach (var usage in usageById.Values.Concat(usageWithoutId))
+        foreach (var usage in reading.UsageById.Values.Concat(reading.UsageWithoutId))
         {
             if (usage.Total == 0)
             {
@@ -161,65 +133,111 @@ internal static partial class SessionTranscript
         return scan;
     }
 
+    private sealed record Reading(TranscriptScan Scan, IRedactor Redactor, bool Digest)
+    {
+        public Dictionary<string, MessageUsage> UsageById { get; } = new(StringComparer.Ordinal);
+
+        public List<MessageUsage> UsageWithoutId { get; } = [];
+
+        public Dictionary<string, TranscriptEvent> AgentUses { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>Cleaned, redacted, then cut to <paramref name="max"/> chars, so a cut never leaves part of a secret behind.</summary>
+        public string Text(string? raw, int max) => Limit(Redactor.RedactText(Limit(Clear(raw), max + 512)), max);
+    }
+
+    private static void ReadLine(ReadOnlyMemory<byte> line, Reading reading)
+    {
+        var scan = reading.Scan;
+        if (Header(line.Span) is not { } header)
+        {
+            return;
+        }
+
+        if (header.Time is { } time)
+        {
+            scan.Started ??= time;
+            scan.Last = time;
+        }
+
+        if (header.Cwd is { Length: > 0 } cwd && scan.Cwds.Count < MaxCwds && !scan.Cwds.Contains(cwd))
+        {
+            scan.Cwds.Add(cwd);
+        }
+
+        var needed = header.Type == "assistant"
+            || (header.Type == "user" && (!header.HasToolResult || line.Span.IndexOf("\"is_error\":true"u8) >= 0 || line.Span.IndexOf("\"is_error\": true"u8) >= 0));
+        if (!needed)
+        {
+            return;
+        }
+
+        using var document = JsonDocument.Parse(line);
+        ReadRecord(document.RootElement, header.Type!, header.Time, reading);
+    }
+
     /// <summary>Top-level <c>type</c>, <c>timestamp</c>, <c>cwd</c> and whether a <c>toolUseResult</c> is present, read without building a document; null for a line that is not a JSON object.</summary>
     private static RecordHeader? Header(ReadOnlySpan<byte> line)
     {
-        try
-        {
-            var reader = new Utf8JsonReader(line);
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-            {
-                return null;
-            }
-
-            string? type = null, cwd = null;
-            DateTimeOffset? time = null;
-            var hasToolResult = false;
-            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
-            {
-                var name = reader.ValueTextEquals("type"u8) ? 1 : reader.ValueTextEquals("timestamp"u8) ? 2 : reader.ValueTextEquals("cwd"u8) ? 3 : reader.ValueTextEquals("toolUseResult"u8) ? 4 : 0;
-                reader.Read();
-                if (reader.TokenType == JsonTokenType.String)
-                {
-                    switch (name)
-                    {
-                        case 1:
-                            type = reader.GetString();
-                            break;
-                        case 2 when reader.TryGetDateTimeOffset(out var t):
-                            time = t;
-                            break;
-                        case 3:
-                            cwd = reader.GetString();
-                            break;
-                    }
-                }
-
-                hasToolResult |= name == 4;
-                reader.Skip();
-            }
-
-            return new RecordHeader(type, time, cwd, hasToolResult);
-        }
-        catch (JsonException)
+        var reader = new Utf8JsonReader(line);
+        if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
         {
             return null;
         }
+
+        string? type = null, cwd = null;
+        DateTimeOffset? time = null;
+        var hasToolResult = false;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var name = reader.ValueTextEquals("type"u8) ? 1 : reader.ValueTextEquals("timestamp"u8) ? 2 : reader.ValueTextEquals("cwd"u8) ? 3 : reader.ValueTextEquals("toolUseResult"u8) ? 4 : 0;
+            reader.Read();
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                switch (name)
+                {
+                    case 1:
+                        type = reader.GetString();
+                        break;
+                    case 2 when reader.TryGetDateTimeOffset(out var t):
+                        time = t;
+                        break;
+                    case 3:
+                        cwd = reader.GetString();
+                        break;
+                }
+            }
+
+            hasToolResult |= name == 4;
+            reader.Skip();
+        }
+
+        return new RecordHeader(type, time, cwd, hasToolResult);
     }
 
-    /// <summary>Lines of a UTF-8 stream without decoding; each slice is valid until the next one is requested.</summary>
+    /// <summary>Lines of a UTF-8 stream without decoding; each slice is valid until the next one is requested. Lines over 64 MiB are skipped.</summary>
     private static IEnumerable<ReadOnlyMemory<byte>> Lines(Stream stream)
     {
         var buffer = new byte[1 << 16];
         int start = 0, end = 0;
+        var skipping = false;
         while (true)
         {
             var newline = buffer.AsSpan(start, end - start).IndexOf((byte)'\n');
             if (newline >= 0)
             {
-                yield return buffer.AsMemory(start, newline);
+                if (!skipping)
+                {
+                    yield return buffer.AsMemory(start, newline);
+                }
+
+                skipping = false;
                 start += newline + 1;
                 continue;
+            }
+
+            if (skipping)
+            {
+                start = end = 0;
             }
 
             if (start > 0)
@@ -231,13 +249,21 @@ internal static partial class SessionTranscript
 
             if (end == buffer.Length)
             {
-                Array.Resize(ref buffer, buffer.Length * 2);
+                if (buffer.Length >= MaxLineBytes)
+                {
+                    skipping = true;
+                    start = end = 0;
+                }
+                else
+                {
+                    Array.Resize(ref buffer, buffer.Length * 2);
+                }
             }
 
             var read = stream.Read(buffer, end, buffer.Length - end);
             if (read == 0)
             {
-                if (end > 0)
+                if (end > 0 && !skipping)
                 {
                     yield return buffer.AsMemory(0, end);
                 }
@@ -251,16 +277,9 @@ internal static partial class SessionTranscript
 
     private sealed record RecordHeader(string? Type, DateTimeOffset? Time, string? Cwd, bool HasToolResult);
 
-    private static void ReadRecord(
-        JsonElement root,
-        string type,
-        DateTimeOffset? time,
-        TranscriptScan scan,
-        bool digest,
-        Dictionary<string, MessageUsage> usageById,
-        List<MessageUsage> usageWithoutId,
-        Dictionary<string, TranscriptEvent> agentUses)
+    private static void ReadRecord(JsonElement root, string type, DateTimeOffset? time, Reading reading)
     {
+        var scan = reading.Scan;
         if (!root.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
         {
             return;
@@ -279,22 +298,22 @@ internal static partial class SessionTranscript
                 String(usage, "speed") == "fast");
             if (String(message, "id") is { } id)
             {
-                usageById[id] = usageById.TryGetValue(id, out var seen) ? seen.Merge(record) : record;
+                reading.UsageById[id] = reading.UsageById.TryGetValue(id, out var seen) ? seen.Merge(record) : record;
             }
             else
             {
-                usageWithoutId.Add(record);
+                reading.UsageWithoutId.Add(record);
             }
         }
 
         message.TryGetProperty("content", out var content);
-        if (type == "user" && !(root.TryGetProperty("isMeta", out var meta) && meta.ValueKind == JsonValueKind.True))
+        if (type == "user" && !IsTrue(root, "isMeta") && !IsTrue(root, "isCompactSummary") && !IsTrue(root, "isVisibleInTranscriptOnly") && !IsTrue(root, "isSidechain"))
         {
-            var text = content.ValueKind == JsonValueKind.String ? content.GetString() : JoinText(content);
+            var text = content.ValueKind == JsonValueKind.String ? content.GetString() : JoinText(content, skipTagged: true);
             if (!string.IsNullOrEmpty(text) && !TagStart().IsMatch(text))
             {
                 scan.Prompts++;
-                scan.Events.Add(new TranscriptEvent('U', time, digest ? Limit(Clear(text), PromptChars) : null));
+                scan.Events.Add(new TranscriptEvent('U', time, reading.Digest ? reading.Text(text, PromptChars) : null));
             }
         }
 
@@ -313,16 +332,16 @@ internal static partial class SessionTranscript
             switch (String(block, "type"))
             {
                 case "tool_use":
-                    ReadToolUse(block, time, scan, digest, agentUses);
+                    ReadToolUse(block, time, reading);
                     break;
-                case "tool_result" when block.TryGetProperty("is_error", out var isError) && isError.ValueKind == JsonValueKind.True:
+                case "tool_result" when IsTrue(block, "is_error"):
                     var result = block.TryGetProperty("content", out var resultContent) && resultContent.ValueKind == JsonValueKind.String
                         ? resultContent.GetString() ?? string.Empty
-                        : JoinText(resultContent);
-                    var clean = Limit(Clear(result), ErrorChars);
+                        : JoinText(resultContent, skipTagged: false);
+                    var clean = reading.Text(result, ErrorChars);
                     scan.Errors.Add(clean);
-                    scan.Events.Add(new TranscriptEvent('E', time, digest ? clean : null));
-                    if (String(block, "tool_use_id") is { } useId && agentUses.TryGetValue(useId, out var agentEvent)
+                    scan.Events.Add(new TranscriptEvent('E', time, reading.Digest ? clean : null));
+                    if (String(block, "tool_use_id") is { } useId && reading.AgentUses.TryGetValue(useId, out var agentEvent)
                         && !agentEvent.Blocked && AgentBlocked().IsMatch(clean))
                     {
                         agentEvent.Blocked = true;
@@ -337,8 +356,9 @@ internal static partial class SessionTranscript
         }
     }
 
-    private static void ReadToolUse(JsonElement block, DateTimeOffset? time, TranscriptScan scan, bool digest, Dictionary<string, TranscriptEvent> agentUses)
+    private static void ReadToolUse(JsonElement block, DateTimeOffset? time, Reading reading)
     {
+        var scan = reading.Scan;
         var name = String(block, "name") ?? string.Empty;
         var input = block.TryGetProperty("input", out var i) && i.ValueKind == JsonValueKind.Object ? i : default;
         string? In(string key) => input.ValueKind == JsonValueKind.Object ? String(input, key) : null;
@@ -364,11 +384,11 @@ internal static partial class SessionTranscript
             scan.EditedCode = true;
         }
 
-        var ev = new TranscriptEvent('A', time, digest ? Limit(ToolSummary(name, In), ToolChars) : null, name, agentType);
+        var ev = new TranscriptEvent('A', time, reading.Digest ? reading.Text(ToolSummary(name, In), ToolChars) : null, name, agentType);
         scan.Events.Add(ev);
         if (name is "Agent" or "Task" && String(block, "id") is { } id)
         {
-            agentUses[id] = ev;
+            reading.AgentUses[id] = ev;
         }
     }
 
@@ -376,9 +396,9 @@ internal static partial class SessionTranscript
     private static string ToolSummary(string name, Func<string, string?> input) => name switch
     {
         "Skill" => $"Skill({input("skill")})",
-        "Agent" or "Task" => $"Agent({input("subagent_type")}): {Limit(Clear(input("description")), 80)}",
-        "SendMessage" => $"SendMessage(->{input("to") ?? input("agent_id")})",
-        "PowerShell" or "Bash" => $"{name}: {Limit(Clear(input("command")), 110)}",
+        "Agent" or "Task" => $"Agent({input("subagent_type")}): {input("description")}",
+        "SendMessage" => $"SendMessage(->{(input("to") is { Length: > 0 } to ? to : input("agent_id"))})",
+        "PowerShell" or "Bash" => $"{name}: {input("command")}",
         "Read" or "Edit" or "Write" => $"{name}({input("file_path")})",
         "Grep" => $"Grep(/{input("pattern")}/ path={input("path")})",
         "Glob" => $"Glob({input("pattern")} path={input("path")})",
@@ -540,9 +560,11 @@ internal static partial class SessionTranscript
     internal static string Clear(string? text) =>
         string.IsNullOrEmpty(text) ? string.Empty : Whitespace().Replace(Ansi().Replace(text, string.Empty), " ").Trim();
 
-    internal static string Limit(string text, int max) => text.Length <= max ? text : text[..max] + "…";
+    internal static string Limit(string text, int max) =>
+        text.Length <= max ? text : text[..(char.IsHighSurrogate(text[max - 1]) ? max - 1 : max)] + "…";
 
-    private static string JoinText(JsonElement content)
+    /// <summary>The <c>text</c> blocks of a content array joined with spaces; <paramref name="skipTagged"/> drops blocks that start with a tag (IDE selections, reminders).</summary>
+    private static string JoinText(JsonElement content, bool skipTagged)
     {
         if (content.ValueKind != JsonValueKind.Array)
         {
@@ -552,7 +574,7 @@ internal static partial class SessionTranscript
         var parts = new List<string>();
         foreach (var item in content.EnumerateArray())
         {
-            if (item.ValueKind == JsonValueKind.Object && String(item, "type") == "text" && String(item, "text") is { } text)
+            if (item.ValueKind == JsonValueKind.Object && String(item, "type") == "text" && String(item, "text") is { } text && !(skipTagged && TagStart().IsMatch(text)))
             {
                 parts.Add(text);
             }
@@ -563,6 +585,9 @@ internal static partial class SessionTranscript
 
     private static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool IsTrue(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 
     private static long Long(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var n) ? n : 0;
