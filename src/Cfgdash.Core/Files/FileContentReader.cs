@@ -10,7 +10,7 @@ internal sealed class FileContentReader(IRedactor redactor) : IFileContentReader
 {
     public const int MaxBytes = 512 * 1024;
 
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    internal static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public async Task<FileContent> ReadAsync(RegisteredFile file, CancellationToken cancellationToken)
     {
@@ -61,7 +61,7 @@ internal sealed class FileContentReader(IRedactor redactor) : IFileContentReader
         return new FileContent(file.Ref.Id, file.Ref.Path, file.Ref.Kind, contentType, content, truncated);
     }
 
-    private static bool TryParse(string text, out JsonNode? node)
+    internal static bool TryParse(string text, out JsonNode? node)
     {
         try
         {

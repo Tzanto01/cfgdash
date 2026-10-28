@@ -205,6 +205,28 @@ public sealed class ApiTests(ApiFixture fixture) : IClassFixture<ApiFixture>
         Assert.Equal("not-found", response.Error);
     }
 
+    [Fact]
+    public async Task Detail_emitted_by_the_snapshot_returns_its_content()
+    {
+        var response = await Host.GetAsync("/api/v1/details/" + Uri.EscapeDataString("c1:emitted"));
+
+        Assert.Equal(200, response.Status);
+        Assert.Equal("c1:emitted", response.Json.GetProperty("id").GetString());
+        Assert.Equal("Title c1:emitted", response.Json.GetProperty("title").GetString());
+        Assert.Equal("markdown", response.Json.GetProperty("contentType").GetString());
+        Assert.Equal("detail of c1:emitted", response.Json.GetProperty("content").GetString());
+        Assert.False(response.Json.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Detail_not_emitted_by_the_snapshot_answers_404_even_when_the_provider_resolves_it()
+    {
+        var response = await Host.GetAsync("/api/v1/details/" + Uri.EscapeDataString("c1:other"));
+
+        Assert.Equal(404, response.Status);
+        Assert.Equal("not-found", response.Error);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("?q=")]

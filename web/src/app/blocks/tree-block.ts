@@ -121,6 +121,8 @@ export class TreeBlockView {
               }
               @if (node.fileId) {
                 <button type="button" class="link-button mono node-label" (click)="url.openFile(node.fileId)">{{ node.label }}</button>
+              } @else if (node.detailId) {
+                <button type="button" class="link-button mono node-label" (click)="url.openDetail(node.detailId)">{{ node.label }}</button>
               } @else {
                 <span class="mono node-label">{{ node.label }}</span>
               }

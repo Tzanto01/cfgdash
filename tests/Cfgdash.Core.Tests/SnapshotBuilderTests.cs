@@ -215,4 +215,27 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
         Assert.Equal("kv", row["type"]!.GetValue<string>());
         Assert.False(row["rows"]![0]!.AsObject().ContainsKey("source"));
     }
+
+    [Fact]
+    public async Task Detail_ids_with_a_foreign_prefix_or_a_path_like_key_are_dropped_and_valid_ones_returned()
+    {
+        var table = new TableBlock("t", "T", [new TableColumn("name", "Name")],
+        [
+            new TableRow("valid", new Dictionary<string, JsonNode?> { ["name"] = "a" }, DetailId: "own:job-1.log"),
+            new TableRow("foreign", new Dictionary<string, JsonNode?> { ["name"] = "b" }, DetailId: "other:job-1"),
+            new TableRow("path", new Dictionary<string, JsonNode?> { ["name"] = "c" }, DetailId: "own:../secrets/x"),
+        ]);
+        var nodes = new TreeBlock("tree", "Tree", [new TreeNode("root", "root", [new TreeNode("child", "child", [], DetailId: "own:node_2")], DetailId: "own:C:/Users/user/x")]);
+        var builder = new SnapshotBuilder(TestEnvironments.Create(tree), [Returning("own", table, nodes)], new Redactor(), new FakeProcessRunner(), "0.1.0");
+
+        var result = await builder.BuildAsync(tree.Root, CancellationToken.None);
+
+        var blocks = Assert.Single(result.Snapshot.Sections).Blocks;
+        var rows = Assert.IsType<TableBlock>(blocks[0]).Rows;
+        Assert.Equal(["own:job-1.log", null, null], rows.Select(r => r.DetailId));
+        var root = Assert.Single(Assert.IsType<TreeBlock>(blocks[1]).Nodes);
+        Assert.Null(root.DetailId);
+        Assert.Equal("own:node_2", Assert.Single(root.Children).DetailId);
+        Assert.Equal(["own:job-1.log", "own:node_2"], result.DetailIds!.Order(StringComparer.Ordinal));
+    }
 }

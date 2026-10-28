@@ -67,7 +67,7 @@ public sealed record TableBlock(string Id, string Title, IReadOnlyList<TableColu
 public sealed record TableColumn(string Key, string Label);
 
 /// <summary>A cell is a string, number, boolean, null, or an object <c>{ "text", "fileId"? }</c>.</summary>
-public sealed record TableRow(string Id, IReadOnlyDictionary<string, JsonNode?> Cells, IReadOnlyList<string>? Flags = null, string? FileId = null);
+public sealed record TableRow(string Id, IReadOnlyDictionary<string, JsonNode?> Cells, IReadOnlyList<string>? Flags = null, string? FileId = null, string? DetailId = null);
 
 public sealed record TreeBlock(string Id, string Title, IReadOnlyList<TreeNode> Nodes, TreeSummary? Summary = null, string? Description = null)
     : Block(Id, Title, Description);
@@ -78,7 +78,8 @@ public sealed record TreeNode(
     IReadOnlyList<TreeNode> Children,
     string? FileId = null,
     IReadOnlyList<string>? Badges = null,
-    IReadOnlyDictionary<string, JsonNode?>? Meta = null);
+    IReadOnlyDictionary<string, JsonNode?>? Meta = null,
+    string? DetailId = null);
 
 public sealed record TreeSummary(int Files, long SizeBytes, long Tokens);
 

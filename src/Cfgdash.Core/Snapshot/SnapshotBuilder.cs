@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Cfgdash.Core.Files;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Redaction;
@@ -16,6 +17,7 @@ internal sealed class SnapshotBuilder(
     TimeSpan? collectorTimeout = null) : ISnapshotSource
 {
     private const int MaxReasonLength = 300;
+    private static readonly Regex DetailKey = new(@"^[A-Za-z0-9._-]{1,128}\z", RegexOptions.CultureInvariant);
     private readonly TimeSpan timeout = collectorTimeout ?? TimeSpan.FromSeconds(20);
 
     public async Task<SnapshotResult> BuildAsync(string targetDir, CancellationToken cancellationToken)
@@ -34,16 +36,20 @@ internal sealed class SnapshotBuilder(
         var runs = collectors.Select(c => RunAsync(c, context, cancellationToken)).ToList();
         var outcomes = await Task.WhenAll(runs);
 
+        var detailIds = outcomes.SelectMany(o => o.DetailIds ?? []).ToHashSet(StringComparer.Ordinal);
         var statuses = outcomes.Select(o => o.Status).ToList();
         var sections = outcomes.Where(o => o.Section is not null).Select(o => o.Section!).ToList();
         var tailnet = environment.Tailnet is { BackendState: "Running" } t ? new TailnetInfo(t.DnsName, t.TailnetName, t.Tags) : null;
         var machine = new MachineInfo(environment.Hostname, tailnet, new OsInfo(environment.Os, environment.OsDescription, environment.Arch), DateTimeOffset.UtcNow, cfgdashVersion);
         var files = registry.All.Select(f => f.Ref).OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
         var snapshot = new HarnessSnapshot(HarnessSnapshot.CurrentSchemaVersion, machine, new SnapshotContext(PathUtil.ToJson(target), environment.Paths), statuses, sections, files);
-        return new SnapshotResult(snapshot, registry);
+        return new SnapshotResult(snapshot, registry, detailIds);
     }
 
-    private sealed record Outcome(CollectorStatus Status, Section? Section);
+    /// <summary>True when <paramref name="key"/> matches <c>^[A-Za-z0-9._-]{1,128}$</c>.</summary>
+    internal static bool IsValidDetailKey(string key) => DetailKey.IsMatch(key);
+
+    private sealed record Outcome(CollectorStatus Status, Section? Section, IReadOnlyCollection<string>? DetailIds = null);
 
     private async Task<Outcome> RunAsync(ICollector collector, CollectContext context, CancellationToken cancellationToken)
     {
@@ -89,10 +95,24 @@ internal sealed class SnapshotBuilder(
                 return Inactive(CollectorState.Unavailable, reason, ms, result.Notes);
             }
 
-            var blocks = result.Blocks.Select(RedactBlock).ToList();
+            var detailIds = new HashSet<string>(StringComparer.Ordinal);
+            var prefix = manifest.Id + ":";
+            string? KeepDetail(string? id)
+            {
+                if (id is null || !id.StartsWith(prefix, StringComparison.Ordinal) || !IsValidDetailKey(id[prefix.Length..]))
+                {
+                    return null;
+                }
+
+                detailIds.Add(id);
+                return id;
+            }
+
+            var blocks = result.Blocks.Select(b => RedactBlock(b, KeepDetail)).ToList();
             return new Outcome(
                 new CollectorStatus(manifest.Id, manifest.Title, manifest.Version, manifest.View, CollectorState.Active, null, manifest.Requirements, ms, RedactNotes(result.Notes)),
-                new Section(manifest.Id, manifest.View, manifest.Title, blocks));
+                new Section(manifest.Id, manifest.View, manifest.Title, blocks),
+                detailIds);
         }
         catch (Exception e)
         {
@@ -149,14 +169,14 @@ internal sealed class SnapshotBuilder(
     private IReadOnlyList<string>? RedactNotes(IReadOnlyList<string>? notes) =>
         notes is null ? null : [.. notes.Select(redactor.RedactText)];
 
-    private Block RedactBlock(Block block) => block switch
+    private Block RedactBlock(Block block, Func<string?, string?> keepDetail) => block switch
     {
         KvBlock kv => kv with { Rows = [.. kv.Rows.Select(RedactRow)] },
         TableBlock table => table with
         {
-            Rows = [.. table.Rows.Select(row => row with { Cells = row.Cells.ToDictionary(c => c.Key, c => RedactCell(c.Value)) })],
+            Rows = [.. table.Rows.Select(row => row with { Cells = row.Cells.ToDictionary(c => c.Key, c => RedactCell(c.Value)), DetailId = keepDetail(row.DetailId) })],
         },
-        TreeBlock tree => tree with { Nodes = RedactNodes(tree.Nodes) },
+        TreeBlock tree => tree with { Nodes = RedactNodes(tree.Nodes, keepDetail) },
         _ => block,
     };
 
@@ -203,12 +223,13 @@ internal sealed class SnapshotBuilder(
         return copy;
     }
 
-    private IReadOnlyList<TreeNode> RedactNodes(IReadOnlyList<TreeNode> nodes) =>
+    private IReadOnlyList<TreeNode> RedactNodes(IReadOnlyList<TreeNode> nodes, Func<string?, string?> keepDetail) =>
     [
         .. nodes.Select(node => node with
         {
             Label = redactor.RedactText(node.Label),
-            Children = RedactNodes(node.Children),
+            Children = RedactNodes(node.Children, keepDetail),
+            DetailId = keepDetail(node.DetailId),
             Meta = node.Meta?.ToDictionary(m => m.Key, m => m.Value is JsonValue v && v.TryGetValue<string>(out var s) ? JsonValue.Create(redactor.RedactText(s)) : m.Value?.DeepClone()),
         }),
     ];

@@ -117,7 +117,7 @@ const sections: Section[] = [
             },
             fileId: FILE_HOOK
           },
-          { id: 'h-alpha', cells: { script: 'alpha.ps1', source: 'project settings' } },
+          { id: 'h-alpha', cells: { script: 'alpha.ps1', source: 'project settings' }, detailId: 'hooks.registered:alpha' },
           { id: 'h-bravo', cells: { script: 'bravo.ps1', source: 'user settings' } }
         ]
       },

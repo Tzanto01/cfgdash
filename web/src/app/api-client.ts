@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ApiError, DirsResponse, FileContent, SearchResponse, Snapshot } from './models';
+import { ApiError, DetailContent, DirsResponse, FileContent, SearchResponse, Snapshot } from './models';
 
 /** Typed client for the cfgdash `/api/v1` surface (api-v1.md). All URLs are relative. */
 @Injectable({ providedIn: 'root' })
@@ -18,6 +18,12 @@ export class ApiClient {
 
   file(id: string, dir?: string): Observable<FileContent> {
     return this.http.get<FileContent>(`/api/v1/files/${encodeURIComponent(id)}`, {
+      params: withDir(new HttpParams(), dir)
+    });
+  }
+
+  detail(id: string, dir?: string): Observable<DetailContent> {
+    return this.http.get<DetailContent>(`/api/v1/details/${encodeURIComponent(id)}`, {
       params: withDir(new HttpParams(), dir)
     });
   }

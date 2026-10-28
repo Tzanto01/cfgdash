@@ -139,6 +139,7 @@ export interface TableRow {
   cells: Record<string, Cell | undefined>;
   flags?: string[];
   fileId?: string;
+  detailId?: string;
 }
 
 export interface TreeBlock extends BlockBase {
@@ -152,6 +153,7 @@ export interface TreeNode {
   label: string;
   children: TreeNode[];
   fileId?: string;
+  detailId?: string;
   badges?: string[];
   meta?: Record<string, JsonValue>;
 }
@@ -179,6 +181,15 @@ export interface FileContent {
   id: string;
   path: string;
   kind: FileKind | string;
+  contentType: 'markdown' | 'json' | 'text';
+  content: string;
+  truncated: boolean;
+}
+
+/** `GET /api/v1/details/{detailId}`. */
+export interface DetailContent {
+  id: string;
+  title: string;
   contentType: 'markdown' | 'json' | 'text';
   content: string;
   truncated: boolean;

@@ -16,7 +16,7 @@ public static class PathKeys
     public const string CompanyLayer = "companyLayer";
 }
 
-/// <summary>Evaluated by the runner in this order: OS, tools, paths. See docs/contracts/collector-v1.md.</summary>
+/// <summary>Evaluated by the runner in this order: OS, paths, tools. See docs/contracts/collector-v1.md.</summary>
 public sealed record Requirements(
     IReadOnlyList<OsFamily>? Os = null,
     IReadOnlyList<string>? Tools = null,
@@ -36,6 +36,18 @@ public sealed record CollectorResult(IReadOnlyList<Block> Blocks, string? Unavai
 {
     public static CollectorResult Unavailable(string reason) => new([], reason);
 }
+
+/// <summary>
+/// Optional on a collector whose rows or nodes carry a <c>detailId</c> of the form <c>&lt;collectorId&gt;:&lt;key&gt;</c>.
+/// Resolves the key on demand; returns null for an unknown key. The runner redacts, caps and times out the result.
+/// </summary>
+public interface IDetailProvider
+{
+    Task<DetailContent?> GetDetailAsync(string key, CollectContext context, CancellationToken cancellationToken);
+}
+
+/// <summary><c>ContentType</c> is <c>markdown</c>, <c>json</c> or <c>text</c>.</summary>
+public sealed record DetailContent(string Title, string ContentType, string Content);
 
 public sealed class CollectContext
 {

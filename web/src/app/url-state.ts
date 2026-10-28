@@ -10,7 +10,7 @@ interface UrlSnapshot {
   fragment: string | null;
 }
 
-/** Signals over the URL state (`dir`, `file`, `line`, `q`, fragment) and the file viewer navigation. */
+/** Signals over the URL state (`dir`, `file`, `detail`, `line`, `q`, fragment) and the file viewer navigation. */
 @Injectable({ providedIn: 'root' })
 export class UrlState {
   private readonly router = inject(Router);
@@ -30,6 +30,7 @@ export class UrlState {
   readonly path = computed(() => this.url()?.path ?? '');
   readonly dir = computed(() => stringParam(this.url()?.query['dir']));
   readonly file = computed(() => stringParam(this.url()?.query['file']));
+  readonly detail = computed(() => stringParam(this.url()?.query['detail']));
   readonly line = computed(() => {
     const value = Number(stringParam(this.url()?.query['line']));
     return Number.isInteger(value) && value > 0 ? value : undefined;
@@ -41,7 +42,16 @@ export class UrlState {
   openFile(fileId: string, line?: number): void {
     this.fileOpenedInApp = true;
     void this.router.navigate([], {
-      queryParams: { file: fileId, line: line ?? null },
+      queryParams: { file: fileId, line: line ?? null, detail: null },
+      queryParamsHandling: 'merge',
+      preserveFragment: true
+    });
+  }
+
+  openDetail(detailId: string): void {
+    this.fileOpenedInApp = true;
+    void this.router.navigate([], {
+      queryParams: { detail: detailId, file: null, line: null },
       queryParamsHandling: 'merge',
       preserveFragment: true
     });
@@ -54,7 +64,7 @@ export class UrlState {
       return;
     }
     void this.router.navigate([], {
-      queryParams: { file: null, line: null },
+      queryParams: { file: null, line: null, detail: null },
       queryParamsHandling: 'merge',
       preserveFragment: true,
       replaceUrl: true

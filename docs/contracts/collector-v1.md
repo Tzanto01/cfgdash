@@ -20,6 +20,7 @@ The code in the initial commit is the contract. Signature changes go through the
 3. `CollectorResult.UnavailableReason` set -> `unavailable`. Otherwise `active` and its blocks become one section.
 4. All string values pass through the `Redactor` before they enter a block (collectors call it; the builder runs a final defensive pass over kv values and table cells).
 5. `collectors[]` lists every registered collector in catalog order, active or not.
+6. Details: a collector that emits `detailId` values implements `IDetailProvider`. Every `detailId` starts with the emitting collector's id and a colon; the key matches `[A-Za-z0-9._-]{1,128}`, is never a path, and the provider validates it against its own data. The builder drops invalid ids and returns the rest in `SnapshotResult.DetailIds`; the host opens only those, and `IDetailReader` resolves them through the owning collector, with the same redaction, a 512 KiB cap and a 20 s timeout.
 
 ## Registration
 

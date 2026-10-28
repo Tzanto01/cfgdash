@@ -13,16 +13,16 @@ import {
   untracked,
   viewChild
 } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { ApiClient, classifyError } from './api-client';
 import { formatBytes, formatTokens } from './format';
-import { FileContent } from './models';
+import { DetailContent, FileContent } from './models';
 import { RequestState, SnapshotStore } from './snapshot-store';
 import { Icon } from './ui/icon';
 import { closeModal, openModal } from './ui-state';
 import { UrlState } from './url-state';
 
-/** Modal file viewer driven by the `file` and `line` query params. */
+/** Modal file and detail viewer driven by the `file`, `detail` and `line` query params. */
 @Component({
   selector: 'app-file-viewer',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,18 +40,26 @@ export class FileViewer {
   private subscription?: Subscription;
   private copyTimer: ReturnType<typeof setTimeout> | undefined;
 
-  protected readonly state = signal<RequestState<FileContent>>({ phase: 'loading' });
+  protected readonly state = signal<RequestState<FileContent | DetailContent>>({ phase: 'loading' });
   protected readonly wrap = signal(true);
   protected readonly copied = signal('');
+  protected readonly detailId = computed(() => (this.url.file() ? undefined : this.url.detail()));
+  protected readonly noun = computed(() => (this.detailId() ? 'detail' : 'file'));
   protected readonly ref = computed(() => this.store.file(this.url.file()));
   protected readonly path = computed(() => {
     const state = this.state();
-    return state.phase === 'content' ? state.value.path : (this.ref()?.path ?? '');
+    return state.phase === 'content' && 'path' in state.value ? state.value.path : (this.ref()?.path ?? '');
   });
-  protected readonly name = computed(() => this.path().split('/').pop() || this.url.file() || 'File');
+  protected readonly name = computed(() => {
+    const state = this.state();
+    if (state.phase === 'content' && 'title' in state.value) {
+      return state.value.title;
+    }
+    return this.path().split('/').pop() || this.url.file() || this.detailId() || 'File';
+  });
   protected readonly kind = computed(() => {
     const state = this.state();
-    return state.phase === 'content' ? state.value.kind : this.ref()?.kind;
+    return state.phase === 'content' && 'kind' in state.value ? state.value.kind : this.ref()?.kind;
   });
   protected readonly lines = computed(() => {
     const state = this.state();
@@ -75,8 +83,8 @@ export class FileViewer {
 
   constructor() {
     afterRenderEffect(() => {
-      const fileId = this.url.file();
-      untracked(() => (fileId ? this.show(fileId) : this.hide()));
+      const open = !!(this.url.file() || this.url.detail());
+      untracked(() => (open ? this.show() : this.hide()));
     });
     effect(() => {
       const line = this.url.line();
@@ -100,14 +108,11 @@ export class FileViewer {
   }
 
   protected retry(): void {
-    const fileId = this.url.file();
-    if (fileId) {
-      this.load(fileId);
-    }
+    this.load();
   }
 
   protected onClosed(): void {
-    if (this.url.file()) {
+    if (this.url.file() || this.url.detail()) {
       this.close();
     }
   }
@@ -126,7 +131,7 @@ export class FileViewer {
     this.copyTimer = setTimeout(() => this.copied.set(''), 2000);
   }
 
-  private show(fileId: string): void {
+  private show(): void {
     const dialog = this.dialog().nativeElement;
     if (!dialog.open) {
       const active = document.activeElement;
@@ -134,7 +139,7 @@ export class FileViewer {
       openModal(dialog);
       this.heading().nativeElement.focus();
     }
-    this.load(fileId);
+    this.load();
   }
 
   private hide(): void {
@@ -150,11 +155,17 @@ export class FileViewer {
     this.trigger = null;
   }
 
-  private load(fileId: string): void {
+  private load(): void {
+    const fileId = this.url.file();
+    const detailId = this.detailId();
+    const request: Observable<FileContent | DetailContent> | null = fileId ?this.api.file(fileId, this.url.dir()) : detailId ? this.api.detail(detailId, this.url.dir()) : null;
+    if (!request) {
+      return;
+    }
     this.subscription?.unsubscribe();
     this.state.set({ phase: 'loading' });
     this.copied.set('');
-    this.subscription = this.api.file(fileId, this.url.dir()).subscribe({
+    this.subscription = request.subscribe({
       next: (value) => this.state.set({ phase: 'content', value }),
       error: (error: unknown) => this.state.set({ phase: 'error', kind: classifyError(error) })
     });

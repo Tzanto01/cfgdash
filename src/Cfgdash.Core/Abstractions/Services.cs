@@ -10,7 +10,17 @@ public interface ISnapshotSource
     Task<SnapshotResult> BuildAsync(string targetDir, CancellationToken cancellationToken);
 }
 
-public sealed record SnapshotResult(HarnessSnapshot Snapshot, IFileCatalog Files);
+/// <summary><c>DetailIds</c> are the <c>detailId</c> values this snapshot emitted; only these can be opened.</summary>
+public sealed record SnapshotResult(HarnessSnapshot Snapshot, IFileCatalog Files, IReadOnlySet<string>? DetailIds = null);
+
+/// <summary>Resolves a <c>detailId</c> through its collector's <see cref="IDetailProvider"/>: redacted, capped at 512 KiB, 20 s timeout. Null when unknown.</summary>
+public interface IDetailReader
+{
+    Task<DetailResponse?> ReadAsync(string targetDir, string detailId, CancellationToken cancellationToken);
+}
+
+/// <summary><c>ContentType</c> is <c>markdown</c>, <c>json</c> or <c>text</c>.</summary>
+public sealed record DetailResponse(string Id, string Title, string ContentType, string Content, bool Truncated);
 
 /// <summary>Files a snapshot registered. Only these can be opened or searched.</summary>
 public interface IFileCatalog

@@ -26,6 +26,8 @@
             <td role="cell" [attr.data-label]="column.label" [class.num]="isNumber(cell)">
               @if (fileId) {
                 <button type="button" class="link-button mono cell-link" (click)="url.openFile(fileId)">{{ text(cell) || 'Open file' }}</button>
+              } @else if (first && row.detailId) {
+                <button type="button" class="link-button mono cell-link" (click)="url.openDetail(row.detailId)">{{ text(cell) || 'Open detail' }}</button>
               } @else if (isEmpty(cell)) {
                 <span class="muted" aria-hidden="true">-</span><span class="sr-only">empty</span>
               } @else {

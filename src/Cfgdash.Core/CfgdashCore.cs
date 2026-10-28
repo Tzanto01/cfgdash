@@ -14,7 +14,8 @@ public sealed record CoreServices(
     IProcessRunner Processes,
     ISnapshotSource Snapshots,
     IFileContentReader FileReader,
-    ISnapshotSearch Search);
+    ISnapshotSearch Search,
+    IDetailReader Details);
 
 /// <summary>Composition root of the core. The host calls only this.</summary>
 public static class CfgdashCore
@@ -26,7 +27,9 @@ public static class CfgdashCore
         var environment = await MachineEnvironmentDiscovery.DiscoverAsync(reader, processes, DiscoveryOptions.Default(reader), cancellationToken);
         var redactor = new Redactor();
         var fileReader = new FileContentReader(redactor);
-        var snapshots = new SnapshotBuilder(environment, CollectorCatalog.All(reader), redactor, processes, cfgdashVersion);
-        return new CoreServices(environment, reader, processes, snapshots, fileReader, new SnapshotSearch());
+        var collectors = CollectorCatalog.All(reader);
+        var snapshots = new SnapshotBuilder(environment, collectors, redactor, processes, cfgdashVersion);
+        var details = new DetailReader(environment, collectors, redactor, processes);
+        return new CoreServices(environment, reader, processes, snapshots, fileReader, new SnapshotSearch(), details);
     }
 }

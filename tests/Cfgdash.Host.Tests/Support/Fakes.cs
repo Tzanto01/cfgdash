@@ -221,8 +221,14 @@ internal sealed class FakeSnapshots(string hostname = "host.example") : ISnapsho
 
         var machine = new MachineInfo(hostname, null, new OsInfo(OsFamily.Linux, "test os", "x64"), DateTimeOffset.UnixEpoch, "0.0.0-dev");
         var snapshot = new HarnessSnapshot(HarnessSnapshot.CurrentSchemaVersion, machine, new SnapshotContext(targetDir, []), [], [], []);
-        return Task.FromResult(new SnapshotResult(snapshot, Files));
+        return Task.FromResult(new SnapshotResult(snapshot, Files, new HashSet<string> { "c1:emitted" }));
     }
+}
+
+internal sealed class FakeDetails : IDetailReader
+{
+    public Task<DetailResponse?> ReadAsync(string targetDir, string detailId, CancellationToken cancellationToken) =>
+        Task.FromResult<DetailResponse?>(detailId.StartsWith("c1:", StringComparison.Ordinal) ? new DetailResponse(detailId, "Title " + detailId, "markdown", "detail of " + detailId, false) : null);
 }
 
 internal sealed class FakeFileReader : IFileContentReader
@@ -253,7 +259,7 @@ internal static class TestCore
         new(OsFamily.Linux, "test os", "x64", hostname, home, paths ?? [], tools ?? new Dictionary<string, string>(), tailnet, [], projects ?? [], logins ?? [], tags ?? []);
 
     public static CoreServices Create(MachineEnvironment? environment = null, IProcessRunner? processes = null, FakeSnapshots? snapshots = null, IEnvironmentReader? reader = null) =>
-        new(environment ?? Machine(), reader ?? new FakeEnv(), processes ?? new FakeProcesses(), snapshots ?? new FakeSnapshots(), new FakeFileReader(), new FakeSearch());
+        new(environment ?? Machine(), reader ?? new FakeEnv(), processes ?? new FakeProcesses(), snapshots ?? new FakeSnapshots(), new FakeFileReader(), new FakeSearch(), new FakeDetails());
 
     public static HostDependencies Deps(CoreServices core, string cacheDir, TextWriter? output = null, TextWriter? error = null, TimeProvider? time = null, Action<string>? open = null, string? exe = null, IFileProvider? ui = null) =>
         new()

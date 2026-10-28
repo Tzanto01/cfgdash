@@ -98,6 +98,7 @@ internal sealed class CfgdashServer : IAsyncDisposable
         app.MapGet("/api/v1/health", ctx => WriteJsonAsync(ctx, StatusCodes.Status200OK, new { status = "ok", version = HostDependencies.Version, schemaVersion = HarnessSnapshot.CurrentSchemaVersion }));
         app.MapGet("/api/v1/snapshot", ctx => SnapshotAsync(ctx));
         app.MapGet("/api/v1/files/{id}", ctx => FileAsync(ctx));
+        app.MapGet("/api/v1/details/{id}", ctx => DetailAsync(ctx));
         app.MapGet("/api/v1/search", ctx => SearchAsync(ctx));
         app.MapGet("/api/v1/dirs", ctx => DirsAsync(ctx));
         app.MapPost("/api/v1/shutdown", ctx => ShutdownAsync(ctx));
@@ -379,6 +380,51 @@ internal sealed class CfgdashServer : IAsyncDisposable
         }
 
         await WriteJsonAsync(ctx, StatusCodes.Status200OK, content);
+    }
+
+    private async Task DetailAsync(HttpContext ctx)
+    {
+        if (!TryGetDir(ctx.Request.Query["dir"], out var dir))
+        {
+            await WriteBadDirAsync(ctx);
+            return;
+        }
+
+        if (await GetSnapshotAsync(ctx, dir, refresh: false) is not { } result)
+        {
+            return;
+        }
+
+        if (ctx.Request.RouteValues["id"] is not string id || result.DetailIds?.Contains(id) != true)
+        {
+            await WriteNotFoundAsync(ctx);
+            return;
+        }
+
+        DetailResponse? detail;
+        try
+        {
+            detail = await core.Details.ReadAsync(dir, id, ctx.RequestAborted);
+        }
+        catch (TimeoutException)
+        {
+            await WriteJsonAsync(ctx, StatusCodes.Status503ServiceUnavailable, new { error = "unavailable" });
+            return;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            log.Error(e);
+            await WriteJsonAsync(ctx, StatusCodes.Status500InternalServerError, new { error = "read-failed" });
+            return;
+        }
+
+        if (detail is null)
+        {
+            await WriteNotFoundAsync(ctx);
+            return;
+        }
+
+        await WriteJsonAsync(ctx, StatusCodes.Status200OK, detail);
     }
 
     private async Task SearchAsync(HttpContext ctx)
