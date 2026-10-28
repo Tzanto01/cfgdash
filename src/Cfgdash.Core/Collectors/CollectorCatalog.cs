@@ -27,6 +27,7 @@ internal static class CollectorCatalog
             new WindowsTasksCollector(),
             new SystemdUserCollector(environmentReader),
             new CrontabCollector(),
+            new SessionsTranscriptsCollector(CfgdashPaths.CacheDir(environmentReader)),
         ];
     }
 }
