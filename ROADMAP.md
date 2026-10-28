@@ -8,4 +8,4 @@ v1 shows the harness of the machine it runs on, read-only. Next, in order:
 4. **Engram browser.** Metadata first (projects, scopes, topic keys, counts, review dates), content on click, company scope only on machines that have it.
 5. **T3 settings.** Show T3 Code providers, projects and per-project settings.
 6. **Codex and OpenCode configs.** Collectors for their config files, instructions and skills, same block model.
-7. **Guarded edits.** The write path: a proposed change renders as a dry-run diff, applies only after explicit confirmation, and lands in an append-only audit log in the cache dir. Separate `/api/v2` surface, off by default.
+7. **Guarded edits.** The write path: a proposed change renders as a dry-run diff, applies only after explicit confirmation, and lands in an append-only audit log in the cache dir. Separate `/api/v2` surface, off by default. First candidate: the config auto-pull switch (`configAutoPull` in the config repo's `.claude/machine.json`), which the overview already shows read-only.

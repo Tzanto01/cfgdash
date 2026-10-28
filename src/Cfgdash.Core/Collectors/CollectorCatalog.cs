@@ -14,7 +14,7 @@ internal static class CollectorCatalog
         return
         [
             new MachineCollector(CfgdashPaths.OverridesFile(environmentReader)),
-            new ConfigRepoCollector(),
+            new ConfigRepoCollector(environmentReader),
             new SettingsEffectiveCollector(settings),
             new InstructionChainCollector(settings, locations),
             new AgentDefinitionsCollector(settings, locations),

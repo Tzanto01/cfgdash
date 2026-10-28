@@ -55,7 +55,7 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
     [Fact]
     public async Task Config_repo_reports_branch_dirty_files_and_last_commit_of_a_real_repo()
     {
-        var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), new ProcessRunner()), CancellationToken.None);
+        var result = await new ConfigRepoCollector(new FakeEnvironmentReader()).CollectAsync(Context(RepoEnvironment("git"), new ProcessRunner()), CancellationToken.None);
 
         Assert.Null(result.UnavailableReason);
         var rows = Rows(result);
@@ -86,7 +86,7 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
             .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), status)
             .On("git", Git(repo, "log", "--no-show-signature", "-1", "--format=%H%x1f%cI%x1f%s"), "abc123\u001f2026-01-01T00:00:00+00:00\u001fsubject line\n");
 
-        var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
+        var result = await new ConfigRepoCollector(new FakeEnvironmentReader()).CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
 
         var rows = Rows(result);
         Assert.Equal(("feature", "origin/feature", 2, 1, 3), (rows["branch"]!.GetValue<string>(), rows["upstream"]!.GetValue<string>(), rows["ahead"]!.GetValue<int>(), rows["behind"]!.GetValue<int>(), rows["dirtyCount"]!.GetValue<int>()));
@@ -102,7 +102,7 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
         var processes = new FakeProcessRunner()
             .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), string.Empty, 128, "fatal: not a git repository\nhint: more");
 
-        var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
+        var result = await new ConfigRepoCollector(new FakeEnvironmentReader()).CollectAsync(Context(RepoEnvironment("git"), processes), CancellationToken.None);
 
         Assert.Equal("git status failed: fatal: not a git repository", result.UnavailableReason);
     }
@@ -112,10 +112,32 @@ public sealed class OverviewCollectorTests(GitRepoFixture fixture) : IClassFixtu
     {
         var nested = fixture.Tree.Dir("repo/nested-config");
 
-        var result = await new ConfigRepoCollector().CollectAsync(Context(RepoEnvironment("git", nested), new ProcessRunner()), CancellationToken.None);
+        var result = await new ConfigRepoCollector(new FakeEnvironmentReader()).CollectAsync(Context(RepoEnvironment("git", nested), new ProcessRunner()), CancellationToken.None);
 
         Assert.StartsWith("git status failed: fatal: not a git repository", result.UnavailableReason);
         Assert.Empty(result.Blocks);
+    }
+
+    [Fact]
+    public async Task Config_repo_reports_auto_pull_from_machine_json_unless_the_env_var_overrides_it()
+    {
+        var repo = Path.GetFullPath(fixture.Tree.Dir("autopull"));
+        fixture.Tree.Write("autopull/.claude/machine.json", "{ \"configAutoPull\": true }");
+        fixture.Tree.Write("autopull/.git/FETCH_HEAD", string.Empty);
+        var processes = new FakeProcessRunner()
+            .On("git", Git(repo, "status", "--porcelain=v2", "--branch", "-z"), "# branch.head main\0")
+            .On("git", Git(repo, "log", "--no-show-signature", "-1", "--format=%H%x1f%cI%x1f%s"), string.Empty);
+        var env = new FakeEnvironmentReader();
+        async Task<KvBlock> Collect() => (KvBlock)(await new ConfigRepoCollector(env).CollectAsync(Context(RepoEnvironment("git", repo), processes), CancellationToken.None)).Blocks[0];
+        static (bool, string?) AutoPull(KvBlock block) => block.Rows.Single(r => r.Key == "autoPull") is var row ? (row.Value!.GetValue<bool>(), row.Source?.Label) : default;
+
+        var fromFile = await Collect();
+        env.Process[ConfigRepoCollector.AutoPullVariable] = "0";
+        var overridden = await Collect();
+
+        Assert.Equal((true, ".claude/machine.json"), AutoPull(fromFile));
+        Assert.Equal((false, ConfigRepoCollector.AutoPullVariable), AutoPull(overridden));
+        Assert.True(DateTimeOffset.TryParse(fromFile.Rows.Single(r => r.Key == "lastFetch").Value!.GetValue<string>(), out _));
     }
 
     [Fact]

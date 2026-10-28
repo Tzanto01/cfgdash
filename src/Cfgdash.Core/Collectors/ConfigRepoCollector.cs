@@ -5,11 +5,14 @@ using Cfgdash.Core.Snapshot;
 namespace Cfgdash.Core.Collectors;
 
 /// <summary>
-/// <c>overview.config-repo</c>: branch, upstream, ahead/behind, dirty files and last commit of the config repo (read-only git).
+/// <c>overview.config-repo</c>: branch, upstream, ahead/behind, config auto-pull state, last fetch, dirty files and last commit of the config repo (read-only git).
 /// Git runs only against the config repo's own <c>.git</c> (no repository discovery) with fsmonitor, hooks and optional locks off; never in the target dir.
+/// Auto-pull mirrors the session-start hook: <c>CC_CONFIG_AUTOPULL</c> wins, otherwise <c>configAutoPull</c> in <c>.claude/machine.json</c>, otherwise off.
 /// </summary>
-internal sealed class ConfigRepoCollector : ICollector
+internal sealed class ConfigRepoCollector(IEnvironmentReader environmentReader) : ICollector
 {
+    public const string AutoPullVariable = "CC_CONFIG_AUTOPULL";
+
     public const int MaxRows = 500;
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(10);
 
@@ -37,12 +40,16 @@ internal sealed class ConfigRepoCollector : ICollector
 
         var source = new SourceRef("git");
         JsonNode? Text(string? value) => value is null ? null : redactor.RedactText(value);
+        var autoPull = AutoPull(repo, environmentReader.Get(AutoPullVariable));
+        var fetchHead = Path.Combine(repo, ".git", "FETCH_HEAD");
         var rows = new List<KvRow>
         {
             new("branch", Text(parsed.Branch), source),
             new("upstream", Text(parsed.Upstream), source),
             new("ahead", parsed.Ahead, source),
             new("behind", parsed.Behind, source),
+            new("autoPull", autoPull.On, new SourceRef(autoPull.Source)),
+            new("lastFetch", File.Exists(fetchHead) ? new DateTimeOffset(File.GetLastWriteTimeUtc(fetchHead)).ToString("o") : null, new SourceRef(".git/FETCH_HEAD")),
             new("dirtyCount", parsed.Dirty.Count, source),
             new("lastCommitHash", Text(commit.Length == 3 ? commit[0] : null), source),
             new("lastCommitDate", Text(commit.Length == 3 ? commit[1] : null), source),
@@ -60,6 +67,30 @@ internal sealed class ConfigRepoCollector : ICollector
                 new TableBlock("dirty", "Uncommitted changes", [new TableColumn("path", "Path"), new TableColumn("status", "Status")], tableRows),
             ],
             Notes: notes);
+    }
+
+    internal static (bool On, string Source) AutoPull(string repo, string? variable)
+    {
+        if (!string.IsNullOrEmpty(variable))
+        {
+            return (IsOn(variable), AutoPullVariable);
+        }
+
+        try
+        {
+            var value = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, ".claude", "machine.json")))?["configAutoPull"];
+            if (value is not null)
+            {
+                return (IsOn(value.ToJsonString().Trim('"')), ".claude/machine.json");
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+        }
+
+        return (false, "default");
+
+        static bool IsOn(string value) => value == "1" || value.Equals("true", StringComparison.OrdinalIgnoreCase);
     }
 
     internal sealed record DirtyEntry(string Path, string Status);

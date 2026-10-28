@@ -43,7 +43,7 @@ Discovered once per run, then per target dir where needed:
 | Id | View | Requirements | Content |
 | --- | --- | --- | --- |
 | `overview.machine` | overview | none | kv: hostname, OS, the five context paths with sources, Claude Code version (`claude --version`, row omitted with a note when claude is absent) |
-| `overview.config-repo` | overview | tools git, paths configRepo | kv: branch, upstream, ahead/behind, dirty count, last commit (hash, date, subject); table: dirty files |
+| `overview.config-repo` | overview | tools git, paths configRepo | kv: branch, upstream, ahead/behind, config auto-pull on/off with its source (`CC_CONFIG_AUTOPULL`, `.claude/machine.json` or default), last fetch (`.git/FETCH_HEAD` time), dirty count, last commit (hash, date, subject); table: dirty files |
 | `settings.effective` | settings | paths claudeConfigDir, targetDir | kv with provenance over every layer that applies to the target dir; table of the layer files in precedence order |
 | `instructions.chain` | instructions | targetDir | tree: ordered instruction files with @imports resolved as children, referenced AGENTS.md / AGENTS.override.md as `referenced` children, main-thread agent and output style prompts; summary totals |
 | `agents.definitions` | agents | paths claudeConfigDir, targetDir | table: name, scope, model, tools, frontmatter hooks, description, company-core marker; row opens the file |

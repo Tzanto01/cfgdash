@@ -6,7 +6,7 @@ public static class HarnessEnvAllowlist
     /// <summary>Shown with their value (secret-looking values are still redacted by the redactor).</summary>
     public static readonly IReadOnlyList<string> Harness =
     [
-        "CLAUDE_CONFIG_DIR", "WORKSPACE_ROOT", "ENGRAM_DATA_DIR", "CC_DISABLED_HOOKS",
+        "CLAUDE_CONFIG_DIR", "WORKSPACE_ROOT", "ENGRAM_DATA_DIR", "CC_DISABLED_HOOKS", "CC_CONFIG_AUTOPULL",
         "CLAUDE_CODE_TMPDIR", "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_ENABLE_TELEMETRY",
         "CLAUDE_CODE_USE_POWERSHELL_TOOL", "CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_SHELL", "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
         "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS",
