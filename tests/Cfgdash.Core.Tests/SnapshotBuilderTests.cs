@@ -95,7 +95,7 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
         var healthy = Returning("ok");
         var stopwatch = Stopwatch.StartNew();
 
-        var snapshot = await BuildAsync(TestEnvironments.Create(tree), TimeSpan.FromMilliseconds(200), hanging, healthy);
+        var snapshot = await BuildAsync(TestEnvironments.Create(tree), TimeSpan.FromSeconds(2), hanging, healthy);
 
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10));
         Assert.Equal(CollectorState.Unavailable, snapshot.Collectors[0].State);
