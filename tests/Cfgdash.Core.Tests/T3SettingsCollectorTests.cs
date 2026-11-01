@@ -244,7 +244,13 @@ public sealed class T3SettingsCollectorTests : IDisposable
             command.ExecuteNonQuery();
         }
 
-        string[] Hashes() => [.. new[] { "-wal", "-shm" }.Select(suffix => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(DbPath + suffix))))];
+        string Hash(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return Convert.ToHexString(SHA256.HashData(stream));
+        }
+
+        string[] Hashes() => [Hash(DbPath + "-wal"), Hash(DbPath + "-shm")];
         var before = Hashes();
 
         var result = await collector.CollectAsync(Context(), CancellationToken.None);
