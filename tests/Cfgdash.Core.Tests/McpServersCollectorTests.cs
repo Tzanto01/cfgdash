@@ -171,7 +171,7 @@ public sealed class McpServersCollectorTests(McpFixture fixture) : IClassFixture
     }
 
     [Fact]
-    public async Task Only_stdio_servers_whose_command_is_neither_a_file_nor_on_path_are_flagged_missing_command()
+    public async Task Only_applied_stdio_servers_whose_command_path_or_name_is_not_found_are_flagged_missing_command()
     {
         using var tree = new TempTree();
         var target = tree.Dir("proj");
@@ -186,11 +186,16 @@ public sealed class McpServersCollectorTests(McpFixture fixture) : IClassFixture
             File.SetUnixFileMode(onPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
+        tree.Write("proj/scripts/srv.sh", "x");
+        tree.Write("config/.claude/.claude.json", """{ "mcpServers": { "missing": { "command": "also-not-there" } } }""");
         tree.Write("proj/.mcp.json", new JsonObject
         {
             ["mcpServers"] = new JsonObject
             {
                 ["abs"] = new JsonObject { ["command"] = absolute },
+                ["abs-gone"] = new JsonObject { ["command"] = tree.Path("tools/gone-srv") },
+                ["relative"] = new JsonObject { ["command"] = "./scripts/srv.sh" },
+                ["relative-gone"] = new JsonObject { ["command"] = "./scripts/gone.sh" },
                 ["onpath"] = new JsonObject { ["command"] = "path-srv" },
                 ["missing"] = new JsonObject { ["command"] = "no-such-srv" },
                 ["var"] = new JsonObject { ["command"] = "${CLAUDE_PLUGIN_ROOT}/srv" },
@@ -215,7 +220,9 @@ public sealed class McpServersCollectorTests(McpFixture fixture) : IClassFixture
         var snapshot = (await builder.BuildAsync(target, CancellationToken.None)).Snapshot;
 
         var servers = (TableBlock)Assert.Single(Assert.Single(snapshot.Sections).Blocks);
-        Assert.Equal(["project:missing"], servers.Rows.Where(r => r.Flags?.Contains("missing-command") == true).Select(r => r.Id));
-        Assert.Equal(5, servers.Rows.Count);
+        Assert.Equal(
+            ["project:abs-gone", "project:relative-gone", "project:missing"],
+            servers.Rows.Where(r => r.Flags?.Contains("missing-command") == true).Select(r => r.Id));
+        Assert.Equal(["overridden"], servers.Rows.Single(r => r.Id == "user:missing").Flags);
     }
 }

@@ -126,7 +126,7 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
                 flags.Add("overridden");
             }
 
-            if (MissingCommand(server.Entry, environment.Os))
+            if (!overridden && MissingCommand(server.Entry, environment.Os, stack.TargetDir))
             {
                 flags.Add("missing-command");
             }
@@ -151,7 +151,7 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
         return new CollectorResult([new TableBlock("servers", "MCP servers", Columns, rows)], Notes: notes.Count > 0 ? notes : null);
     }
 
-    private bool MissingCommand(JsonObject entry, OsFamily os)
+    private bool MissingCommand(JsonObject entry, OsFamily os, string targetDir)
     {
         if (Text(entry["command"]) is not { } command || Text(entry["type"]) is not (null or "stdio")
             || PathUtil.IsNetworkPath(command) || command.Contains("${", StringComparison.Ordinal))
@@ -159,7 +159,12 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
             return false;
         }
 
-        return Path.IsPathFullyQualified(command) ? !File.Exists(command) : ToolProbe.FindOnPath(command, environmentReader, os) is null;
+        if (command.IndexOfAny(['/', '\\']) < 0)
+        {
+            return ToolProbe.FindOnPath(command, environmentReader, os) is null;
+        }
+
+        return !File.Exists(Path.IsPathFullyQualified(command) ? command : Path.Combine(targetDir, command));
     }
 
     private static string? Target(JsonObject entry)
