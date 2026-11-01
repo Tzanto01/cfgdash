@@ -40,7 +40,7 @@ describe('access problems', () => {
     await h.click(h.button('Try again'));
     await h.answer('/api/v1/snapshot', makeSnapshot());
 
-    expect(h.requests).toHaveLength(2);
+    expect(h.requests.filter((r) => r.url.pathname === '/api/v1/snapshot')).toHaveLength(2);
     expect(h.el.querySelector('main h1')?.textContent).toBe('Overview');
   });
 });

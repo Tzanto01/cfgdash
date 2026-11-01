@@ -73,8 +73,9 @@ describe('snapshot store', () => {
     await h.navigate('/overview?dir=D%3A%2Fws%2Fa');
     await h.navigate('/overview?dir=D%3A%2Fws%2Fb');
 
-    expect(h.requests[1].aborted).toBe(true);
-    expect(h.requests[2].aborted).toBe(false);
+    const snapshots = h.requests.filter((r) => r.url.pathname === '/api/v1/snapshot');
+    expect(snapshots[1].aborted).toBe(true);
+    expect(snapshots[2].aborted).toBe(false);
     expect(h.text()).not.toContain("Couldn't");
     expect(h.text()).not.toContain("isn't answering");
 

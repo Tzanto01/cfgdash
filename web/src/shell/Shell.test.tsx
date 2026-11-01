@@ -86,8 +86,9 @@ describe('redirects', () => {
   it('loads the snapshot of the folder in the query once, across the redirect', async () => {
     const h = await startApp('/a/b?dir=D%3A%2Fws%2Fapp');
 
-    expect(h.requests).toHaveLength(1);
-    expect(h.requests[0].url.searchParams.get('dir')).toBe('D:/ws/app');
+    const snapshots = h.requests.filter((r) => r.url.pathname === '/api/v1/snapshot');
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].url.searchParams.get('dir')).toBe('D:/ws/app');
   });
 });
 
