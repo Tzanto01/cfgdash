@@ -117,6 +117,20 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
     }
 
     [LinuxFact]
+    public void Register_refuses_a_link_whose_target_climbs_out_of_another_link_with_dot_dot()
+    {
+        tree.Write("climb/home/user/.codex/log/codex-tui.log", "log content");
+        tree.Dir("climb/repo");
+        Directory.CreateSymbolicLink(tree.Path("climb/repo/x"), tree.Path("climb/home/user/.codex/log"));
+        File.CreateSymbolicLink(tree.Path("climb/repo/e"), "x/../log/codex-tui.log");
+        var path = tree.Path("climb/repo/e");
+        Assert.Equal("log content", File.ReadAllText(path));
+
+        Assert.True(FileRegistry.IsNeverRead(path));
+        Assert.Null(new FileRegistry([]).Register(path, "instruction"));
+    }
+
+    [LinuxFact]
     public void Register_refuses_a_path_through_a_link_loop()
     {
         tree.Dir("loop/repo");
