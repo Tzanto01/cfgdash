@@ -7,14 +7,8 @@ internal static class ToolProbe
 
     public static IReadOnlyDictionary<string, string> Probe(IEnvironmentReader env, OsFamily os, string homeDir, string? programFilesDir)
     {
-        var dirs = (env.Get("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(d => d.Trim('"'))
-            .Where(Path.IsPathFullyQualified)
-            .ToList();
-        IReadOnlyList<string> extensions = os == OsFamily.Windows
-            ? (env.Get("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : [string.Empty];
+        var dirs = PathDirs(env);
+        var extensions = Extensions(env, os);
 
         var known = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         void Known(string tool, string path) => (known.TryGetValue(tool, out var list) ? list : known[tool] = []).Add(path);
@@ -38,6 +32,30 @@ internal static class ToolProbe
 
         return found;
     }
+
+    /// <summary>Full path of <paramref name="name"/> on PATH (PATHEXT on Windows, where a name that already has an extension is tried bare first), or null.</summary>
+    internal static string? FindOnPath(string name, IEnvironmentReader env, OsFamily os)
+    {
+        IReadOnlyList<string> extensions = Extensions(env, os);
+        if (os == OsFamily.Windows && Path.HasExtension(name))
+        {
+            extensions = [string.Empty, .. extensions];
+        }
+
+        return Find(name, PathDirs(env), extensions);
+    }
+
+    private static List<string> PathDirs(IEnvironmentReader env) =>
+        (env.Get("PATH") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(d => d.Trim('"'))
+            .Where(Path.IsPathFullyQualified)
+            .ToList();
+
+    private static string[] Extensions(IEnvironmentReader env, OsFamily os) =>
+        os == OsFamily.Windows
+            ? (env.Get("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [string.Empty];
 
     private static string? Find(string tool, IReadOnlyList<string> dirs, IReadOnlyList<string> extensions)
     {

@@ -21,7 +21,7 @@ internal static class CollectorCatalog
             new CompanyCoreCollector(),
             new SkillsCatalogCollector(settings, locations),
             new HooksRegisteredCollector(settings, locations),
-            new McpServersCollector(settings, locations),
+            new McpServersCollector(settings, locations, environmentReader),
             new SettingsHighlightsCollector(settings),
             new EnvHarnessCollector(settings, environmentReader),
             new WindowsTasksCollector(),

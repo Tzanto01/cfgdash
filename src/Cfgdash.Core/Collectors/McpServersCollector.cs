@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Cfgdash.Core.Environment;
 using Cfgdash.Core.Files;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Settings;
@@ -7,7 +8,7 @@ using Cfgdash.Core.Snapshot;
 namespace Cfgdash.Core.Collectors;
 
 /// <summary><c>mcp.servers</c>: MCP servers by scope (managed-mcp.json, local, project, user, plugin). <c>${VAR}</c> references are never expanded.</summary>
-internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocations locations) : ICollector
+internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocations locations, IEnvironmentReader environmentReader) : ICollector
 {
     private static readonly IReadOnlyList<TableColumn> Columns =
     [
@@ -119,6 +120,17 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
         var rows = servers.Select(server =>
         {
             var overridden = (managed && server.Scope != "managed") | !seen.Add(server.Name);
+            var flags = new List<string>();
+            if (overridden)
+            {
+                flags.Add("overridden");
+            }
+
+            if (!overridden && MissingCommand(server.Entry, environment.Os, stack.TargetDir))
+            {
+                flags.Add("missing-command");
+            }
+
             return new TableRow(
                 server.Id,
                 new Dictionary<string, JsonNode?>
@@ -132,11 +144,27 @@ internal sealed class McpServersCollector(SettingsLayers settings, PlatformLocat
                     ["source"] = server.Source?.DeepClone(),
                     ["status"] = overridden ? "overridden" : "applied",
                 },
-                overridden ? ["overridden"] : null,
+                flags.Count > 0 ? flags : null,
                 server.FileId);
         }).ToList();
 
         return new CollectorResult([new TableBlock("servers", "MCP servers", Columns, rows)], Notes: notes.Count > 0 ? notes : null);
+    }
+
+    private bool MissingCommand(JsonObject entry, OsFamily os, string targetDir)
+    {
+        if (Text(entry["command"]) is not { } command || Text(entry["type"]) is not (null or "stdio")
+            || PathUtil.IsNetworkPath(command) || command.Contains("${", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (command.IndexOfAny(['/', '\\']) < 0)
+        {
+            return ToolProbe.FindOnPath(command, environmentReader, os) is null;
+        }
+
+        return !File.Exists(Path.IsPathFullyQualified(command) ? command : Path.Combine(targetDir, command));
     }
 
     private static string? Target(JsonObject entry)

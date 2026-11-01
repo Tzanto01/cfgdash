@@ -95,6 +95,11 @@ internal sealed class SnapshotBuilder(
                 return Inactive(CollectorState.Unavailable, reason, ms, result.Notes);
             }
 
+            if (result.NotPresentReason is { } absent)
+            {
+                return Inactive(CollectorState.NotPresent, absent, ms, result.Notes);
+            }
+
             var detailIds = new HashSet<string>(StringComparer.Ordinal);
             var prefix = manifest.Id + ":";
             string? KeepDetail(string? id)

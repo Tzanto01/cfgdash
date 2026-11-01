@@ -429,7 +429,7 @@ export function buildSnapshot(dir) {
         ...(rich ? [mcpRow('project-metrics', 'metrics', 'project', 'sse', '${METRICS_URL}', null, 'Authorization: [redacted]', `${base}/.mcp.json`, MCP, ['redacted'])] : []),
         mcpRow('user-issues', 'issues', 'user', 'stdio', 'npx -y @example/issues-mcp@1.2.0', 'ISSUES_TOKEN=[redacted]', null, '.claude.json', undefined, ['overridden', 'redacted']),
         mcpRow('user-engram', 'engram', 'user', 'stdio', 'engram mcp --tools=agent', 'ENGRAM_DATA_DIR=D:/ws/config/.engram', null, '.claude.json'),
-        mcpRow('user-browser', 'browser', 'user', 'stdio', 'npx -y @example/browser-mcp@1.4.0', null, null, '.claude.json'),
+        mcpRow('user-browser', 'browser', 'user', 'stdio', 'npx -y @example/browser-mcp@1.4.0', null, null, '.claude.json', undefined, ['missing-command']),
         mcpRow('plugin-search', 'docs-tools:search', 'plugin', 'http', 'https://search.example/mcp', null, 'X-Api-Key: [redacted]', 'docs-tools plugin.json', undefined, ['redacted']),
       ] }],
   };

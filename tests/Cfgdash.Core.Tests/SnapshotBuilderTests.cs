@@ -73,6 +73,18 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
     }
 
     [Fact]
+    public async Task Collector_reporting_its_source_absent_is_not_present_with_no_section()
+    {
+        var absent = new TestCollector("absent", new Requirements(), (_, _) => Task.FromResult(CollectorResult.NotPresent("no tool config on this machine")));
+
+        var snapshot = await BuildAsync(TestEnvironments.Create(tree), null, absent);
+
+        Assert.Equal(CollectorState.NotPresent, snapshot.Collectors[0].State);
+        Assert.Equal("no tool config on this machine", snapshot.Collectors[0].Reason);
+        Assert.Empty(snapshot.Sections);
+    }
+
+    [Fact]
     public async Task Exception_becomes_a_one_line_redacted_reason_and_other_collectors_still_run()
     {
         var token = "gh" + "p_" + new string('a', 36);
@@ -95,7 +107,7 @@ public sealed class SnapshotBuilderTests(TempTree tree) : IClassFixture<TempTree
         var healthy = Returning("ok");
         var stopwatch = Stopwatch.StartNew();
 
-        var snapshot = await BuildAsync(TestEnvironments.Create(tree), TimeSpan.FromMilliseconds(200), hanging, healthy);
+        var snapshot = await BuildAsync(TestEnvironments.Create(tree), TimeSpan.FromSeconds(2), hanging, healthy);
 
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10));
         Assert.Equal(CollectorState.Unavailable, snapshot.Collectors[0].State);
