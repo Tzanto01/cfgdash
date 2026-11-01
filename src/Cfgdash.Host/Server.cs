@@ -97,6 +97,7 @@ internal sealed class CfgdashServer : IAsyncDisposable
         app.UseRouting();
         app.MapGet("/api/v1/health", ctx => WriteJsonAsync(ctx, StatusCodes.Status200OK, new { status = "ok", version = HostDependencies.Version, schemaVersion = HarnessSnapshot.CurrentSchemaVersion }));
         app.MapGet("/api/v1/snapshot", ctx => SnapshotAsync(ctx));
+        app.MapGet("/api/v1/findings", ctx => FindingsAsync(ctx));
         app.MapGet("/api/v1/files/{id}", ctx => FileAsync(ctx));
         app.MapGet("/api/v1/details/{id}", ctx => DetailAsync(ctx));
         app.MapGet("/api/v1/search", ctx => SearchAsync(ctx));
@@ -340,6 +341,21 @@ internal sealed class CfgdashServer : IAsyncDisposable
         if (await GetSnapshotAsync(ctx, dir, refresh) is { } result)
         {
             await WriteJsonAsync(ctx, StatusCodes.Status200OK, result.Snapshot);
+        }
+    }
+
+    private async Task FindingsAsync(HttpContext ctx)
+    {
+        if (!TryGetDir(ctx.Request.Query["dir"], out var dir))
+        {
+            await WriteBadDirAsync(ctx);
+            return;
+        }
+
+        var refresh = string.Equals(ctx.Request.Query["refresh"], "true", StringComparison.OrdinalIgnoreCase);
+        if (await GetSnapshotAsync(ctx, dir, refresh) is { } result)
+        {
+            await WriteJsonAsync(ctx, StatusCodes.Status200OK, CfgdashCore.Findings(result.Snapshot));
         }
     }
 

@@ -91,7 +91,7 @@ public sealed class McpFixture : IDisposable
         var locations = new PlatformLocations(managedDir, null, _ => null);
         var builder = new SnapshotBuilder(
             TestContexts.WithConfigDir(Tree, Config),
-            [new McpServersCollector(new SettingsLayers(locations), locations)],
+            [new McpServersCollector(new SettingsLayers(locations), locations, new FakeEnvironmentReader())],
             new Redactor(),
             new FakeProcessRunner(),
             "0.1.0");
@@ -168,5 +168,54 @@ public sealed class McpServersCollectorTests(McpFixture fixture) : IClassFixture
         Assert.Equal(("managed:corp", "applied"), (servers.Rows[0].Id, Text(servers.Rows[0].Cells["status"])));
         Assert.All(servers.Rows.Skip(1), r => Assert.Equal("overridden", Text(r.Cells["status"])));
         Assert.Contains(snapshot.Collectors[0].Notes!, n => n.Contains("managed-mcp.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Only_stdio_servers_whose_command_is_neither_a_file_nor_on_path_are_flagged_missing_command()
+    {
+        using var tree = new TempTree();
+        var target = tree.Dir("proj");
+        tree.Dir("proj/.git");
+        var config = tree.Dir("config/.claude");
+        var extension = OperatingSystem.IsWindows() ? ".exe" : string.Empty;
+        var absolute = tree.Write("tools/abs-srv" + extension, "x");
+        var onPath = tree.Write("bin/path-srv" + extension, "x");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(absolute, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(onPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        tree.Write("proj/.mcp.json", new JsonObject
+        {
+            ["mcpServers"] = new JsonObject
+            {
+                ["abs"] = new JsonObject { ["command"] = absolute },
+                ["onpath"] = new JsonObject { ["command"] = "path-srv" },
+                ["missing"] = new JsonObject { ["command"] = "no-such-srv" },
+                ["var"] = new JsonObject { ["command"] = "${CLAUDE_PLUGIN_ROOT}/srv" },
+                ["remote"] = new JsonObject { ["type"] = "http", ["url"] = "https://mcp.example/api" },
+            },
+        }.ToJsonString());
+        var environment = new FakeEnvironmentReader();
+        environment.Process["PATH"] = Path.GetDirectoryName(onPath)!;
+        if (OperatingSystem.IsWindows())
+        {
+            environment.Process["PATHEXT"] = ".EXE";
+        }
+
+        var locations = new PlatformLocations(null, null, _ => null);
+        var builder = new SnapshotBuilder(
+            TestContexts.WithConfigDir(tree, config),
+            [new McpServersCollector(new SettingsLayers(locations), locations, environment)],
+            new Redactor(),
+            new FakeProcessRunner(),
+            "0.1.0");
+
+        var snapshot = (await builder.BuildAsync(target, CancellationToken.None)).Snapshot;
+
+        var servers = (TableBlock)Assert.Single(Assert.Single(snapshot.Sections).Blocks);
+        Assert.Equal(["project:missing"], servers.Rows.Where(r => r.Flags?.Contains("missing-command") == true).Select(r => r.Id));
+        Assert.Equal(5, servers.Rows.Count);
     }
 }

@@ -10,14 +10,15 @@ using Cfgdash.Core;
 namespace Cfgdash.Host;
 
 /// <summary>Parsed command line. <paramref name="Dir"/> is an existing, normalized absolute directory.</summary>
-internal sealed record CliOptions(string Command, string Dir, int Port = CfgdashCli.DefaultPort, bool Tailnet = false, bool NoOpen = false, bool Check = false);
+internal sealed record CliOptions(string Command, string Dir, int Port = CfgdashCli.DefaultPort, bool Tailnet = false, bool NoOpen = false, bool Check = false, bool Json = false);
 
-/// <summary>The <c>cfgdash</c> command line (api-v1: CLI). Exit codes: 0 ok, 1 error, 2 prerequisite missing.</summary>
+/// <summary>The <c>cfgdash</c> command line (api-v1: CLI). Exit codes: 0 ok, 1 error, 2 prerequisite missing, 3 doctor found a critical finding.</summary>
 internal static partial class CfgdashCli
 {
     public const int ExitOk = 0;
     public const int ExitError = 1;
     public const int ExitPrerequisite = 2;
+    public const int ExitCritical = 3;
     public const int DefaultPort = 7820;
 
     private const string Usage = """
@@ -26,6 +27,7 @@ internal static partial class CfgdashCli
           cfgdash stop
           cfgdash update [--check]
           cfgdash export [--dir <path>]
+          cfgdash doctor [--dir <path>] [--json]
           cfgdash --version
           cfgdash --help
 
@@ -60,6 +62,7 @@ internal static partial class CfgdashCli
                 "stop" => await StopAsync(dependencies),
                 "update" => await UpdateAsync(options, dependencies),
                 "export" => await ExportAsync(options, dependencies),
+                "doctor" => await DoctorAsync(options, dependencies),
                 _ => await RunServerAsync(options, dependencies),
             };
         }
@@ -82,7 +85,7 @@ internal static partial class CfgdashCli
             index = 1;
         }
 
-        if (command is not ("run" or "stop" or "update" or "export"))
+        if (command is not ("run" or "stop" or "update" or "export" or "doctor"))
         {
             error = $"unknown command '{command}'";
             return null;
@@ -90,7 +93,7 @@ internal static partial class CfgdashCli
 
         int port = DefaultPort;
         string? dir = null;
-        bool tailnet = false, noOpen = false, check = false;
+        bool tailnet = false, noOpen = false, check = false, json = false;
         for (; index < args.Length; index++)
         {
             var name = args[index];
@@ -128,7 +131,7 @@ internal static partial class CfgdashCli
                     }
 
                     break;
-                case ("run" or "export", "--dir"):
+                case ("run" or "export" or "doctor", "--dir"):
                     dir = ResolveDir(value!);
                     if (dir is null)
                     {
@@ -146,6 +149,9 @@ internal static partial class CfgdashCli
                 case ("update", "--check"):
                     check = true;
                     break;
+                case ("doctor", "--json"):
+                    json = true;
+                    break;
                 default:
                     error = $"unknown option '{name}' for '{command}'";
                     return null;
@@ -159,7 +165,7 @@ internal static partial class CfgdashCli
             return null;
         }
 
-        return new CliOptions(command, dir, port, tailnet, noOpen, check);
+        return new CliOptions(command, dir, port, tailnet, noOpen, check, json);
     }
 
     private static string? ResolveDir(string value)
@@ -393,6 +399,42 @@ internal static partial class CfgdashCli
 
         dependencies.Out.WriteLine(path);
         return ExitOk;
+    }
+
+    private static async Task<int> DoctorAsync(CliOptions options, HostDependencies dependencies)
+    {
+        var core = await dependencies.CreateCore(CancellationToken.None);
+        SnapshotResult result;
+        try
+        {
+            result = await core.Snapshots.BuildAsync(options.Dir, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            dependencies.Error.WriteLine($"cfgdash: snapshot failed ({e.GetType().Name}).");
+            return ExitError;
+        }
+
+        var report = CfgdashCore.Findings(result.Snapshot);
+        if (options.Json)
+        {
+            dependencies.Out.WriteLine(JsonSerializer.Serialize(report, SnapshotJson.Options));
+        }
+        else
+        {
+            dependencies.Out.WriteLine($"{report.Dir}: {report.Counts.Critical} critical, {report.Counts.Warning} warning, {report.Counts.Info} info");
+            foreach (var group in report.Findings.GroupBy(f => f.Severity))
+            {
+                dependencies.Out.WriteLine();
+                dependencies.Out.WriteLine($"{group.Key} ({group.Count()})");
+                foreach (var finding in group)
+                {
+                    dependencies.Out.WriteLine($"  {finding.Title}: {finding.Detail}");
+                }
+            }
+        }
+
+        return report.Counts.Critical > 0 ? ExitCritical : ExitOk;
     }
 
     private static string PrintUrls(TextWriter output, int port, string token, RunTailnet? tailnet)

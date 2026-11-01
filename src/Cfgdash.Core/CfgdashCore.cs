@@ -1,6 +1,7 @@
 using Cfgdash.Core.Collectors;
 using Cfgdash.Core.Environment;
 using Cfgdash.Core.Files;
+using Cfgdash.Core.Health;
 using Cfgdash.Core.Redaction;
 using Cfgdash.Core.Search;
 using Cfgdash.Core.Snapshot;
@@ -32,4 +33,7 @@ public static class CfgdashCore
         var details = new DetailReader(environment, collectors, redactor, processes);
         return new CoreServices(environment, reader, processes, snapshots, fileReader, new SnapshotSearch(), details);
     }
+
+    /// <summary>The health-v1 findings for <paramref name="snapshot"/> (docs/contracts/health-v1.md), details redacted.</summary>
+    public static FindingsReport Findings(HarnessSnapshot snapshot) => HealthRules.Evaluate(snapshot, new Redactor());
 }
