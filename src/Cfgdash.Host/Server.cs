@@ -27,7 +27,7 @@ internal sealed record DirsResponse(
     IReadOnlyList<DirSuggestion> Suggestions);
 
 /// <summary>The cfgdash HTTP server: Kestrel on 127.0.0.1 only, the security pipeline, <c>/api/v1</c> and the embedded UI.</summary>
-internal sealed class CfgdashServer : IAsyncDisposable
+internal sealed partial class CfgdashServer : IAsyncDisposable
 {
     public const string SessionCookie = "cfgdash_session";
     private const string ContentSecurityPolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'";
@@ -95,13 +95,14 @@ internal sealed class CfgdashServer : IAsyncDisposable
         }
 
         app.UseRouting();
-        app.MapGet("/api/v1/health", ctx => WriteJsonAsync(ctx, StatusCodes.Status200OK, new { status = "ok", version = HostDependencies.Version, schemaVersion = HarnessSnapshot.CurrentSchemaVersion }));
+        app.MapGet("/api/v1/health", ctx => WriteJsonAsync(ctx, StatusCodes.Status200OK, new { status = "ok", version = HostDependencies.Version, schemaVersion = HarnessSnapshot.CurrentSchemaVersion, edits = !OnTailnet(ctx) }));
         app.MapGet("/api/v1/snapshot", ctx => SnapshotAsync(ctx));
         app.MapGet("/api/v1/files/{id}", ctx => FileAsync(ctx));
         app.MapGet("/api/v1/details/{id}", ctx => DetailAsync(ctx));
         app.MapGet("/api/v1/search", ctx => SearchAsync(ctx));
         app.MapGet("/api/v1/dirs", ctx => DirsAsync(ctx));
         app.MapPost("/api/v1/shutdown", ctx => ShutdownAsync(ctx));
+        MapApiV2(dependencies);
         app.MapFallback("{**path}", ctx => FallbackAsync(ctx));
     }
 
