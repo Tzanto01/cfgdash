@@ -61,7 +61,7 @@ export function DiffCard({ file, scopeLabel, gitTracked }: { file: ProposalFile;
     <section aria-label={`Changes to ${file.path}`} className="card rounded-lg border border-border bg-raised">
       <header
         className={cn(
-          'sticky top-0 z-10 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 bg-raised px-3 py-1.5',
+          'sticky top-12 z-10 flex md:top-[52px] min-h-10 flex-wrap items-center gap-x-2 gap-y-1 bg-raised px-3 py-1.5',
           open ? 'rounded-t-lg border-b border-border' : 'rounded-lg'
         )}
       >

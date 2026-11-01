@@ -101,6 +101,8 @@ export default function SettingsEditor() {
   const reviewRef = useRef<HTMLHeadingElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const pending = useRef(false);
+  const latest = useRef({ dir, staged });
+  latest.current = { dir, staged };
 
   if (stagedDir !== dir) {
     setStagedDir(dir);
@@ -207,8 +209,13 @@ export default function SettingsEditor() {
     }
     pending.current = true;
     setBusy('review');
+    const asked = latest.current;
+    const outdated = () => latest.current.dir !== asked.dir || latest.current.staged !== asked.staged;
     try {
       const next = await api.propose(targetDir, changes);
+      if (outdated()) {
+        return;
+      }
       flushSync(() => {
         setProposal(next);
         setBanner(null);
@@ -216,6 +223,9 @@ export default function SettingsEditor() {
       });
       reviewRef.current?.focus();
     } catch (error) {
+      if (outdated()) {
+        return;
+      }
       if (error instanceof ApiError && error.status === 400 && error.code === 'invalid-change') {
         const raw = error.body?.['key'];
         const key = typeof raw === 'string' ? raw : null;
@@ -260,7 +270,7 @@ export default function SettingsEditor() {
         setBanner(applyFailure(error));
       });
       bannerRef.current?.focus();
-      if (error instanceof ApiError && error.code === 'write-failed') {
+      if (error instanceof ApiError && (error.code === 'write-failed' || error.status === 409)) {
         setReloads((n) => n + 1);
         store.refresh();
       }
@@ -338,7 +348,9 @@ export default function SettingsEditor() {
             ))}
           </div>
           <div className={cn(FLOATING, 'mt-4 flex h-16 items-center justify-end gap-2 rounded-lg border border-border bg-raised px-4 shadow-overlay')}>
-            <Button onClick={backToEditing}>Back to editing</Button>
+            <Button onClick={backToEditing} disabled={busy === 'apply'}>
+              Back to editing
+            </Button>
             <Button variant="primary" aria-busy={busy === 'apply'} onClick={() => void apply()}>
               {busy === 'apply' ? 'Applying...' : `Apply ${plural(count, 'change')}`}
             </Button>

@@ -64,14 +64,14 @@ Self-hosted OFL variable fonts (`@fontsource-variable/instrument-sans`, `@fontso
 
 ### Shell (at least 1024px)
 
-- Header 52px on `surface` with bottom border: folder pill (folder icon, mono path, chevron; opens the folder picker), machine name (monitor icon, muted), spacer, Search button (search icon, "Search", `Ctrl K` kbd; opens the palette), refresh icon button, theme toggle. No Edit button (edits slice not built).
+- Header 52px on `surface` with bottom border: folder pill (folder icon, mono path, chevron; opens the folder picker), machine name (monitor icon, muted), spacer, Search button (search icon, "Search", `Ctrl K` kbd; opens the palette), Settings link (cog icon plus "Settings", bordered like a control; only when `GET /api/v1/health` says `edits: true`, so never on the tailnet listener), refresh icon button, theme toggle.
 - Sidebar 208px on `surface`, right border, groups with sentence-case labels 12/16 500 muted: *Machine* (Overview, Health), *Harness* (Settings, Instructions, Agents, Skills & commands, Hooks, MCP & permissions, Environment, Jobs, T3 Code, Codex, OpenCode), *Activity* (Sessions, Usage, Memory), then Other without a label. Only visible views (`views.ts`). Items 36px, radius 8px, icon plus label plus count pill (mono 11px, `raised` with border); active item accent tint background, accent text, weight 600, `aria-current="page"`. A warn dot plus screen-reader text when the view has an unavailable source. Health shows no count pill: a badge with critical plus warning findings (danger tint when any critical, else warn; hidden at zero, before findings load and on error; a dot in the collapsed rail; screen-reader text "n findings need attention"). Foot: "Collected 10:00 · 2 min ago" (muted 12px) and Collapse. Collapsed: 64px rail, icons only with tooltips, counts hidden, labels kept as accessible names.
 - Main column: page padding 24px, max content width 1200px.
 - 768 to 1023px: sidebar starts collapsed (rail).
 
 ### Narrow (below 768px, designed at 375px)
 
-- Top bar 48px: cfgdash mark, current page title, palette button, theme toggle.
+- Top bar 48px: cfgdash mark, current page title, palette button, Settings icon link (when edits are available), theme toggle.
 - Bottom tab bar 56px, safe-area inset: Overview, Settings, Search, More (Settings only when visible). More opens a left sheet with the full nav, the folder pill, collected time and Refresh.
 - Rows stack: key and lineage on line 1, value on line 2, flags on line 3. Tables become stacked cards (label from the column). Bento 2-up. Sheets full height and width. Touch targets at least 44px (rows 44px on coarse pointers).
 
@@ -140,6 +140,16 @@ Dot plus word: active (ok), unavailable (warn), not on this machine (muted). Nev
 - Then by-model, by-machine, by-project and any other block through the generic table block, each in its own card, only when present.
 - States: unavailable shows the warn note with the reason and no tiles; not present shows "Not on this machine: title (reason)".
 
+### Settings editor (edits-v1)
+
+- Lazy route `/edit`, h1 "Edit settings" with the target folder below. Data from `GET /api/v2/settings?dir=`; 404 says editing is only available from this machine's browser.
+- Left: "Search settings" input and the category nav (200px, sticky; a `<select>` below 768px). Search filters rows by label, key and description across categories, grouped by category; "No settings match".
+- Scope switch above the cards: a radio group of the scopes the shown rows use, in order User, Project, Local, Machine (the Config repo category shows only Machine). Below it "Writes to <path>", plus "not created yet" and "tracked by git" notes.
+- One D card per category, one row per setting: label, key (mono, muted), description; on the right the control for the selected scope (switch for bool, select with "Not set" for enum, number and text inputs, a one-item-per-line textarea for lists), the effective value with its source, "Overridden by <Scope>" when a higher-precedence scope wins, "Restore default" (stages an unset) and Undo for a staged row. Read-only rows show the value and the reason in words (secret, can run code, not in the catalog, scope unavailable, unsafe link) and no control; a redacted value is never put into a control.
+- Staged changes: a "Changed" pill per row and a sticky bar "n changes staged" with Discard and "Review changes".
+- Review: "Review changes" (dry run) replaces the cards with one diff card per file: `raised`, 8px radius, 40px sticky header (path, scope pill, "new file", "dry run", "tracked by git", +n −n, collapse toggle), the reformat note when the diff starts with `# cfgdash: file will be reformatted`, then the diff with two 40px line-number gutters, a +/- column and ok/danger tints (screen-reader "added"/"removed"). The floating Apply bar (64px raised card, above the narrow tab bar) holds "Back to editing" and "Apply n changes".
+- Apply sends the proposal's confirm. Success: "Applied. Audit entry <id>." and the snapshot refreshes. Stale, mismatch, expired, forbidden, validation (inline on the row, in words) and write failures show as a focused alert at the top and keep the staged changes; "Review again" where it helps.
+
 ## Sheets and dialogs
 
 - File and detail sheet: right side, 560px (full width below 768px), `raised`, shadow, spring (stiffness 400, damping 34) or 160ms ease-out. Header: mono name (h2, focus target), path, kind, size, tokens, company badge; Copy path (feedback "Copied" or "Couldn't copy", announced) and Close. Body: truncated notice, Wrap lines toggle (`aria-pressed`), an ordered list of lines with line numbers in a 40px gutter, the target line highlighted and scrolled into view. Loading, 404 ("This file isn't available for the selected folder.") and other errors with Try again. Escape and the scrim close it; focus returns to the trigger.
@@ -166,7 +176,3 @@ Skip link; one h1 per page focused on route change (not when following a fragmen
 ## Rejects
 
 Card grids for lists, connectors and rings in dense rows, ambient motion, gradients, glow, uppercase tracked labels, accent on anything that is not action, focus, active nav or token bars, color as the only carrier of meaning.
-
-## Out of scope in this slice
-
-Settings edit screen, diff review and the Settings button (edits-v1, next).

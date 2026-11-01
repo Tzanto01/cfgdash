@@ -145,7 +145,7 @@ function EditLink({ iconOnly = false }: { iconOnly?: boolean }) {
   return (
     <Link
       to={url.link('/edit')}
-      aria-label={iconOnly ? 'Settings' : undefined}
+      aria-label="Edit settings"
       aria-current={url.path === '/edit' ? 'page' : undefined}
       className={cn(
         'touch-target inline-flex h-8 items-center gap-1.5 rounded-md text-sm font-medium hover:bg-hover [&_svg]:size-4',

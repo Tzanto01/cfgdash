@@ -9,6 +9,11 @@ import { makeSnapshot } from './fixtures';
 export interface RequestRecord {
   url: URL;
   aborted: boolean;
+  method: string;
+  /** Request headers with lower-cased names. */
+  headers: Record<string, string>;
+  /** The raw request body, or null. */
+  body: string | null;
 }
 
 interface Pending extends RequestRecord {
@@ -56,6 +61,9 @@ export async function startApp(url: string, snapshot: Snapshot | null = makeSnap
       const record: Pending = {
         url: new URL(String(input), window.location.origin),
         aborted: false,
+        method: init?.method ?? 'GET',
+        headers: Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v])),
+        body: typeof init?.body === 'string' ? init.body : null,
         respond: (body, status) => {
           open.splice(open.indexOf(record), 1);
           resolve({ ok: status >= 200 && status < 300, status, json: async () => body } as Response);

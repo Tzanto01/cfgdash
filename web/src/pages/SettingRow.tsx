@@ -60,6 +60,13 @@ interface SettingRowProps {
 export function SettingRow({ row, scope, staged, error, onStage, onUnstage }: SettingRowProps) {
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
+  const [drafted, setDrafted] = useState({ scope, isStaged: staged !== undefined });
+  if (drafted.scope !== scope || drafted.isStaged !== (staged !== undefined)) {
+    if (drafted.scope !== scope || drafted.isStaged) {
+      setDraft(null);
+    }
+    setDrafted({ scope, isStaged: staged !== undefined });
+  }
   const labelId = `${id}-label`;
   const descId = `${id}-desc`;
   const errorId = `${id}-error`;
@@ -80,9 +87,11 @@ export function SettingRow({ row, scope, staged, error, onStage, onUnstage }: Se
 
   const source = row.effectiveSource;
   const overriddenBy =
-    source !== null && PRECEDENCE.includes(source as EditScope) && PRECEDENCE.indexOf(source as EditScope) < PRECEDENCE.indexOf(scope)
-      ? SCOPE_LABEL[source as EditScope]
-      : null;
+    scope === 'machine' && source === 'env'
+      ? 'the CC_CONFIG_AUTOPULL environment variable'
+      : source !== null && PRECEDENCE.includes(source as EditScope) && PRECEDENCE.indexOf(source as EditScope) < PRECEDENCE.indexOf(scope)
+        ? SCOPE_LABEL[source as EditScope]
+        : null;
 
   const set = (value: Value | null) =>
     onStage(value === null ? { key: row.key, scope, unset: true } : { key: row.key, scope, value });
@@ -148,6 +157,9 @@ export function SettingRow({ row, scope, staged, error, onStage, onUnstage }: Se
             onChange={(event) => {
               const text = event.target.value;
               setDraft(text);
+              if (event.target.validity.badInput) {
+                return;
+              }
               if (text.trim() === '') {
                 set(null);
               } else if (Number.isFinite(Number(text))) {
