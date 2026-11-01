@@ -1,4 +1,4 @@
-import { domAnimation, LazyMotion, MotionConfig } from 'motion/react';
+import { LazyMotion, MotionConfig } from 'motion/react';
 import { useEffect, useRef } from 'react';
 import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 'react-router';
 import { TooltipProvider } from '../components/ui/tooltip';
@@ -96,6 +96,8 @@ function Root() {
   return <Shell />;
 }
 
+const loadMotionFeatures = () => import('../lib/motion-features').then((m) => m.default);
+
 /** Providers plus the root: access panel or shell, theme, focus rules, document title and the palette shortcut. */
 export function App() {
   return (
@@ -103,7 +105,7 @@ export function App() {
       <SnapshotProvider>
         <UiProvider>
           <TooltipProvider delayDuration={300}>
-            <LazyMotion features={domAnimation}>
+            <LazyMotion features={loadMotionFeatures} strict>
               <MotionConfig reducedMotion="user">
                 <Root />
               </MotionConfig>
