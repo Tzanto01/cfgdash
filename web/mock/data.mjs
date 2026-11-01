@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { addUsageMetrics } from './usage.mjs';
 
 const exampleText = readFileSync(new URL('../../docs/contracts/snapshot-v1.example.json', import.meta.url), 'utf8');
 const example = JSON.parse(exampleText);
@@ -543,6 +544,7 @@ export function buildSnapshot(dir) {
     { id: 'usage.otel', title: 'OpenTelemetry usage', version: '0.3.0', view: 'usage', state: 'active', requirements: { targetDir: false }, durationMs: 44 },
   ];
   snap.sections = [machine, configRepo, settings, ...(timedOut ? [] : [instructions]), agents, skills, hooks, mcp, highlights, env, jobs, usage];
+  addUsageMetrics(snap);
 
   const referenced = new Set();
   JSON.stringify(snap.sections, (k, v) => { if (k === 'fileId') referenced.add(v); return v; });
