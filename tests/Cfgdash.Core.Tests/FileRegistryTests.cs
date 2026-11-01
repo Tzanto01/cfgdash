@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Cfgdash.Core.Files;
+using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Tests.Support;
 
 namespace Cfgdash.Core.Tests;
@@ -65,6 +66,19 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
     [InlineData("credentials")]
     [InlineData("putty.ppk")]
     [InlineData("infra/prod.tfstate.backup")]
+    [InlineData("auth.json")]
+    [InlineData("history.jsonl")]
+    [InlineData("clerk-tokens.json")]
+    [InlineData("anonymous-id")]
+    [InlineData("environment-id")]
+    [InlineData("connection-catalog.json")]
+    [InlineData("server-owner.sqlite-journal")]
+    [InlineData(".codex/sessions/2026/rollout.jsonl")]
+    [InlineData(".codex/log/codex-tui.log")]
+    [InlineData(".t3/userdata/secrets/key.bin")]
+    [InlineData(".t3/userdata/logs/server.log")]
+    [InlineData(".t3/userdata/attachments/a.txt")]
+    [InlineData(".local/share/opencode/storage/session.json")]
     public void Register_refuses_never_read_files(string relative)
     {
         var path = tree.Write($"never/{Guid.NewGuid():N}/{relative}", "content");
@@ -73,6 +87,68 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
         Assert.Null(registry.Register(path, "other"));
         Assert.True(FileRegistry.IsNeverRead(path));
         Assert.Empty(registry.All);
+    }
+
+    [Theory]
+    [InlineData(".codex/config.toml")]
+    [InlineData(".codex/prompts/review.md")]
+    [InlineData(".t3/userdata/settings.json")]
+    [InlineData(".config/opencode/opencode.json")]
+    [InlineData("project/sessions/log/notes.md")]
+    public void Register_accepts_tool_config_files_beside_the_never_read_tool_dirs(string relative)
+    {
+        var path = tree.Write($"tools/{Guid.NewGuid():N}/{relative}", "content");
+
+        Assert.NotNull(new FileRegistry([]).Register(path, "settings"));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_file_reached_through_a_chain_of_two_links_into_a_never_read_dir()
+    {
+        tree.Write("chain/home/user/.codex/log/codex-tui.log", "log content");
+        tree.Dir("chain/repo");
+        Directory.CreateSymbolicLink(tree.Path("chain/repo/d"), tree.Path("chain/home/user/.codex"));
+        Directory.CreateSymbolicLink(tree.Path("chain/repo/e"), "d/log");
+        var path = tree.Path("chain/repo/e/codex-tui.log");
+        Assert.True(File.Exists(path));
+
+        Assert.True(FileRegistry.IsNeverRead(path));
+        Assert.Null(new FileRegistry([]).Register(path, "instruction"));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_link_whose_target_climbs_out_of_another_link_with_dot_dot()
+    {
+        tree.Write("climb/home/user/.codex/log/codex-tui.log", "log content");
+        tree.Dir("climb/repo");
+        Directory.CreateSymbolicLink(tree.Path("climb/repo/x"), tree.Path("climb/home/user/.codex/log"));
+        File.CreateSymbolicLink(tree.Path("climb/repo/e"), "x/../log/codex-tui.log");
+        var path = tree.Path("climb/repo/e");
+        Assert.Equal("log content", File.ReadAllText(path));
+
+        Assert.True(FileRegistry.IsNeverRead(path));
+        Assert.Null(new FileRegistry([]).Register(path, "instruction"));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_path_that_follows_a_link_under_proc()
+    {
+        tree.Dir("proc/repo");
+        Directory.CreateSymbolicLink(tree.Path("proc/repo/self"), "/proc/self/cwd");
+
+        Assert.True(FileRegistry.IsNeverRead(tree.Path("proc/repo/self/notes.md")));
+        Assert.False(PathUtil.TryRealPath(tree.Path("proc/repo/self/notes.md"), out _));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_path_through_a_link_loop()
+    {
+        tree.Dir("loop/repo");
+        File.CreateSymbolicLink(tree.Path("loop/repo/a"), "b");
+        File.CreateSymbolicLink(tree.Path("loop/repo/b"), "a");
+
+        Assert.True(FileRegistry.IsNeverRead(tree.Path("loop/repo/a/notes.md")));
+        Assert.False(PathUtil.TryRealPath(tree.Path("loop/repo/a/notes.md"), out _));
     }
 
     [Fact]

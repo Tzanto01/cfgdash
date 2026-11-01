@@ -30,6 +30,9 @@ internal static class CollectorCatalog
             new SessionsTranscriptsCollector(CfgdashPaths.CacheDir(environmentReader)),
             new EngramMemoryCollector(),
             new UsageMetricsCollector(settings, environmentReader, CfgdashPaths.OverridesFile(environmentReader)),
+            new T3SettingsCollector(),
+            new CodexConfigCollector(environmentReader),
+            new OpenCodeConfigCollector(environmentReader),
         ];
     }
 }

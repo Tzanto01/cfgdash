@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Cfgdash.Core.Files;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Snapshot;
 
@@ -108,6 +109,11 @@ internal sealed class SettingsLayers(PlatformLocations locations)
             return new SettingsLayer(id, id, label, path, null, LayerStatus.NotPresent, null, null);
         }
 
+        if (FileRegistry.IsNeverRead(path))
+        {
+            return new SettingsLayer(id, id, label, path, null, LayerStatus.Error, null, "not opened");
+        }
+
         var fileId = context.Files.Register(path, "settings")?.Id;
         var real = PathUtil.RealPath(path);
         if (seen.TryGetValue(real, out var original))
@@ -124,7 +130,7 @@ internal sealed class SettingsLayers(PlatformLocations locations)
     {
         var sources = new List<IReadOnlyList<Candidate>>();
         Candidate FileCandidate(string id, string path) =>
-            new(id, id == "managed:server" ? "managed (server)" : "managed (file)", path, context.Files.Register(path, "settings")?.Id, () => ReadFile(path));
+            new(id, id == "managed:server" ? "managed (server)" : "managed (file)", path, context.Files.Register(path, "settings")?.Id, () => FileRegistry.IsNeverRead(path) ? (null, "not opened") : ReadFile(path));
         Candidate? RegistryCandidate(string hive) =>
             locations.ReadPolicyRegistry(hive) is { } text ? new Candidate("managed:" + hive.ToLowerInvariant(), $"managed ({hive})", null, null, () => ParseText(text)) : null;
 

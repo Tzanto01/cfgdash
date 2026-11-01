@@ -23,6 +23,7 @@ public static class HarnessEnvAllowlist
         "OTEL_LOG_TOOL_DETAILS", "OTEL_METRICS_INCLUDE_SESSION_ID", "OTEL_METRICS_INCLUDE_VERSION",
         "OTEL_METRICS_INCLUDE_ACCOUNT_UUID",
         "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_METRICS_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+        "CODEX_HOME", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR",
     ];
 
     /// <summary>Credentials: the reader only reports whether they are set, never the value.</summary>

@@ -155,6 +155,25 @@ public sealed class RedactorTests
     }
 
     [Theory]
+    [InlineData("notify = [\"ntfy\", \"--token\", \"", "\"]")]
+    [InlineData("args: ['srv', '--api-key', '", "']")]
+    [InlineData("[\"srv\",\"--password\",\"", "\"]")]
+    public void RedactText_a_secret_flag_and_its_value_in_separate_list_items_redacts_the_value(string before, string after)
+    {
+        Assert.Equal(before + R + after, redactor.RedactText(before + "q7" + "Zx9vLm" + after));
+    }
+
+    [Fact]
+    public void RedactJson_redacts_the_array_item_after_a_bare_secret_flag()
+    {
+        var input = new JsonArray("srv", "--api-key", "q7" + "Zx9vLm", "--port", "8080", "-p", "q7" + "Zx9vLm");
+
+        var output = redactor.RedactJson(input)!.AsArray().Select(n => n!.GetValue<string>());
+
+        Assert.Equal(["srv", "--api-key", R, "--port", "8080", "-p", "q7" + "Zx9vLm"], output);
+    }
+
+    [Theory]
     [InlineData("tool --access-token ", " --verbose")]
     [InlineData("tool --auth-token=", " --verbose")]
     [InlineData("tool --client-secret ", " --verbose")]

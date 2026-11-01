@@ -60,7 +60,91 @@ internal static class PathUtil
         return null;
     }
 
+    public const int MaxLinkHops = 40;
+
     public static string RealPath(string path)
+    {
+        TryRealPath(path, out var real);
+        return real;
+    }
+
+    /// <summary>
+    /// Resolves every symlink or junction in <paramref name="path"/>. On non-Windows each link is followed one hop at a time (at most <see cref="MaxLinkHops"/>),
+    /// links inside link targets included, and <c>..</c> applies to the resolved parent as the kernel does. Links under <c>/proc/</c> are never followed.
+    /// False when a link loops, cannot be read, lies under <c>/proc/</c> or the chain is too long (non-Windows); <paramref name="real"/> is then a best-effort path and callers must fail closed.
+    /// </summary>
+    public static bool TryRealPath(string path, out string real)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            real = WindowsRealPath(path);
+            return true;
+        }
+
+        var hops = 0;
+        var ok = true;
+        real = Full(ResolveUnix(Full(path), ref hops, ref ok));
+        return ok;
+    }
+
+    private static string ResolveUnix(string path, ref int hops, ref bool ok)
+    {
+        var root = Path.GetPathRoot(path) ?? "/";
+        var current = root;
+        var segments = path[root.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (segments[i] == ".")
+            {
+                continue;
+            }
+
+            if (segments[i] == "..")
+            {
+                current = Path.GetDirectoryName(current) ?? root;
+                continue;
+            }
+
+            var next = Path.Combine(current, segments[i]);
+            string? link;
+            try
+            {
+                link = new FileInfo(next).LinkTarget;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                ok = false;
+                return Path.Combine([next, .. segments[(i + 1)..]]);
+            }
+
+            if (link is null)
+            {
+                if (!File.Exists(next) && !Directory.Exists(next))
+                {
+                    return Path.Combine([next, .. segments[(i + 1)..]]);
+                }
+
+                current = next;
+                continue;
+            }
+
+            if (++hops > MaxLinkHops || next.StartsWith("/proc/", StringComparison.Ordinal))
+            {
+                ok = false;
+                return Path.Combine([next, .. segments[(i + 1)..]]);
+            }
+
+            current = ResolveUnix(Path.IsPathRooted(link) ? link : Path.Combine(current, link), ref hops, ref ok);
+            if (!ok)
+            {
+                return Path.Combine([current, .. segments[(i + 1)..]]);
+            }
+        }
+
+        return current;
+    }
+
+    private static string WindowsRealPath(string path)
     {
         var full = Full(path);
         var root = Path.GetPathRoot(full) ?? string.Empty;

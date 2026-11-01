@@ -16,16 +16,23 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         ".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk", ".gpg", ".asc", ".jks", ".keystore", ".p8", ".tfstate", ".tfvars", ".tfstate.backup",
     ];
 
-    private static readonly string[] NeverReadPrefixes = ["id_rsa", "id_ecdsa", "id_ed25519", ".claude.json"];
+    private static readonly string[] NeverReadPrefixes = ["id_rsa", "id_ecdsa", "id_ed25519", ".claude.json", "connection-catalog", "server-owner.sqlite"];
 
     private static readonly string[] NeverReadNames =
     [
         ".credentials.json", ".env", ".netrc", "_netrc", ".git-credentials", ".npmrc", ".pypirc", ".pgpass", ".envrc", "credentials", "credentials.json",
+        "auth.json", "history.jsonl", "clerk-tokens.json", "anonymous-id", "environment-id",
     ];
 
     private static readonly string[] NeverReadSegments = [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"];
     private static readonly string[] NeverReadConfigDirs = ["gh", "gcloud"];
     private static readonly string[] NeverReadRoots = ["/proc/", "/sys/", "/dev/"];
+
+    private static readonly string[][] NeverReadSegmentRuns =
+    [
+        [".codex", "sessions"], [".codex", "log"], [".t3", "userdata", "secrets"], [".t3", "userdata", "logs"], [".t3", "userdata", "attachments"],
+        [".local", "share", "opencode"],
+    ];
 
     private readonly Lock gate = new();
     private readonly Dictionary<string, RegisteredFile> files = new(StringComparer.Ordinal);
@@ -100,7 +107,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16];
     }
 
-    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path, and for network and pseudo-filesystem paths.</summary>
+    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path, for paths whose links loop or cannot be resolved, and for network and pseudo-filesystem paths.</summary>
     public static bool IsNeverRead(string path)
     {
         var full = PathUtil.Full(path);
@@ -109,7 +116,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
             return true;
         }
 
-        return IsNeverReadName(full) || IsNeverReadName(PathUtil.RealPath(full));
+        return IsNeverReadName(full) || !PathUtil.TryRealPath(full, out var real) || PathUtil.IsNetworkPath(real) || IsNeverReadName(real);
     }
 
     private static bool IsNeverReadName(string full)
@@ -127,6 +134,8 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
 
         var segments = full.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return segments.Any(s => NeverReadSegments.Any(n => s.Equals(n, comparison)))
-            || segments.Skip(1).Where((s, i) => segments[i].Equals(".config", comparison) && NeverReadConfigDirs.Any(n => s.Equals(n, comparison))).Any();
+            || segments.Skip(1).Where((s, i) => segments[i].Equals(".config", comparison) && NeverReadConfigDirs.Any(n => s.Equals(n, comparison))).Any()
+            || NeverReadSegmentRuns.Any(run => Enumerable.Range(0, Math.Max(0, segments.Length - run.Length + 1))
+                .Any(start => run.Select((part, i) => segments[start + i].Equals(part, comparison)).All(match => match)));
     }
 }
