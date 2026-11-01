@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Cfgdash.Core.Snapshot;
 
 namespace Cfgdash.Core.Health;
@@ -6,6 +7,8 @@ namespace Cfgdash.Core.Health;
 /// <summary>The health-v1 rules: deterministic findings over one snapshot, see docs/contracts/health-v1.md.</summary>
 internal static class HealthRules
 {
+    private static readonly Regex ExceptionReason = new(@"^\w*Exception: ", RegexOptions.CultureInvariant);
+
     public static FindingsReport Evaluate(HarnessSnapshot snapshot, IRedactor redactor)
     {
         var findings = new List<Finding>();
@@ -22,7 +25,8 @@ internal static class HealthRules
         foreach (var status in snapshot.Collectors.Where(s => s.State == CollectorState.Unavailable))
         {
             var reason = status.Reason ?? string.Empty;
-            var rule = reason.EndsWith(" not installed", StringComparison.Ordinal) ? "collector-unavailable" : "collector-error";
+            var failed = reason.Contains("timed out", StringComparison.OrdinalIgnoreCase) || reason.Contains(" failed", StringComparison.Ordinal) || ExceptionReason.IsMatch(reason);
+            var rule = failed ? "collector-error" : "collector-unavailable";
             var severity = rule == "collector-unavailable" ? FindingSeverity.Info : FindingSeverity.Warning;
             Add($"{rule}:{status.Id}", rule, severity, rule == "collector-unavailable" ? "Collector unavailable" : "Collector failed",
                 $"{status.Title}: {reason}", new FindingEvidence(status.Id), status.View);

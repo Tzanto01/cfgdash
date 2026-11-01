@@ -34,7 +34,7 @@ export function findings(snapshot) {
   for (const c of snapshot.collectors) {
     if (c.state !== 'unavailable') continue;
     const reason = c.reason ?? '';
-    const rule = reason.endsWith(' not installed') ? 'collector-unavailable' : 'collector-error';
+    const rule = /timed out/i.test(reason) || reason.includes(' failed') || /^\w*Exception: /.test(reason) ? 'collector-error' : 'collector-unavailable';
     add(`${rule}:${c.id}`, rule, rule === 'collector-error' ? 'warning' : 'info', `${c.title}: ${reason}`, { collectorId: c.id }, c.view);
   }
 

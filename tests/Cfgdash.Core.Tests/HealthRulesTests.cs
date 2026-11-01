@@ -143,6 +143,7 @@ public sealed class HealthRulesTests
     [Theory]
     [InlineData("timed out after 20 s")]
     [InlineData("IOException: disk")]
+    [InlineData("git status failed: not a repository")]
     public void An_unavailable_collector_with_a_runtime_reason_is_a_collector_error_warning(string reason)
     {
         var report = CfgdashCore.Findings(Snap([Status("git.status", "overview", CollectorState.Unavailable, reason)]));
@@ -155,10 +156,12 @@ public sealed class HealthRulesTests
         Assert.Equal("overview", finding.View);
     }
 
-    [Fact]
-    public void An_unavailable_collector_whose_tool_is_not_installed_is_info()
+    [Theory]
+    [InlineData("git not installed")]
+    [InlineData("no engram.db in the engram data dir")]
+    public void An_unavailable_collector_for_a_missing_tool_or_file_is_info(string reason)
     {
-        var report = CfgdashCore.Findings(Snap([Status("git.status", "overview", CollectorState.Unavailable, "git not installed")]));
+        var report = CfgdashCore.Findings(Snap([Status("git.status", "overview", CollectorState.Unavailable, reason)]));
 
         var finding = Assert.Single(report.Findings);
         Assert.Equal("collector-unavailable:git.status", finding.Id);
