@@ -1,6 +1,6 @@
 # Plan: UI redesign in React (ROADMAP 10)
 
-Owner: department lead. Status: draft, waiting for Nico's Gate 1 "go".
+Owner: department lead. Status: Gate 1 approved by Nico on 2026-11-01 with sequencing A, light and dark themes following the system, and the Health view in scope. Phase 1 (directions) running.
 
 ## Goal
 
@@ -73,7 +73,7 @@ Rejected for this surface: animated backgrounds, shaders, 3D, scroll-driven stor
 2. **Storyboard and blueprint** (@visual-design-planner). Frames: Overview, a settings view with lineage, Instructions, Sessions table, file sheet, command palette, Settings edit with diff review and stale/mismatch errors, Health, narrow width, empty/unavailable/error states. Then the implementation blueprint with tokens. **Gate 3 (Nico): approve the storyboard revision.**
 3. **Foundation** (@designer, branch `v1-web`, owns all of `web/`). React/Vite/Tailwind/shadcn scaffold, tokens and fonts from `DESIGN.md`, ported `api-client`, `models`, URL state and access token handling, the shell and the generic `kv`/`table`/`tree` blocks. Keep `web/mock` as the dev backend. Host: point `CfgdashWebDist` at the new `dist` path; nothing else in the host changes.
 4. **Parity** (@designer + @tester). Every current behavior, with its tests ported: all views and the Other fallback, folder picker, search, file viewer, detail seam, flags, redacted values, collector states and reasons, idle and access handling, deep links. Angular is deleted in the same branch once parity holds; the two UIs never ship side by side.
-5. **New surfaces.** Command palette; Settings screen against edits-v1 and its mock endpoints; Usage view against ROADMAP 3's blocks; Health view if ROADMAP 12 is approved.
+5. **New surfaces.** Command palette; Settings screen against edits-v1 and its mock endpoints; Usage view against ROADMAP 3's blocks; Health view; its findings come from ROADMAP 12 under a `health-v1` contract the department lead writes before phase 5.
 6. **QA and review.** `impeccable audit` then `polish`; `ui-ux-qa` checklist; @e2e-runner on the real single-file exe (embedded UI, real CSP) for the main journeys and the edit flow; @code-reviewer on the diff; @security-reviewer on the Settings screen (confirm flow, nothing unredacted rendered, `X-Cfgdash-Request` and origin handling, no new CSP exceptions). Release as a minor version.
 
 ## Sequencing against v0.3 (decision for Gate 1)
@@ -92,7 +92,7 @@ Option A changes edits-v1's "producer: team `edits` (core, host, web)" to core a
 - `npm ci && npm test && npm run build` and `dotnet build`/`dotnet test` pass with warnings as errors.
 - WCAG 2.1 AA: keyboard reach for everything including the palette and sheets, visible focus, contrast in every state, reduced motion respected. Usable at 375 px.
 - Initial JS at most 200 KB gzip; CSP unchanged; no network requests outside the cfgdash origin.
-- Light and dark themes follow the system, with a manual toggle (if Nico agrees below).
+- Light and dark themes follow the system, with a manual toggle.
 - `THIRD_PARTY.md` lists every copied component and font with its license.
 
 ## Risks
@@ -102,8 +102,8 @@ Option A changes edits-v1's "producer: team `edits` (core, host, web)" to core a
 - **Large tables:** Sessions and Memory can be long. Measure first, add `@tanstack/react-virtual` only if scrolling drops frames.
 - **License drift** on copied components: recorded per item in `THIRD_PARTY.md`.
 
-## Open decisions for Nico
+## Decisions (Nico, 2026-11-01)
 
-1. Sequencing: A, B or C (recommended A).
-2. Light theme as well as dark, following the system (recommended yes; today is dark only).
-3. Include the Health view (ROADMAP 12) in the redesign's new surfaces (recommended yes, so it is designed in from the start).
+1. Sequencing A: v0.3 teams build core and host only; team `web` builds Usage and the Settings screen in React.
+2. Light and dark themes, following the system, with a manual toggle.
+3. The Health view (ROADMAP 12) is part of the redesign and is designed in from the start.

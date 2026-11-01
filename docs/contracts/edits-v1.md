@@ -1,6 +1,6 @@
 # Contract: guarded edits v1 (`/api/v2`)
 
-Owner: department lead. Producer and consumer: team `edits` (core, host, web). Decided by Nico on 2026-10-28: cfgdash is no longer read-only; edits cover the config auto-pull switch and Claude Code `settings.json` keys; they are applied from localhost only; they are reached through a Settings button in the dashboard that opens a settings screen in the style of T3 Code's settings (category nav, grouped cards, one row per setting with a toggle, select or text control, restore default).
+Owner: department lead. Producer: team `edits` (core, host), which also adds the `/api/v2` routes to `web/mock` so the UI can be built against them. Consumer: team `web`, which builds the settings screen in the React UI ([redesign plan](../plans/redesign.md)); team `edits` adds no Angular code. Decided by Nico on 2026-10-28: cfgdash is no longer read-only; edits cover the config auto-pull switch and Claude Code `settings.json` keys; they are applied from localhost only; they are reached through a Settings button in the dashboard that opens a settings screen in the style of T3 Code's settings (category nav, grouped cards, one row per setting with a toggle, select or text control, restore default).
 
 ## Scope
 
