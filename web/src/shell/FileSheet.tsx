@@ -107,7 +107,6 @@ export default function FileSheet() {
         aria-labelledby="file-viewer-title"
         aria-describedby={undefined}
         closeLabel={`Close ${noun}`}
-        className="sheet-in"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           heading.current?.focus();

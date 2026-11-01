@@ -48,28 +48,34 @@ function jumpTo(target: RevealTarget): void {
  * reveal it (`onTarget` runs first, e.g. to clear a filter that hides it), then scrolls to it, focuses it and flashes it.
  */
 export function useReveal(pageKey: string, sections: Section[] | undefined, onTarget?: (target: RevealTarget) => void): RevealTarget | null {
-  const fragment = readFragment(useLocation().hash);
+  const location = useLocation();
+  const fragment = readFragment(location.hash);
+  const { search, key: navigation } = location;
   const [reveal, setReveal] = useState<RevealTarget | null>(null);
-  const handled = useRef('');
+  const handled = useRef<{ key: string; search: string; navigation: string } | null>(null);
   const pending = useRef<RevealTarget | null>(null);
 
   useEffect(() => {
     if (!fragment) {
-      handled.current = '';
+      handled.current = null;
+      return;
+    }
+    if (!sections) {
       return;
     }
     const key = `${pageKey}#${fragment}`;
-    if (!sections || key === handled.current) {
+    const last = handled.current;
+    handled.current = { key, search, navigation };
+    if (last?.key === key && (last.search !== search || last.navigation === navigation)) {
       return;
     }
-    handled.current = key;
     const target = resolveFragment(sections, fragment);
     if (target) {
       onTarget?.(target);
     }
     pending.current = target;
     setReveal(target);
-  }, [fragment, pageKey, sections, onTarget]);
+  }, [fragment, search, navigation, pageKey, sections, onTarget]);
 
   useEffect(() => {
     if (reveal && pending.current === reveal) {

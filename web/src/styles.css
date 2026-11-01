@@ -161,8 +161,29 @@
 
 @utility touch-target {
   @media (pointer: coarse) {
+    &:not(.absolute, .fixed, .sticky) {
+      position: relative;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+
+    &:is(input, select, textarea) {
+      min-height: 44px;
+    }
+  }
+}
+
+@utility touch-row {
+  @media (pointer: coarse) {
     min-height: 44px;
-    min-width: 44px;
   }
 }
 
@@ -285,6 +306,66 @@
     }
   }
 
+  @media (max-width: 767px) {
+    .tree-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    .tree-table,
+    .tree-table tbody,
+    .tree-table td {
+      display: block;
+    }
+
+    .tree-table tr {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      grid-template-areas: 'order path path path' 'flags flags size tokens';
+      column-gap: 8px;
+      row-gap: 2px;
+      padding: 6px 16px;
+    }
+
+    .tree-table td {
+      padding: 0;
+    }
+
+    .tree-table td:nth-child(1) {
+      grid-area: order;
+    }
+
+    .tree-table td:nth-child(2) {
+      grid-area: path;
+    }
+
+    .tree-table td:nth-child(3) {
+      grid-area: flags;
+    }
+
+    .tree-table td:nth-child(4) {
+      display: none;
+    }
+
+    .tree-table td:nth-child(5) {
+      grid-area: size;
+    }
+
+    .tree-table td:nth-child(6) {
+      grid-area: tokens;
+    }
+
+    .tree-table td[data-label]::before {
+      content: attr(data-label) ' ';
+      color: var(--muted);
+      font-family: var(--font-sans);
+      font-size: 12px;
+    }
+  }
+
   .jump-flash {
     animation: jump-flash 400ms ease-out;
   }
@@ -295,16 +376,6 @@
 
   .pulse-once {
     animation: pulse-border 600ms ease-out;
-  }
-
-  .sheet-in {
-    animation: sheet-in 160ms ease-out;
-  }
-}
-
-@keyframes sheet-in {
-  from {
-    transform: translateX(100%);
   }
 }
 

@@ -14,14 +14,18 @@ import { useReveal } from './useReveal';
 const TILE = 'rounded-xl border border-border bg-surface p-4';
 const TILE_LABEL = 'flex items-center gap-2 text-xs font-medium text-muted [&_svg]:size-5';
 
-/** Previous item counts of the views whose count changed with the last refresh; empty on first paint. */
-function useChangedCounts(views: ViewModel[], refreshes: number): Map<string, number> {
+/** Previous item counts of the views whose count changed with the last refresh of folder `dir`; empty on first paint and after a folder change. */
+function useChangedCounts(views: ViewModel[], refreshes: number, dir: string | undefined): Map<string, number> {
   const counts = useMemo(() => new Map(views.map((v) => [v.id, v.itemCount])), [views]);
-  const previous = useRef({ refreshes, counts });
-  const [changed, setChanged] = useState(new Map<string, number>());
+  const previous = useRef({ refreshes, counts, dir });
+  const [changed, setChanged] = useState({ dir, counts: new Map<string, number>() });
   useEffect(() => {
     const before = previous.current;
-    previous.current = { refreshes, counts };
+    previous.current = { refreshes, counts, dir };
+    if (before.dir !== dir) {
+      setChanged({ dir, counts: new Map() });
+      return;
+    }
     if (before.refreshes === refreshes) {
       return;
     }
@@ -32,9 +36,9 @@ function useChangedCounts(views: ViewModel[], refreshes: number): Map<string, nu
         next.set(id, old);
       }
     }
-    setChanged(next);
-  }, [refreshes, counts]);
-  return changed;
+    setChanged({ dir, counts: next });
+  }, [refreshes, counts, dir]);
+  return changed.dir === dir ? changed.counts : new Map<string, number>();
 }
 
 function Ticker({ from, to, run }: { from?: number; to: number; run: number }) {
@@ -68,7 +72,7 @@ export function OverviewPage() {
   const reduce = useReducedMotion();
   const overview = store.views.find((v) => v.id === 'overview');
   const reveal = useReveal('overview', overview?.sections);
-  const changed = useChangedCounts(store.views, store.refreshes);
+  const changed = useChangedCounts(store.views, store.refreshes, store.snapshot?.context.targetDir);
   const s = store.snapshot;
   if (!s) {
     return null;

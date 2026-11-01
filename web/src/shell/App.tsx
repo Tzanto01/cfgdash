@@ -1,13 +1,14 @@
 import { LazyMotion, MotionConfig } from 'motion/react';
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react';
 import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 'react-router';
+import { Button } from '../components/ui/button';
 import { TooltipProvider } from '../components/ui/tooltip';
 import { setAccessProblem, useAccessProblem } from '../lib/access';
 import { readParams } from '../lib/url';
 import { VIEW_DEFINITIONS } from '../lib/views';
 import { OverviewPage } from '../pages/OverviewPage';
 import { ViewPage } from '../pages/ViewPage';
-import { AnnouncerProvider } from '../state/announcer';
+import { AnnouncerProvider, useAnnounce } from '../state/announcer';
 import { SnapshotProvider, useSnapshotStore } from '../state/snapshot';
 import { applyTheme, useTheme } from '../state/theme';
 import { UiProvider, useUi } from '../state/ui';
@@ -40,6 +41,7 @@ function Root() {
   const ui = useUi();
   const location = useLocation();
   const theme = useTheme();
+  const announce = useAnnounce();
   const redirect = needsRedirect(location.pathname);
   const lastPath = useRef<string | null>(null);
   const { setPickerOpen, setPaletteOpen, paletteOpen, pickerOpen } = ui;
@@ -52,9 +54,16 @@ function Root() {
   const [Palette, setPalette] = useState<ComponentType | null>(null);
   useEffect(() => {
     if (loaded) {
-      void loadPalette().then((m) => setPalette(() => m.default));
+      void loadPalette()
+        .then((m) => setPalette(() => m.default))
+        .catch(() => undefined);
     }
   }, [loaded]);
+  const [paletteMode, setPaletteMode] = useState<'ready' | 'lazy' | null>(null);
+  const openPaletteMode: 'ready' | 'lazy' | null = paletteOpen ? (paletteMode ?? (Palette ? 'ready' : 'lazy')) : null;
+  if (openPaletteMode !== paletteMode) {
+    setPaletteMode(openPaletteMode);
+  }
 
   useEffect(() => {
     if (redirect) {
@@ -78,14 +87,15 @@ function Root() {
     if (problem) {
       setPickerOpen(false);
       setPaletteOpen(false);
+      announce('');
       focusMainHeading();
     }
-  }, [problem, setPickerOpen, setPaletteOpen]);
+  }, [problem, setPickerOpen, setPaletteOpen, announce]);
 
   useEffect(() => {
     const onKeydown = (event: KeyboardEvent) => {
       const slash = event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isTyping(event.target);
-      const commandK = event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey;
+      const commandK = event.key?.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey;
       if ((!slash && !commandK) || problem || paletteOpen || document.querySelector('[role="dialog"], dialog[open]')) {
         return;
       }
@@ -129,14 +139,12 @@ function Root() {
           <FolderPicker />
         </Suspense>
       )}
-      {paletteOpen &&
-        (Palette ? (
-          <Palette />
-        ) : (
-          <Suspense fallback={null}>
-            <CommandPalette />
-          </Suspense>
-        ))}
+      {openPaletteMode === 'ready' && Palette && <Palette />}
+      {openPaletteMode === 'lazy' && (
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
+      )}
     </>
   );
 }
@@ -162,11 +170,25 @@ export function App() {
   );
 }
 
+/** Replaces the app when a route fails to render, typically a lazy chunk gone after cfgdash was updated or restarted. */
+function ReloadPanel() {
+  return (
+    <main id="content" className="flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-lg space-y-3 rounded-xl border border-border bg-surface p-6">
+        <h1 className="text-2xl leading-[30px] font-semibold">cfgdash needs a reload</h1>
+        <p>It was updated or restarted while this page was open.</p>
+        <Button onClick={() => window.location.reload()}>Reload</Button>
+      </div>
+    </main>
+  );
+}
+
 /** The route table: `/overview`, `/:view`, and redirects to `/overview` (keeping the query) for `/` and deeper paths. */
 export const routes: RouteObject[] = [
   {
     path: '/',
     element: <App />,
+    errorElement: <ReloadPanel />,
     children: [
       { index: true, element: null },
       { path: 'overview', element: <OverviewPage /> },

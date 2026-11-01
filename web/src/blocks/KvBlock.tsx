@@ -67,7 +67,7 @@ function KvRowView({ row, id, open, onToggle }: { row: KvRow; id: string; open: 
           {contributions.length ? (
             <button
               type="button"
-              className="touch-target block max-w-full truncate text-left hover:text-accent"
+              className="touch-row block max-w-full truncate text-left hover:text-accent"
               aria-expanded={open}
               onClick={onToggle}
             >

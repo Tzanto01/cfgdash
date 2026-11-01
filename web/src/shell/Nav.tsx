@@ -36,7 +36,7 @@ export function NavList({ collapsed = false, onNavigate }: { collapsed?: boolean
                     onClick={onNavigate}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'touch-target flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors duration-100',
+                      'touch-row flex h-9 items-center gap-2 rounded-lg px-2 text-sm transition-colors duration-100',
                       collapsed && 'justify-center px-0',
                       active ? 'tint-accent font-semibold text-accent' : 'hover:bg-hover'
                     )}
@@ -50,7 +50,7 @@ export function NavList({ collapsed = false, onNavigate }: { collapsed?: boolean
                       </>
                     )}
                     {!collapsed && (
-                      <span className="rounded-full border border-border bg-raised px-1.5 font-mono text-[11px] leading-4 text-muted tabular">
+                      <span className="shrink-0 rounded-full border border-border bg-raised px-1 font-mono text-[10px] leading-4 text-muted tabular">
                         {view.itemCount}
                         <span className="sr-only"> items</span>
                       </span>

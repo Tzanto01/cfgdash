@@ -21,7 +21,7 @@ interface FileGroup {
 }
 
 const FILE_PREVIEW = 5;
-const HIT = 'touch-target block w-full px-4 py-2 text-left hover:bg-hover';
+const HIT = 'touch-row block w-full px-4 py-2 text-left hover:bg-hover';
 const HITS = 'divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface';
 
 function summaryOf(response: SearchResponse): string {
@@ -83,7 +83,7 @@ export default function SearchPage() {
   const location = useLocation();
   const search = useRef(location.search);
   search.current = location.search;
-  const committed = useRef<string | undefined>(undefined);
+  const committed = useRef<string | undefined | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const q = url.q;
   const dir = url.dir;
@@ -99,6 +99,7 @@ export default function SearchPage() {
     if (q !== committed.current) {
       setText(q ?? '');
     }
+    committed.current = null;
   }, [q]);
 
   useEffect(() => {

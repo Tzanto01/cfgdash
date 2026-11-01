@@ -1,10 +1,12 @@
 import { Command } from 'cmdk';
 import { FileText, Folder, FolderSearch, ListTree, Palette, RefreshCw, Search, type LucideIcon } from 'lucide-react';
+import { m } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { JsonValue } from '../blocks/JsonValue';
 import { Lineage } from '../blocks/Lineage';
 import { Dialog, DialogContent, DialogTitle } from '../components/ui/dialog';
+import { SPRING } from '../components/ui/sheet';
 import { api, isAbort } from '../lib/api';
 import type { DirSuggestion, SearchHit, Snapshot } from '../lib/models';
 import { mergeSearch, useUrl } from '../lib/url';
@@ -26,7 +28,7 @@ interface Entry {
 
 const TOP_HITS = 8;
 const ITEM =
-  'touch-target flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 data-[selected=true]:tint-accent [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted';
+  'touch-row flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 data-[selected=true]:tint-accent [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted';
 const GROUP =
   'px-2 pb-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted';
 
@@ -224,82 +226,85 @@ export default function CommandPalette() {
         aria-describedby={undefined}
         onCloseAutoFocus={focus.onCloseAutoFocus}
         className="top-[12vh] max-h-[76vh] w-[min(640px,calc(100%-2rem))] translate-y-0 overflow-hidden"
+        asChild
       >
-        <DialogTitle className="sr-only">Search cfgdash</DialogTitle>
-        <Command shouldFilter={false} loop label="Search cfgdash" value={selected} onValueChange={setSelected} className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 border-b border-border px-4">
-            <Search className="size-4 shrink-0 text-muted" strokeWidth={1.75} aria-hidden="true" />
-            <Command.Input
-              aria-label="Search cfgdash"
-              placeholder="Search views, folders, settings..."
-              value={input}
-              onValueChange={setInput}
-              className="h-[52px] min-w-0 flex-1 bg-transparent text-[15px] placeholder:text-muted focus-visible:-outline-offset-2"
-            />
-          </div>
-          <div className="flex min-h-0 flex-1">
-            <Command.List className="min-h-0 flex-1 overflow-y-auto py-1">
-              {!searching && <Command.Empty className="px-4 py-6 text-muted">No matches.</Command.Empty>}
-              {views.length > 0 && (
-                <Command.Group heading="Views" className={GROUP}>
-                  {views.map(renderEntry)}
-                </Command.Group>
-              )}
-              {folderEntries.length > 0 && (
-                <Command.Group heading="Folders" className={GROUP}>
-                  {folderEntries.map(renderEntry)}
-                </Command.Group>
-              )}
-              {searching && (
-                <Command.Group heading="Search results" className={GROUP}>
-                  {!current && (
-                    <Command.Loading label="Searching" className="px-2 py-1.5 text-muted">
-                      Searching...
-                    </Command.Loading>
-                  )}
-                  {current?.failed && <p className="px-2 py-1.5 text-muted">Couldn't search.</p>}
-                  {current && !current.failed && !hits.length && <p className="px-2 py-1.5 text-muted">No results for "{query}".</p>}
-                  {hits.map((hit, index) => (
-                    <Command.Item key={`hit:${index}`} value={`hit:${index}`} onSelect={() => openHit(hit)} className={ITEM}>
-                      {hit.kind === 'file' ? <FileText strokeWidth={1.75} aria-hidden="true" /> : <ListTree strokeWidth={1.75} aria-hidden="true" />}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs text-muted">{hitLocation(store.snapshot, hit)}</span>
-                        <span className="mono-value block truncate">
-                          <Highlight text={hit.snippet} query={query} />
+        <m.div initial={{ y: 4, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={SPRING}>
+          <DialogTitle className="sr-only">Search cfgdash</DialogTitle>
+          <Command shouldFilter={false} loop label="Search cfgdash" value={selected} onValueChange={setSelected} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-2 border-b border-border px-4 focus-within:shadow-[inset_0_-2px_var(--focus)]">
+              <Search className="size-4 shrink-0 text-muted" strokeWidth={1.75} aria-hidden="true" />
+              <Command.Input
+                aria-label="Search cfgdash"
+                placeholder="Search views, folders, settings..."
+                value={input}
+                onValueChange={setInput}
+                className="h-[52px] min-w-0 flex-1 bg-transparent text-[15px] placeholder:text-muted focus-visible:outline-hidden"
+              />
+            </div>
+            <div className="flex min-h-0 flex-1">
+              <Command.List className="min-h-0 flex-1 overflow-y-auto py-1">
+                {!searching && <Command.Empty className="px-4 py-6 text-muted">No matches.</Command.Empty>}
+                {views.length > 0 && (
+                  <Command.Group heading="Views" className={GROUP}>
+                    {views.map(renderEntry)}
+                  </Command.Group>
+                )}
+                {folderEntries.length > 0 && (
+                  <Command.Group heading="Folders" className={GROUP}>
+                    {folderEntries.map(renderEntry)}
+                  </Command.Group>
+                )}
+                {searching && (
+                  <Command.Group heading="Search results" className={GROUP}>
+                    {!current && (
+                      <Command.Loading label="Searching" className="px-2 py-1.5 text-muted">
+                        Searching...
+                      </Command.Loading>
+                    )}
+                    {current?.failed && <p className="px-2 py-1.5 text-muted">Couldn't search.</p>}
+                    {current && !current.failed && !hits.length && <p className="px-2 py-1.5 text-muted">No results for "{query}".</p>}
+                    {hits.map((hit, index) => (
+                      <Command.Item key={`hit:${index}`} value={`hit:${index}`} onSelect={() => openHit(hit)} className={ITEM}>
+                        {hit.kind === 'file' ? <FileText strokeWidth={1.75} aria-hidden="true" /> : <ListTree strokeWidth={1.75} aria-hidden="true" />}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs text-muted">{hitLocation(store.snapshot, hit)}</span>
+                          <span className="mono-value block truncate">
+                            <Highlight text={hit.snippet} query={query} />
+                          </span>
                         </span>
-                      </span>
-                    </Command.Item>
-                  ))}
-                  {hits.length > 0 && (
-                    <Command.Item
-                      value="search:all"
-                      onSelect={() => go(`/search${mergeSearch('', { dir, q: query })}`)}
-                      className={ITEM}
-                    >
-                      <Search strokeWidth={1.75} aria-hidden="true" />
-                      Show all results
-                    </Command.Item>
-                  )}
-                </Command.Group>
+                      </Command.Item>
+                    ))}
+                    {hits.length > 0 && (
+                      <Command.Item
+                        value="search:all"
+                        onSelect={() => go(`/search${mergeSearch('', { dir, q: query })}`)}
+                        className={ITEM}
+                      >
+                        <Search strokeWidth={1.75} aria-hidden="true" />
+                        Show all results
+                      </Command.Item>
+                    )}
+                  </Command.Group>
+                )}
+                {actions.length > 0 && (
+                  <Command.Group heading="Actions" className={GROUP}>
+                    {actions.map(renderEntry)}
+                  </Command.Group>
+                )}
+              </Command.List>
+              {!narrow && (
+                <aside aria-label="Preview" className="w-60 shrink-0 overflow-y-auto border-l border-border bg-surface p-4 text-sm">
+                  {selectedEntry && <p className="text-muted">{selectedEntry.description}</p>}
+                  {selected === 'search:all' && <p className="text-muted">Open the search page with every result for "{query}".</p>}
+                  {selectedHit && <HitPreview hit={selectedHit} snapshot={store.snapshot} query={query} />}
+                </aside>
               )}
-              {actions.length > 0 && (
-                <Command.Group heading="Actions" className={GROUP}>
-                  {actions.map(renderEntry)}
-                </Command.Group>
-              )}
-            </Command.List>
-            {!narrow && (
-              <aside aria-label="Preview" className="w-60 shrink-0 overflow-y-auto border-l border-border bg-surface p-4 text-sm">
-                {selectedEntry && <p className="text-muted">{selectedEntry.description}</p>}
-                {selected === 'search:all' && <p className="text-muted">Open the search page with every result for "{query}".</p>}
-                {selectedHit && <HitPreview hit={selectedHit} snapshot={store.snapshot} query={query} />}
-              </aside>
-            )}
-          </div>
-          <div className="border-t border-border px-4 py-2 font-mono text-[11px] text-muted">
-            ↑↓ move, ↵ open, esc close
-          </div>
-        </Command>
+            </div>
+            <div className="border-t border-border px-4 py-2 font-mono text-[11px] text-muted">
+              ↑↓ move, ↵ open, esc close
+            </div>
+          </Command>
+        </m.div>
       </DialogContent>
     </Dialog>
   );

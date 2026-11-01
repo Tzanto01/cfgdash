@@ -11,7 +11,7 @@ import { LoadingPanel } from './Shell';
 import { useChooseFolder, useReturnFocus } from './surface';
 
 const FIELD_ERROR = "That folder doesn't exist or isn't an absolute path.";
-const ITEM = 'touch-target flex min-h-9 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover';
+const ITEM = 'touch-row flex min-h-9 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover';
 const PART_TITLE = 'mb-1 text-xs font-medium text-muted';
 
 /** Centered folder picker opened by the `pickerOpen` flag; browsing never changes `dir` until "Use this folder". */

@@ -85,13 +85,13 @@ export function TreeBlock({ block, collectorId, revealItemId }: { block: TreeBlo
               <p className="text-xs text-muted">
                 Loaded for <span className="font-mono">{targetDir}</span>
               </p>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex flex-col gap-x-4 gap-y-2 md:flex-row md:flex-wrap md:items-center">
                 <p>
                   <span className="text-[28px] leading-8 font-semibold tabular">{formatCount(summary.tokens)}</span>{' '}
                   <span className="text-muted">tok est.</span>
                 </p>
                 {total > 0 && counted.length > 0 && (
-                  <div className="flex h-2.5 min-w-40 flex-1 gap-0.5 overflow-hidden rounded-[5px]" aria-hidden="true">
+                  <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-[5px] md:w-auto md:min-w-40 md:flex-1" aria-hidden="true">
                     {counted.map((node, index) => (
                       <span
                         key={node.id}
@@ -121,7 +121,7 @@ export function TreeBlock({ block, collectorId, revealItemId }: { block: TreeBlo
       )}
       {block.nodes.length ? (
         <div className="overflow-x-auto">
-          <table className="data-table w-full border-collapse mono-value">
+          <table className="data-table tree-table w-full border-collapse mono-value">
             <caption className="sr-only">{block.title}</caption>
             <thead>
               <tr className="border-b border-border font-sans text-xs text-muted">
@@ -205,8 +205,8 @@ export function TreeBlock({ block, collectorId, revealItemId }: { block: TreeBlo
                         </span>
                       ) : null}
                     </td>
-                    <td className="num">{size === undefined ? '' : typeof size === 'number' ? formatBytes(size) : text(size)}</td>
-                    <td className="num">
+                    <td className="num" data-label={size === undefined ? undefined : 'Size'}>{size === undefined ? '' : typeof size === 'number' ? formatBytes(size) : text(size)}</td>
+                    <td className="num" data-label={meta['tokens'] === undefined ? undefined : 'Tokens'}>
                       {tokens !== undefined ? formatCount(tokens) : meta['tokens'] !== undefined ? text(meta['tokens']) : ''}
                       {notCounted && <span className="block font-sans text-xs">not counted</span>}
                     </td>
