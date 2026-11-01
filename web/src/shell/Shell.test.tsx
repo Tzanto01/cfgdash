@@ -175,7 +175,7 @@ describe('error panels', () => {
     expect(h.text()).toContain('start it again with cfgdash');
 
     await h.click(h.button('Try again'));
-    expect(h.requests).toHaveLength(2);
+    expect(h.requests.filter((r) => r.url.pathname === '/api/v1/snapshot')).toHaveLength(2);
     await h.answer('/api/v1/snapshot', makeSnapshot());
 
     expect(h.el.querySelector('main h1')?.textContent).toBe('Overview');

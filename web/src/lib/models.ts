@@ -266,6 +266,75 @@ export interface FindingsResponse {
   findings: Finding[];
 }
 
+/** `GET /api/v1/health`. */
+export interface HealthInfo {
+  status: string;
+  version: string;
+  schemaVersion: number;
+  edits?: boolean;
+}
+
+export type EditScope = 'user' | 'project' | 'local' | 'machine';
+
+/** One catalog row of `GET /api/v2/settings`; values are redacted by the server. */
+export interface SettingRow {
+  key: string;
+  label: string;
+  description: string;
+  type: 'bool' | 'enum' | 'string' | 'number' | 'stringList' | 'json' | string;
+  options?: string[];
+  scopes: EditScope[];
+  values: Partial<Record<EditScope, JsonValue | null>>;
+  effective: JsonValue | null;
+  effectiveSource: EditScope | 'merged' | string | null;
+  editable: boolean;
+  /** Why the row is read-only: `secret`, `unsafe-env`, `not-in-catalog`, `scope-unavailable`, `unsafe-target`. */
+  reason?: string;
+}
+
+export interface SettingsCategory {
+  id: string;
+  label: string;
+  settings: SettingRow[];
+}
+
+export interface SettingsFile {
+  scope: EditScope;
+  path: string;
+  exists: boolean;
+  gitTracked: boolean;
+}
+
+/** `GET /api/v2/settings`. */
+export interface SettingsResponse {
+  categories: SettingsCategory[];
+  files: SettingsFile[];
+}
+
+export type SettingChange = { key: string; scope: EditScope; value: JsonValue } | { key: string; scope: EditScope; unset: true };
+
+export interface ProposalFile {
+  path: string;
+  scope: EditScope;
+  sha256Before: string | null;
+  /** Unified diff of the redacted before and after text; may start with `# cfgdash: file will be reformatted`. */
+  diff: string;
+}
+
+/** `POST /api/v2/proposals`. */
+export interface Proposal {
+  id: string;
+  expiresAt: string;
+  files: ProposalFile[];
+  confirm: string;
+}
+
+/** `POST /api/v2/proposals/{id}/apply`. */
+export interface ApplyResult {
+  applied: boolean;
+  auditId: string;
+}
+
 /** Error bodies of api-v1. */
 export interface ApiError {
   error: string;

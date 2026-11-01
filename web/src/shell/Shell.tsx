@@ -1,4 +1,4 @@
-import { Ellipsis, LayoutGrid, LoaderCircle, Monitor, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal } from 'lucide-react';
+import { Ellipsis, LayoutGrid, LoaderCircle, Monitor, PanelLeftClose, PanelLeftOpen, Search, Settings, SlidersHorizontal } from 'lucide-react';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Button } from '../components/ui/button';
@@ -135,6 +135,29 @@ function SearchButton() {
   );
 }
 
+/** The header link to the settings editor; only when health says `edits: true`. */
+function EditLink({ iconOnly = false }: { iconOnly?: boolean }) {
+  const ui = useUi();
+  const url = useUrl();
+  if (!ui.edits) {
+    return null;
+  }
+  return (
+    <Link
+      to={url.link('/edit')}
+      aria-label={iconOnly ? 'Settings' : undefined}
+      aria-current={url.path === '/edit' ? 'page' : undefined}
+      className={cn(
+        'touch-target inline-flex h-8 items-center gap-1.5 rounded-md text-sm font-medium hover:bg-hover [&_svg]:size-4',
+        iconOnly ? 'size-8 justify-center' : 'border border-border-strong bg-raised px-3'
+      )}
+    >
+      <Settings strokeWidth={1.75} aria-hidden="true" />
+      {!iconOnly && 'Settings'}
+    </Link>
+  );
+}
+
 function WideShell() {
   const store = useSnapshotStore();
   const tablet = useMediaQuery('(max-width: 1023px)');
@@ -177,6 +200,7 @@ function WideShell() {
           )}
           <span className="flex-1" />
           <SearchButton />
+          {snapshot && <EditLink />}
           {snapshot && <RefreshButton />}
           <ThemeToggle />
         </header>
@@ -219,7 +243,7 @@ function NarrowShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const snapshot = store.snapshot;
   const viewId = url.path.split('/').filter(Boolean)[0] ?? '';
-  const title = viewId === 'search' ? 'Search' : (VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '');
+  const title = viewId === 'search' ? 'Search' : viewId === 'edit' ? 'Edit settings' : (VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '');
   const settingsVisible = store.navViews.some((v) => v.id === 'settings');
   return (
     <div className="min-h-screen">
@@ -232,6 +256,7 @@ function NarrowShell() {
         <Button variant="ghost" size="icon" aria-label="Search" aria-haspopup="dialog" onClick={() => ui.setPaletteOpen(true)}>
           <Search strokeWidth={1.75} aria-hidden="true" />
         </Button>
+        {snapshot && <EditLink iconOnly />}
         <ThemeToggle />
       </header>
       <MainContent className="p-4 pb-[calc(72px+env(safe-area-inset-bottom))]" />

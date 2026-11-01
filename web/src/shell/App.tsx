@@ -23,6 +23,7 @@ const CommandPalette = lazy(loadPalette);
 const SearchPage = lazy(() => import('../pages/SearchPage'));
 const HealthPage = lazy(() => import('../pages/HealthPage'));
 const UsagePage = lazy(() => import('../pages/UsagePage'));
+const SettingsEditor = lazy(() => import('../pages/SettingsEditor'));
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -35,7 +36,7 @@ function needsRedirect(pathname: string): boolean {
 
 function pageTitle(pathname: string): string {
   const id = pathname.split('/').filter(Boolean)[0];
-  return id === 'search' ? 'Search' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
+  return id === 'search' ? 'Search' : id === 'edit' ? 'Edit settings' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
 }
 
 function Root() {
@@ -218,6 +219,14 @@ export const routes: RouteObject[] = [
         element: (
           <Suspense fallback={<LoadingPanel text="Loading usage..." />}>
             <UsagePage />
+          </Suspense>
+        )
+      },
+      {
+        path: 'edit',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading settings..." />}>
+            <SettingsEditor />
           </Suspense>
         )
       },
