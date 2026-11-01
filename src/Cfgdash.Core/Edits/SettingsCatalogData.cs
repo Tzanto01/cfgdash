@@ -92,7 +92,6 @@ internal static class SettingsCatalogData
         E("enforceAvailableModels", "model", "Enforce available models", "bool", Any, "enforceavailablemodels", "Makes the default model resolve to an availableModels entry."),
         E("fallbackModel", "model", "Fallback models", "stringList", Any, "fallbackmodel", "Backup models tried in order when the primary is unavailable."),
         E("fastMode", "model", "Fast mode", "bool", Any, "fastmode", "Turns fast mode on where available."),
-        E("fastModePerSessionOptIn", "model", "Fast mode per-session opt-in", "bool", Any, "fastmodepersessionoptin", "Requires users to run /fast in each session."),
         E("feedbackDrafts", "privacy", "Feedback drafts", "enum", UserOnly, "feedbackdrafts", "Controls Claude-drafted feedback cards and queueing; default notify.", ["notify", "quiet", "off"]),
         E("feedbackSurveyRate", "privacy", "Feedback survey rate", "number", Any, "feedbacksurveyrate", "Probability the session quality survey appears; 0 stops it."),
         E("fileCheckpointingEnabled", "memory", "File checkpointing", "bool", Any, "filecheckpointingenabled", "Snapshots files before edits so /rewind can restore them."),
