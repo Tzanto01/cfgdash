@@ -4,7 +4,7 @@ Owner: department lead. Producer: team `usage` (core, `web/mock`). Consumer: the
 
 ## Source
 
-- Endpoint: the origin (scheme, host, port) of `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, else of `OTEL_EXPORTER_OTLP_ENDPOINT`, taken from the effective settings `env` for the target dir, else from the process environment through `AllowlistEnvironmentReader` (both names are already allowlisted). Queries go to that origin's Prometheus API (`/api/v1/query`, `/api/v1/query_range`, `/api/v1/labels`, `/api/v1/series`). Optional override in `overrides.json`: `"usage": { "metricsUrl": "http://host:8428" }`.
+- Endpoint: the origin (scheme, host, port) of `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, else of `OTEL_EXPORTER_OTLP_ENDPOINT`, taken from the `env` of the managed and user settings layers only (project and local layers are ignored, because a cloned repo must not choose where cfgdash sends requests), else from the process environment through `AllowlistEnvironmentReader` (both names are already allowlisted). Queries go to that origin's Prometheus API (`/api/v1/query`, `/api/v1/query_range`, `/api/v1/labels`, `/api/v1/series`). Optional override in `overrides.json`: `"usage": { "metricsUrl": "http://host:8428" }`.
 - Requests: `GET` only, plain `HttpClient`, 5 s per request, at most 10 requests per snapshot, no redirects followed to another origin, no credentials and no `OTEL_EXPORTER_OTLP_*HEADERS` sent. The URL path and query never contain user data beyond metric and label names.
 - Metric names are discovered at runtime (`claude_code` token, cost, session and active-time metrics, with or without the exporter's unit and `_total` suffixes). Never hardcode one exact name list without that fallback.
 
