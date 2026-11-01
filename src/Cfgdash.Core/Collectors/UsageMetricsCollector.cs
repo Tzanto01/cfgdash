@@ -48,7 +48,7 @@ internal sealed partial class UsageMetricsCollector(
         var endpoint = ResolveEndpoint(stack);
         if (endpoint is null)
         {
-            return new CollectorResult([], "no OpenTelemetry metrics endpoint configured");
+            return CollectorResult.NotPresent("no OpenTelemetry metrics endpoint configured");
         }
 
         if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.Host.Length == 0)

@@ -253,7 +253,8 @@ public sealed class UsageMetricsCollectorTests : IDisposable
 
         var result = await CollectAsync(store, settingsEnv: null);
 
-        Assert.Equal("no OpenTelemetry metrics endpoint configured", result.UnavailableReason);
+        Assert.Equal("no OpenTelemetry metrics endpoint configured", result.NotPresentReason);
+        Assert.Null(result.UnavailableReason);
         Assert.Empty(store.Requests);
     }
 
