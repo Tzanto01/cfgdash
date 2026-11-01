@@ -511,7 +511,7 @@ export function buildSnapshot(dir) {
   };
 
   const usage = {
-    collectorId: 'usage.otel', view: 'usage', title: 'OpenTelemetry usage',
+    collectorId: 'usage.otel', view: 'telemetry', title: 'OpenTelemetry usage',
     blocks: [
       { type: 'kv', id: 'exporter', title: 'Exporter', rows: [
         kv('exporter', 'otlp', 'env:OTEL_METRICS_EXPORTER'),
@@ -542,7 +542,7 @@ export function buildSnapshot(dir) {
     collector('jobs.windows-tasks', 'Windows scheduled tasks', 'jobs', { os: ['windows'], tools: ['schtasks'], targetDir: false }, 410, { notes: ['Only tasks whose action references the workspace or config repo are listed.'] }),
     ex['jobs.systemd-user'],
     collector('jobs.crontab', 'crontab', 'jobs', { os: ['linux', 'macos'], tools: ['crontab'], targetDir: false }, 0, { state: 'notPresent', reason: 'Linux and macOS only' }),
-    { id: 'usage.otel', title: 'OpenTelemetry usage', version: '0.3.0', view: 'usage', state: 'active', requirements: { targetDir: false }, durationMs: 44 },
+    { id: 'usage.otel', title: 'OpenTelemetry usage', version: '0.3.0', view: 'telemetry', state: 'active', requirements: { targetDir: false }, durationMs: 44 },
   ];
   snap.sections = [machine, configRepo, settings, ...(timedOut ? [] : [instructions]), agents, skills, hooks, mcp, highlights, env, jobs, usage];
   addUsageMetrics(snap);
