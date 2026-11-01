@@ -259,8 +259,12 @@ internal sealed partial class UsageMetricsCollector(
         return Effective(MetricsEndpoint) ?? Effective(OtlpEndpoint);
     }
 
+    /// <summary>The <c>env</c> value from the managed and user layers only; a project or local layer never chooses the store.</summary>
     private static string? SettingText(SettingsStack stack, string name) =>
-        stack.Get("env." + name)?.Value is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+        stack.Contributing
+            .Where(l => l.Scope is "managed" or "user" || l.ExtraScopes.Contains("user"))
+            .Select(l => l.Root?["env"] is JsonObject env && env[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null)
+            .FirstOrDefault(s => s is not null);
 
     /// <summary>All discovered names of one metric: the stem with dots or underscores plus only unit and <c>_total</c> suffixes.</summary>
     private static string? Family(IEnumerable<string> names, string stem)

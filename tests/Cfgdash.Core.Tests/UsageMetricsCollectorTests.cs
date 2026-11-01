@@ -277,6 +277,21 @@ public sealed class UsageMetricsCollectorTests : IDisposable
         Assert.Equal("https://override.example:9443/api/v1/query", fromOverride.Requests[0].RequestUri!.GetLeftPart(UriPartial.Path));
     }
 
+    [Fact]
+    public async Task A_project_settings_endpoint_never_chooses_the_store()
+    {
+        var env = new FakeEnvironmentReader();
+        env.Process["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = "http://process.example:8428";
+        tree.Write("proj/.claude/settings.json", """{ "env": { "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://repo.example:8428" } }""");
+        tree.Write("proj/.claude/settings.local.json", """{ "env": { "OTEL_EXPORTER_OTLP_ENDPOINT": "http://local.example:4318" } }""");
+        var store = new FakeStore();
+
+        await CollectAsync(store, settingsEnv: null, env);
+
+        Assert.All(store.Requests, r => Assert.Equal("process.example:8428", r.RequestUri!.Authority));
+        Assert.NotEmpty(store.Requests);
+    }
+
     public static TheoryData<HttpStatusCode, string> FailedAnswers => new()
     {
         { HttpStatusCode.Unauthorized, "metrics store needs auth (not supported)" },
