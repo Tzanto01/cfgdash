@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { buildSnapshot, START_DIR } from './data.mjs';
 import { listDirs, resolveDir } from './dirs.mjs';
 import { search } from './search.mjs';
+import { findings } from './health.mjs';
 
 const { values: opts } = parseArgs({
   options: {
@@ -42,6 +43,7 @@ const TYPES = {
 const ROUTES = [
   { re: /^\/api\/v1\/health$/, method: 'GET', handle: () => [200, { status: 'ok', version: '0.1.0', schemaVersion: 1 }] },
   { re: /^\/api\/v1\/snapshot$/, method: 'GET', handle: (url) => withDir(url, (dir) => [200, snapshotFor(dir, url.searchParams.get('refresh') === 'true').snapshot]) },
+  { re: /^\/api\/v1\/findings$/, method: 'GET', handle: (url) => withDir(url, (dir) => [200, findings(snapshotFor(dir, url.searchParams.get('refresh') === 'true').snapshot)]) },
   { re: /^\/api\/v1\/files\/([^/]+)$/, method: 'GET', handle: (url, m) => withDir(url, (dir) => fileFor(dir, m[1])) },
   { re: /^\/api\/v1\/search$/, method: 'GET', handle: (url) => searchFor(url) },
   { re: /^\/api\/v1\/dirs$/, method: 'GET', handle: (url) => withDir(url, (dir) => [200, listDirs(dir)], 'path') },
