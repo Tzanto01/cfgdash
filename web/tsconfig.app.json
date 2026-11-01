@@ -19,6 +19,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src"],
-  "exclude": ["src/app", "src/testing", "src/main.ts"]
+  "include": ["src"]
 }
