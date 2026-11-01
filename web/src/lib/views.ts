@@ -2,13 +2,18 @@ import {
   Bot,
   Boxes,
   CalendarClock,
+  ChartColumn,
+  Code,
   Database,
   FileText,
+  HeartPulse,
   LayoutGrid,
+  Layers,
   Plug,
   SlidersHorizontal,
   Sparkles,
   Terminal,
+  SquareTerminal,
   Variable,
   Zap,
   type LucideIcon
@@ -29,6 +34,7 @@ export interface ViewDefinition {
 /** Known view ids in navigation order (snapshot-v1), then `other`. */
 export const VIEW_DEFINITIONS: readonly ViewDefinition[] = [
   { id: 'overview', label: 'Overview', description: 'What this machine is, what is active and where to look next.', group: 'machine', icon: LayoutGrid },
+  { id: 'health', label: 'Health', description: 'Problems found in this harness: missing scripts and commands, errors, duplicates and overrides.', group: 'machine', icon: HeartPulse },
   { id: 'settings', label: 'Settings', description: 'Effective Claude Code settings for the folder and where each value comes from.', group: 'harness', icon: SlidersHorizontal },
   { id: 'instructions', label: 'Instructions', description: 'Instruction files loaded for the folder, in load order.', group: 'harness', icon: FileText },
   { id: 'agents', label: 'Agents', description: 'Agent definitions and the company agent cores.', group: 'harness', icon: Bot },
@@ -37,7 +43,11 @@ export const VIEW_DEFINITIONS: readonly ViewDefinition[] = [
   { id: 'mcp-permissions', label: 'MCP & permissions', description: 'MCP servers, permission rules and model settings.', group: 'harness', icon: Plug },
   { id: 'env', label: 'Environment', description: 'Harness environment variables and where they are set.', group: 'harness', icon: Variable },
   { id: 'jobs', label: 'Jobs', description: 'Scheduled jobs that run harness scripts.', group: 'harness', icon: CalendarClock },
+  { id: 't3', label: 'T3 Code', description: 'T3 Code settings, providers, models and projects.', group: 'harness', icon: Layers },
+  { id: 'codex', label: 'Codex', description: 'Codex settings, MCP servers, instruction files, prompts and skills.', group: 'harness', icon: SquareTerminal },
+  { id: 'opencode', label: 'OpenCode', description: 'OpenCode settings, providers, agents, commands, MCP servers and instruction files.', group: 'harness', icon: Code },
   { id: 'sessions', label: 'Sessions', description: 'Recent Claude Code sessions with tokens, estimated cost and audit signals.', group: 'activity', icon: Terminal },
+  { id: 'usage', label: 'Usage', description: 'Claude Code cost, tokens and sessions from the OpenTelemetry metrics store.', group: 'activity', icon: ChartColumn },
   { id: 'memory', label: 'Memory', description: 'What agents remember in the Engram store on this machine: projects, topic keys and observations.', group: 'activity', icon: Database },
   { id: 'other', label: 'Other', description: 'Data from sources this version of the UI has no view for.', group: 'other', icon: Boxes }
 ];
@@ -62,7 +72,7 @@ export interface ViewModel extends ViewDefinition {
   sections: Section[];
   itemCount: number;
   hasUnavailable: boolean;
-  /** Shown in the nav: overview always, a view with an active or unavailable collector, other with unknown ids. */
+  /** Shown in the nav: overview and health always, a view with an active or unavailable collector, other with unknown ids. */
   visible: boolean;
 }
 
@@ -72,6 +82,7 @@ export function buildViews(snapshot: Snapshot): ViewModel[] {
     const sections = snapshot.sections.filter((s) => navViewId(s.view) === definition.id);
     const visible =
       definition.id === 'overview' ||
+      definition.id === 'health' ||
       (definition.id === 'other'
         ? collectors.length > 0 || sections.length > 0
         : collectors.some((c) => c.state !== 'notPresent'));

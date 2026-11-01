@@ -231,6 +231,41 @@ export interface DirsResponse {
   suggestions: DirSuggestion[];
 }
 
+export type Severity = 'critical' | 'warning' | 'info';
+
+/** Where a finding's evidence lives in the snapshot (health-v1). */
+export interface FindingEvidence {
+  collectorId: string;
+  blockId?: string;
+  itemId?: string;
+  key?: string;
+  fileId?: string;
+}
+
+export interface Finding {
+  id: string;
+  rule: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+  evidence: FindingEvidence;
+  view: string;
+}
+
+export interface SeverityCounts {
+  critical: number;
+  warning: number;
+  info: number;
+}
+
+/** `GET /api/v1/findings`. */
+export interface FindingsResponse {
+  dir: string;
+  collectedAt: string;
+  counts: SeverityCounts;
+  findings: Finding[];
+}
+
 /** Error bodies of api-v1. */
 export interface ApiError {
   error: string;

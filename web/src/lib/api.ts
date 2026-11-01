@@ -1,5 +1,5 @@
 import { setAccessProblem } from './access';
-import type { DetailContent, DirsResponse, FileContent, SearchResponse, Snapshot } from './models';
+import type { DetailContent, DirsResponse, FileContent, FindingsResponse, SearchResponse, Snapshot } from './models';
 
 /** A non-2xx answer (`status` > 0) or a network failure (`status` 0). */
 export class ApiError extends Error {
@@ -74,6 +74,9 @@ export const api = {
       params.set('refresh', 'true');
     }
     return get<Snapshot>('/api/v1/snapshot', params, signal);
+  },
+  findings(dir: string | undefined, signal?: AbortSignal): Promise<FindingsResponse> {
+    return get<FindingsResponse>('/api/v1/findings', withDir(new URLSearchParams(), dir), signal);
   },
   file(id: string, dir?: string, signal?: AbortSignal): Promise<FileContent> {
     return get<FileContent>(`/api/v1/files/${encodeURIComponent(id)}`, withDir(new URLSearchParams(), dir), signal);
