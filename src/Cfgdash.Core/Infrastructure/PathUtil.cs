@@ -70,8 +70,8 @@ internal static class PathUtil
 
     /// <summary>
     /// Resolves every symlink or junction in <paramref name="path"/>. On non-Windows each link is followed one hop at a time (at most <see cref="MaxLinkHops"/>),
-    /// links inside link targets included, and <c>..</c> applies to the resolved parent as the kernel does.
-    /// False when a link loops, cannot be read or the chain is too long (non-Windows); <paramref name="real"/> is then a best-effort path and callers must fail closed.
+    /// links inside link targets included, and <c>..</c> applies to the resolved parent as the kernel does. Links under <c>/proc/</c> are never followed.
+    /// False when a link loops, cannot be read, lies under <c>/proc/</c> or the chain is too long (non-Windows); <paramref name="real"/> is then a best-effort path and callers must fail closed.
     /// </summary>
     public static bool TryRealPath(string path, out string real)
     {
@@ -128,7 +128,7 @@ internal static class PathUtil
                 continue;
             }
 
-            if (++hops > MaxLinkHops)
+            if (++hops > MaxLinkHops || next.StartsWith("/proc/", StringComparison.Ordinal))
             {
                 ok = false;
                 return Path.Combine([next, .. segments[(i + 1)..]]);

@@ -11,7 +11,7 @@ namespace Cfgdash.Core.Collectors;
 /// <summary>
 /// <c>t3.settings</c>: T3 Code server runtime facts, <c>settings.json</c>, providers, models and projects from <c>~/.t3/userdata</c>.
 /// Reads only <c>settings.json</c>, the listed keys of <c>server-runtime.json</c> and the <c>projection_projects</c> table of <c>statev2.sqlite</c>
-/// (read-only, parameterized, opened <c>immutable</c> when SQLite would otherwise create <c>-wal</c>/<c>-shm</c> side files).
+/// (read-only, parameterized, always opened <c>immutable</c> so no T3 file, its <c>-wal</c> and <c>-shm</c> included, is ever written; changes not yet checkpointed may be missed).
 /// Nothing else in the userdata dir is enumerated, opened or registered.
 /// </summary>
 internal sealed class T3SettingsCollector : ICollector
@@ -117,10 +117,13 @@ internal sealed class T3SettingsCollector : ICollector
         {
             notes.Add($"no {StateFile}: projects omitted");
         }
-        else if (CanOpen(dbPath) && new[] { dbPath + "-wal", dbPath + "-shm" }.All(side => !File.Exists(side) || CanOpen(side))
-                 && await ProjectsAsync(dbPath, context, notes, cancellationToken) is { } projects)
+        else if (CanOpen(dbPath) && await ProjectsAsync(dbPath, context, notes, cancellationToken) is { } projects)
         {
             blocks.Add(projects);
+            if (File.Exists(dbPath + "-wal"))
+            {
+                notes.Add("projects may miss T3 changes not yet checkpointed");
+            }
         }
 
         return new CollectorResult(blocks, Notes: notes.Count > 0 ? notes : null);
@@ -224,17 +227,9 @@ internal sealed class T3SettingsCollector : ICollector
         var redactor = context.Redactor;
         try
         {
-            var header = new byte[20];
-            int read;
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            {
-                read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
-            }
-
-            var immutable = read == header.Length && header[18] == 2 && header[19] == 2 && !(File.Exists(path + "-wal") && File.Exists(path + "-shm"));
             await using var db = new SqliteConnection(new SqliteConnectionStringBuilder
             {
-                DataSource = immutable ? new Uri(path).AbsoluteUri + "?immutable=1" : path,
+                DataSource = new Uri(path).AbsoluteUri + "?immutable=1",
                 Mode = SqliteOpenMode.ReadOnly,
                 Pooling = false,
                 DefaultTimeout = 5,

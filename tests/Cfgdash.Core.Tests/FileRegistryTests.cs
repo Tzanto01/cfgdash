@@ -131,6 +131,16 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
     }
 
     [LinuxFact]
+    public void Register_refuses_a_path_that_follows_a_link_under_proc()
+    {
+        tree.Dir("proc/repo");
+        Directory.CreateSymbolicLink(tree.Path("proc/repo/self"), "/proc/self/cwd");
+
+        Assert.True(FileRegistry.IsNeverRead(tree.Path("proc/repo/self/notes.md")));
+        Assert.False(PathUtil.TryRealPath(tree.Path("proc/repo/self/notes.md"), out _));
+    }
+
+    [LinuxFact]
     public void Register_refuses_a_path_through_a_link_loop()
     {
         tree.Dir("loop/repo");

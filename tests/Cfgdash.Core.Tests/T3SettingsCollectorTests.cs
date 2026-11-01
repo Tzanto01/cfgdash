@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Cfgdash.Core.Collectors;
 using Cfgdash.Core.Files;
@@ -229,5 +230,27 @@ public sealed class T3SettingsCollectorTests : IDisposable
         Assert.Equal(["p1", "p2"], Table(result, "projects").Rows.Select(r => r.Id));
         Assert.False(File.Exists(DbPath + "-wal"));
         Assert.False(File.Exists(DbPath + "-shm"));
+    }
+
+    [Fact]
+    public async Task A_database_in_use_by_T3_is_read_without_touching_its_side_files_and_notes_possible_staleness()
+    {
+        Exec(Seed());
+        using var writer = new SqliteConnection($"Data Source={DbPath};Pooling=False");
+        writer.Open();
+        using (var command = writer.CreateCommand())
+        {
+            command.CommandText = "PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0; INSERT INTO projection_projects (project_id, title, workspace_root) VALUES ('p4', 'late', '/home/user/late');";
+            command.ExecuteNonQuery();
+        }
+
+        string[] Hashes() => [.. new[] { "-wal", "-shm" }.Select(suffix => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(DbPath + suffix))))];
+        var before = Hashes();
+
+        var result = await collector.CollectAsync(Context(), CancellationToken.None);
+
+        Assert.Equal(["p1", "p2"], Table(result, "projects").Rows.Select(r => r.Id));
+        Assert.Contains("projects may miss T3 changes not yet checkpointed", result.Notes!);
+        Assert.Equal(before, Hashes());
     }
 }
