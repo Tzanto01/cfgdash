@@ -184,11 +184,11 @@ internal sealed partial class UsageMetricsCollector(
                 }
             }
 
+            var modelIds = new HashSet<string>(StringComparer.Ordinal);
             blocks.Add(new TableBlock("by-model", "By model",
                 [new("model", "Model"), new("cost", "Cost (USD)"), new("input", "Input"), new("output", "Output"), new("cache-read", "Cache read"), new("cache-creation", "Cache creation")],
-                [.. rows.OrderByDescending(r => r.Value[0]).ThenBy(r => r.Key, StringComparer.Ordinal).Select(r => new TableRow(r.Key, new Dictionary<string, JsonNode?>
+                [.. rows.OrderByDescending(r => r.Value[0]).ThenBy(r => r.Key, StringComparer.Ordinal).Select(r => LabeledRow(redactor, r.Key, "model", modelIds, new Dictionary<string, JsonNode?>
                 {
-                    ["model"] = redactor.RedactText(r.Key.Length == 0 ? "(none)" : r.Key),
                     ["cost"] = cost is null ? null : Math.Round(r.Value[0], 2),
                     ["input"] = tokens is null ? null : (long)Math.Round(r.Value[1]),
                     ["output"] = tokens is null ? null : (long)Math.Round(r.Value[2]),
@@ -216,11 +216,11 @@ internal sealed partial class UsageMetricsCollector(
                 row[s.Labels.GetValueOrDefault("m") ?? ""] = s.Samples.Sum(x => x.Value);
             }
 
+            var ids = new HashSet<string>(StringComparer.Ordinal);
             blocks.Add(new TableBlock(id, title,
                 [new(key, keyLabel), new("cost", "Cost (USD)"), new("tokens", "Tokens"), new("sessions", "Sessions")],
-                [.. rows.OrderByDescending(r => r.Value.GetValueOrDefault("cost")).ThenBy(r => r.Key, StringComparer.Ordinal).Select(r => new TableRow(r.Key, new Dictionary<string, JsonNode?>
+                [.. rows.OrderByDescending(r => r.Value.GetValueOrDefault("cost")).ThenBy(r => r.Key, StringComparer.Ordinal).Select(r => LabeledRow(redactor, r.Key, key, ids, new Dictionary<string, JsonNode?>
                 {
-                    [key] = redactor.RedactText(r.Key.Length == 0 ? "(none)" : r.Key),
                     ["cost"] = cost is null ? null : Math.Round(r.Value.GetValueOrDefault("cost"), 2),
                     ["tokens"] = tokens is null ? null : (long)Math.Round(r.Value.GetValueOrDefault("tokens")),
                     ["sessions"] = sessions is null ? null : (long)Math.Round(r.Value.GetValueOrDefault("sessions")),
@@ -231,6 +231,20 @@ internal sealed partial class UsageMetricsCollector(
         await GroupTable(machine, "by-machine", "By machine", "machine", "Machine");
         await GroupTable(project, "by-project", "By project", "project", "Project");
         return new CollectorResult(blocks, Notes: notes);
+    }
+
+    /// <summary>A row for one store label value: the redacted value is both the key cell and the row id (made unique), never the raw value.</summary>
+    private static TableRow LabeledRow(IRedactor redactor, string value, string column, HashSet<string> ids, Dictionary<string, JsonNode?> cells)
+    {
+        var shown = redactor.RedactText(value.Length == 0 ? "(none)" : value);
+        var id = shown;
+        for (var n = 2; !ids.Add(id); n++)
+        {
+            id = $"{shown} ({n})";
+        }
+
+        cells[column] = shown;
+        return new TableRow(id, cells);
     }
 
     private string? ResolveEndpoint(SettingsStack stack)

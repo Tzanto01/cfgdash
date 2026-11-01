@@ -67,7 +67,7 @@ internal sealed class PrometheusClient(HttpMessageHandler handler, Uri origin)
             {
                 if (sample is JsonArray { Count: 2 } pair && pair[0] is JsonValue t && t.TryGetValue<double>(out var time)
                     && pair[1] is JsonValue raw && raw.TryGetValue<string>(out var text)
-                    && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value))
+                    && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && Math.Abs(value) < 1e15)
                 {
                     samples.Add((time, value));
                 }

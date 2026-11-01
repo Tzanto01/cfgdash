@@ -206,6 +206,21 @@ public sealed class UsageMetricsCollectorTests : IDisposable
     }
 
     [Fact]
+    public async Task Label_values_are_redacted_in_row_ids_as_well_as_cells()
+    {
+        const string Token = "tok3n-value-123";
+        var store = FullStore(["claude_code.cost.usage", "claude_code.token.usage"]);
+        store.Answers["instant:project"] = Vector([(L("g", "https://user:" + Token + "@git.example/x", "m", "cost"), 1), (L("g", "", "m", "cost"), 2)]);
+
+        var result = await CollectAsync(store);
+
+        var byProject = Block<TableBlock>(result, "by-project");
+        Assert.DoesNotContain(Token, JsonSerializer.Serialize(byProject, SnapshotJson.Options), StringComparison.Ordinal);
+        Assert.All(byProject.Rows, r => Assert.Equal(r.Id, r.Cells["project"]!.GetValue<string>()));
+        Assert.Contains(byProject.Rows, r => r.Id == "(none)");
+    }
+
+    [Fact]
     public async Task Cumulative_temporality_from_settings_switches_from_summed_deltas_to_increase()
     {
         var delta = FullStore(["claude_code.cost.usage"]);
