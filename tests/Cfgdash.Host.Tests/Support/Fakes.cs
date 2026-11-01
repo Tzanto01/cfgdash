@@ -209,6 +209,8 @@ internal sealed class FakeSnapshots(string hostname = "host.example") : ISnapsho
 
     public Func<string, int, Exception?>? FailWith { get; set; }
 
+    public IReadOnlyList<Section> Sections { get; set; } = [];
+
     public int CountFor(string dir) => counts.GetValueOrDefault(dir);
 
     public Task<SnapshotResult> BuildAsync(string targetDir, CancellationToken cancellationToken)
@@ -220,7 +222,7 @@ internal sealed class FakeSnapshots(string hostname = "host.example") : ISnapsho
         }
 
         var machine = new MachineInfo(hostname, null, new OsInfo(OsFamily.Linux, "test os", "x64"), DateTimeOffset.UnixEpoch, "0.0.0-dev");
-        var snapshot = new HarnessSnapshot(HarnessSnapshot.CurrentSchemaVersion, machine, new SnapshotContext(targetDir, []), [], [], []);
+        var snapshot = new HarnessSnapshot(HarnessSnapshot.CurrentSchemaVersion, machine, new SnapshotContext(targetDir, []), [], Sections, []);
         return Task.FromResult(new SnapshotResult(snapshot, Files, new HashSet<string> { "c1:emitted" }));
     }
 }
