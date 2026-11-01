@@ -133,7 +133,7 @@ export default function HealthPage() {
                         {finding.title}
                       </button>
                     </td>
-                    <td data-label="Where" className="mono-value break-all text-muted">
+                    <td data-label="Where" className="mono-value wrap-anywhere text-muted">
                       {findingLocation(store.snapshot, finding)}
                     </td>
                   </tr>

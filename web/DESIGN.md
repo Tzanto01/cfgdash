@@ -65,7 +65,7 @@ Self-hosted OFL variable fonts (`@fontsource-variable/instrument-sans`, `@fontso
 ### Shell (at least 1024px)
 
 - Header 52px on `surface` with bottom border: folder pill (folder icon, mono path, chevron; opens the folder picker), machine name (monitor icon, muted), spacer, Search button (search icon, "Search", `Ctrl K` kbd; opens the palette), refresh icon button, theme toggle. No Edit button (edits slice not built).
-- Sidebar 208px on `surface`, right border, groups with sentence-case labels 12/16 500 muted: *Machine* (Overview), *Harness* (Settings, Instructions, Agents, Skills & commands, Hooks, MCP & permissions, Environment, Jobs), *Activity* (Sessions, Memory), then Other without a label. Only visible views (`views.ts`). Items 36px, radius 8px, icon plus label plus count pill (mono 11px, `raised` with border); active item accent tint background, accent text, weight 600, `aria-current="page"`. A warn dot plus screen-reader text when the view has an unavailable source. Foot: "Collected 10:00 · 2 min ago" (muted 12px) and Collapse. Collapsed: 64px rail, icons only with tooltips, counts hidden, labels kept as accessible names.
+- Sidebar 208px on `surface`, right border, groups with sentence-case labels 12/16 500 muted: *Machine* (Overview, Health), *Harness* (Settings, Instructions, Agents, Skills & commands, Hooks, MCP & permissions, Environment, Jobs, T3 Code, Codex, OpenCode), *Activity* (Sessions, Usage, Memory), then Other without a label. Only visible views (`views.ts`). Items 36px, radius 8px, icon plus label plus count pill (mono 11px, `raised` with border); active item accent tint background, accent text, weight 600, `aria-current="page"`. A warn dot plus screen-reader text when the view has an unavailable source. Health shows no count pill: a badge with critical plus warning findings (danger tint when any critical, else warn; hidden at zero, before findings load and on error; a dot in the collapsed rail; screen-reader text "n findings need attention"). Foot: "Collected 10:00 · 2 min ago" (muted 12px) and Collapse. Collapsed: 64px rail, icons only with tooltips, counts hidden, labels kept as accessible names.
 - Main column: page padding 24px, max content width 1200px.
 - 768 to 1023px: sidebar starts collapsed (rail).
 
@@ -116,11 +116,29 @@ Dot plus word: active (ok), unavailable (warn), not on this machine (muted). Nev
 4 columns, 12px gap, tiles 12px radius on `surface` with border, 16px padding, no shadows, no accent rings.
 
 - Identity 2x1: icon plus "Identity" label, then a mono line: hostname (700), OS description and arch, tailnet DNS name and tags, collected time, cfgdash version. The h1 is "Overview" with "hostname · collected 10:00" muted beside it.
-- Count tiles 1x1 for every visible view except Overview: icon plus label (12/16 muted), number 32/36 600 tabular, whole tile is the link. A tile whose view has an unavailable source shows a warn dot and "1 unavailable".
+- Health 2x2 (full width below 1024px) after Identity: icon plus "Health" and a "View all" link, the severity bar with the three counts, then the top two findings as ruled rows (severity icon plus word, title) linking to Health. "Checking..." while loading, "Couldn't load findings" on error.
+- Count tiles 1x1 for every visible view except Overview and Health: icon plus label (12/16 muted), number 32/36 600 tabular, whole tile is the link. A tile whose view has an unavailable source shows a warn dot and "1 unavailable".
 - Collectors 2x1: "n of m active", then each non-active source as a row (mono title, state chip, reason, link to its view).
 - Context paths: a full-width card below the bento with A-style rows: key (mono), value (mono, or "not set" muted), source (muted), "missing" badge when the path does not exist; first row "Target folder".
 - Then the overview sections as cards.
 - Motion: after a refresh (never on first paint) changed numbers tick for 600ms and the tile border pulses once in accent; reduced motion shows a static "changed" dot until the next refresh.
+
+### Health
+
+- Data: `GET /api/v1/findings?dir=` after every new snapshot (load, folder change, refresh); the last findings for the same folder stay visible while a refresh's findings load.
+- Page head (h1 "Health", "n findings", description), then the severity bar: thin 8px segmented bar (critical `danger`, warning `warn`, info `border-strong`, 2px gaps, zero parts omitted, decorative) with the counts as text "1 critical · 7 warning · 4 info"; "No findings" when all are zero.
+- Chips All / Critical / Warning / Info (`aria-pressed`, pressing the active chip returns to All) with an announced "n of m findings" line.
+- One card with a ruled table: Severity (icon plus word), Title (button, opens the sheet), Where (mono, "Section › Block › Item", or the collector title for collector-level findings). Stacked cards below 768px.
+- Finding sheet (right, as the file sheet): title (h2, focus target), severity and rule id, detail text, Where, "Show in <View>" (closes the sheet, then jumps to the evidence row with the search-hit flash and focus), "Open file" when the evidence has a file (closes the finding sheet, then opens the file sheet; focus returns to the row), Close.
+- States: "Checking this harness..." loading, "Couldn't load findings" with Try again, "No findings. Nothing in this snapshot needs attention."
+
+### Usage
+
+- Lazy route. Page head with the description and the collector notes.
+- Totals tiles from the `totals` kv (Cost today, Cost 7 days, Cost 30 days in USD with 2 decimals; Tokens 30 days compact; Sessions; Active time when present), 2-up at 375px, 3 across from 640px, 6 across from 1536px; each tile is a jump target (`<collector>/totals/<key>`). Redacted or null values keep their marker. A muted "Source host:port · range" line below.
+- "Cost per day (USD)" card: plain SVG columns, oldest left, one accent hue, no legend; columns at most 24px wide with a 4px rounded top and a square baseline; hairline gridlines, "USD" y label with 3 to 5 clean ticks, dates every 7th day plus the last; hover tooltip (value strong, date muted). The svg is `role="img"` with a summary label; the by-day table right below is the keyboard and screen-reader path. No chart when no day has a cost ("No cost recorded in this range.").
+- Then by-model, by-machine, by-project and any other block through the generic table block, each in its own card, only when present.
+- States: unavailable shows the warn note with the reason and no tiles; not present shows "Not on this machine: title (reason)".
 
 ## Sheets and dialogs
 
@@ -151,4 +169,4 @@ Card grids for lists, connectors and rings in dense rows, ambient motion, gradie
 
 ## Out of scope in this slice
 
-Health view and nav badge, Usage view (its collector shows under Other), Settings edit screen, diff review and the Edit button.
+Settings edit screen, diff review and the Settings button (edits-v1, next).
