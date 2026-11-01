@@ -1,7 +1,9 @@
 using Cfgdash.Core.Collectors;
+using Cfgdash.Core.Edits;
 using Cfgdash.Core.Environment;
 using Cfgdash.Core.Files;
 using Cfgdash.Core.Health;
+using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Redaction;
 using Cfgdash.Core.Search;
 using Cfgdash.Core.Snapshot;
@@ -36,4 +38,8 @@ public static class CfgdashCore
 
     /// <summary>The health-v1 findings for <paramref name="snapshot"/> (docs/contracts/health-v1.md), details redacted.</summary>
     public static FindingsReport Findings(HarnessSnapshot snapshot) => HealthRules.Evaluate(snapshot, new Redactor());
+
+    /// <summary>The guarded edit service (docs/contracts/edits-v1.md); backups and the audit log go to <c>&lt;cacheDir&gt;/edits</c>.</summary>
+    public static IEditService CreateEdits(CoreServices core, string cacheDir, TimeProvider time) =>
+        new EditService(core.Environment, core.EnvironmentReader, core.Processes, new Redactor(), PlatformLocations.Default, cacheDir, time);
 }
