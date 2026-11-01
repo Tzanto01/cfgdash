@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Cfgdash.Core.Files;
+using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Tests.Support;
 
 namespace Cfgdash.Core.Tests;
@@ -99,6 +100,31 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
         var path = tree.Write($"tools/{Guid.NewGuid():N}/{relative}", "content");
 
         Assert.NotNull(new FileRegistry([]).Register(path, "settings"));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_file_reached_through_a_chain_of_two_links_into_a_never_read_dir()
+    {
+        tree.Write("chain/home/user/.codex/log/codex-tui.log", "log content");
+        tree.Dir("chain/repo");
+        Directory.CreateSymbolicLink(tree.Path("chain/repo/d"), tree.Path("chain/home/user/.codex"));
+        Directory.CreateSymbolicLink(tree.Path("chain/repo/e"), "d/log");
+        var path = tree.Path("chain/repo/e/codex-tui.log");
+        Assert.True(File.Exists(path));
+
+        Assert.True(FileRegistry.IsNeverRead(path));
+        Assert.Null(new FileRegistry([]).Register(path, "instruction"));
+    }
+
+    [LinuxFact]
+    public void Register_refuses_a_path_through_a_link_loop()
+    {
+        tree.Dir("loop/repo");
+        File.CreateSymbolicLink(tree.Path("loop/repo/a"), "b");
+        File.CreateSymbolicLink(tree.Path("loop/repo/b"), "a");
+
+        Assert.True(FileRegistry.IsNeverRead(tree.Path("loop/repo/a/notes.md")));
+        Assert.False(PathUtil.TryRealPath(tree.Path("loop/repo/a/notes.md"), out _));
     }
 
     [Fact]
