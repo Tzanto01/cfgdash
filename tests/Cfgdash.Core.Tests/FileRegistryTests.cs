@@ -65,6 +65,19 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
     [InlineData("credentials")]
     [InlineData("putty.ppk")]
     [InlineData("infra/prod.tfstate.backup")]
+    [InlineData("auth.json")]
+    [InlineData("history.jsonl")]
+    [InlineData("clerk-tokens.json")]
+    [InlineData("anonymous-id")]
+    [InlineData("environment-id")]
+    [InlineData("connection-catalog.json")]
+    [InlineData("server-owner.sqlite-journal")]
+    [InlineData(".codex/sessions/2026/rollout.jsonl")]
+    [InlineData(".codex/log/codex-tui.log")]
+    [InlineData(".t3/userdata/secrets/key.bin")]
+    [InlineData(".t3/userdata/logs/server.log")]
+    [InlineData(".t3/userdata/attachments/a.txt")]
+    [InlineData(".local/share/opencode/storage/session.json")]
     public void Register_refuses_never_read_files(string relative)
     {
         var path = tree.Write($"never/{Guid.NewGuid():N}/{relative}", "content");
@@ -73,6 +86,19 @@ public sealed class FileRegistryTests(TempTree tree) : IClassFixture<TempTree>
         Assert.Null(registry.Register(path, "other"));
         Assert.True(FileRegistry.IsNeverRead(path));
         Assert.Empty(registry.All);
+    }
+
+    [Theory]
+    [InlineData(".codex/config.toml")]
+    [InlineData(".codex/prompts/review.md")]
+    [InlineData(".t3/userdata/settings.json")]
+    [InlineData(".config/opencode/opencode.json")]
+    [InlineData("project/sessions/log/notes.md")]
+    public void Register_accepts_tool_config_files_beside_the_never_read_tool_dirs(string relative)
+    {
+        var path = tree.Write($"tools/{Guid.NewGuid():N}/{relative}", "content");
+
+        Assert.NotNull(new FileRegistry([]).Register(path, "settings"));
     }
 
     [Fact]

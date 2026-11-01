@@ -78,6 +78,7 @@ public sealed class CodexConfigCollectorTests
             [mcp_servers.remote]
             url = "https://mcp.example/api"
             enabled = false
+            http_headers = { X-Team = "blue" }
             """);
         var globalOverride = tree.Write(Codex + "/AGENTS.override.md", "global override");
         tree.Write(Codex + "/AGENTS.md", "global");
@@ -108,6 +109,7 @@ public sealed class CodexConfigCollectorTests
         Assert.Equal("stdio", (string?)mcp["local"].Cells["transport"]);
         Assert.Equal("npx -y server-pkg", (string?)mcp["local"].Cells["target"]);
         Assert.Equal("MODE=${MODE}", (string?)mcp["local"].Cells["env"]);
+        Assert.Equal("X-Team=[redacted]", (string?)mcp["remote"].Cells["headers"]);
         Assert.Equal("http", (string?)mcp["remote"].Cells["transport"]);
         Assert.Equal("https://mcp.example/api", (string?)mcp["remote"].Cells["target"]);
         Assert.False((bool)mcp["remote"].Cells["enabled"]!);

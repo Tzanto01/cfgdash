@@ -19,6 +19,7 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
     private const string Outside = "not opened (outside project and config dirs)";
     private static readonly HashSet<string> NonSettings = new(StringComparer.Ordinal) { "provider", "agent", "command", "mcp", "instructions", "$schema" };
     private static readonly char[] GlobChars = ['*', '?', '[', '{'];
+    private static readonly HashSet<string> ConcatArrays = new(StringComparer.Ordinal) { "instructions", "plugin" };
 
     private static readonly IReadOnlyList<TableColumn> ProviderColumns =
     [
@@ -75,7 +76,6 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
         bool Forbidden(string path) =>
             PathUtil.IsNetworkPath(path)
             || IsAuthJson(path)
-            || PathUtil.IsUnder(path, dataDir)
             || ToolConfig.IsUnderAny(path, [dataDir])
             || IsAuthJson(PathUtil.RealPath(path))
             || FileRegistry.IsNeverRead(path);
@@ -219,7 +219,7 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
                     changed,
                     changed ? ["redacted"] : null,
                     by.Count > 1
-                        ? by.Select((s, i) => new Contribution(s.Value, Ref(s.Source), i == by.Count - 1 ? ContributionStatus.Applied : ContributionStatus.Overridden)).ToList()
+                        ? by.Select((s, i) => new Contribution(s.Value, Ref(s.Source), ConcatArrays.Contains(path) ? ContributionStatus.Merged : i == by.Count - 1 ? ContributionStatus.Applied : ContributionStatus.Overridden)).ToList()
                         : null));
             }
         }
@@ -466,6 +466,12 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
             }
 
             var text = redactor.RedactText(entry);
+            if (entry.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || entry.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                AddInstruction("config", text, "url (not fetched)", null);
+                continue;
+            }
+
             if (entry.IndexOfAny(GlobChars) >= 0)
             {
                 AddInstruction("config", text, "glob (not expanded)", null);
@@ -525,7 +531,9 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
                 continue;
             }
 
-            into[key] = value?.DeepClone();
+            into[key] = prefix.Length == 0 && ConcatArrays.Contains(key) && value is JsonArray added && into[key] is JsonArray existingItems
+                ? new JsonArray([.. existingItems.Concat(added).DistinctBy(n => n?.ToJsonString()).Select(n => n?.DeepClone())])
+                : value?.DeepClone();
             if (!setters.TryGetValue(path, out var list))
             {
                 setters[path] = list = [];

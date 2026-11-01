@@ -194,6 +194,45 @@ public sealed class OpenCodeConfigCollectorTests
     }
 
     [Fact]
+    public async Task Instructions_from_every_layer_are_concatenated_without_duplicates_and_urls_are_not_fetched()
+    {
+        using var tree = new TempTree();
+        var target = tree.Dir("work/proj");
+        tree.Dir("work/proj/.git");
+        tree.Write("home/user/.config/opencode/opencode.json", """{ "instructions": ["https://rules.example/team.md", "docs/rules.md"] }""");
+        tree.Write("work/proj/opencode.json", """{ "instructions": ["docs/rules.md", "docs/extra.md"] }""");
+        tree.Write("work/proj/docs/rules.md", "rules\n");
+
+        var (_, result) = await CollectAsync(tree, target);
+
+        var rows = Table(result, "instructions").Rows;
+        Assert.Equal(
+            [("https://rules.example/team.md", "url (not fetched)"), ("docs/rules.md", "loaded"), ("docs/extra.md", "missing")],
+            rows.Select(r => (Text(r.Cells["entry"]), Text(r.Cells["status"]))));
+    }
+
+    [Fact]
+    public async Task An_OPENCODE_CONFIG_DIR_alone_makes_the_collector_present_with_its_config_and_agents()
+    {
+        using var tree = new TempTree();
+        var target = tree.Dir("work/proj");
+        tree.Dir("work/proj/.git");
+        var dir = tree.Dir("custom/opencode");
+        tree.Write("custom/opencode/opencode.json", """{ "theme": "light" }""");
+        var helper = tree.Write("custom/opencode/agents/helper.md", "---\ndescription: Helps out\n---\nbody\n");
+        var reader = new FakeEnvironmentReader();
+        reader.Process["OPENCODE_CONFIG_DIR"] = dir;
+
+        var (context, result) = await CollectAsync(tree, target, reader);
+
+        Assert.Null(result.NotPresentReason);
+        Assert.Equal("OPENCODE_CONFIG_DIR/opencode.json", Kv(result, "theme").Source!.Label);
+        var agent = Assert.Single(Table(result, "agents").Rows);
+        Assert.Equal(["helper", "Helps out"], Cells(agent, "name", "description"));
+        Assert.Contains(context.Files.All, f => f.Ref.Id == agent.FileId && f.Ref.Path == PathUtil.ToJson(helper));
+    }
+
+    [Fact]
     public async Task Secret_keys_and_token_values_never_reach_the_snapshot()
     {
         using var tree = new TempTree();

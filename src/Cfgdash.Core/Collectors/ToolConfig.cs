@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Redaction;
 using Cfgdash.Core.Snapshot;
@@ -11,7 +12,7 @@ using Tomlyn.Model;
 namespace Cfgdash.Core.Collectors;
 
 /// <summary>Shared reading and display helpers for the T3, Codex and OpenCode collectors. Values are unredacted until <see cref="Flatten"/> or the caller redacts them.</summary>
-internal static class ToolConfig
+internal static partial class ToolConfig
 {
     public const int MaxBytes = 4 * 1024 * 1024;
 
@@ -26,7 +27,7 @@ internal static class ToolConfig
 
         try
         {
-            if (JsonNode.Parse(text!, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }) is not JsonObject obj)
+            if (JsonNode.Parse(text!, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip, AllowDuplicateProperties = false }) is not JsonObject obj)
             {
                 error = "root is not a JSON object";
                 return false;
@@ -42,7 +43,7 @@ internal static class ToolConfig
         }
     }
 
-    /// <summary>TOML, max 4 MiB, converted to JSON (dates as their TOML text). Parser errors carry a position, never source text.</summary>
+    /// <summary>TOML, max 4 MiB, converted to JSON (dates as their TOML text). Errors report only the position, never parser text (it can quote source tokens).</summary>
     public static bool TryReadToml(string path, out JsonObject? root, out string? error)
     {
         root = null;
@@ -58,7 +59,8 @@ internal static class ToolConfig
         }
         catch (TomlException e)
         {
-            error = "invalid TOML: " + FirstLine(e.Message);
+            var position = TomlPosition().Match(e.Message);
+            error = position.Success ? $"invalid TOML at line {position.Groups[1].Value}, column {position.Groups[2].Value}" : "invalid TOML";
             return false;
         }
     }
@@ -169,4 +171,7 @@ internal static class ToolConfig
     }
 
     private static string FirstLine(string text) => text.Split('\n')[0].Trim();
+
+    [GeneratedRegex(@"^\((\d+),(\d+)\)")]
+    private static partial Regex TomlPosition();
 }

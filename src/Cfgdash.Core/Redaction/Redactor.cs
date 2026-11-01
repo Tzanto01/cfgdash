@@ -51,8 +51,11 @@ internal sealed partial class Redactor : IRedactor
     private static readonly Regex BasicRegex = new("\\bBasic\\s+([A-Za-z0-9+/]{8,}={0,2})", Linear);
 
     private static readonly Regex CliFlagRegex = new(
-        "(?:^|[\\s\"'(=])(-{1,2}[A-Za-z0-9_-]*(?:token|secret|pass|pwd|key|auth|credential)[A-Za-z0-9_-]*(?:=|\\s+))(\"[^\"]*\"|'[^']*'|[^\\s\"']+)",
+        "(?:^|[\\s\"'(=])(-{1,2}[A-Za-z0-9_-]*(?:token|secret|pass|pwd|key|auth|credential)[A-Za-z0-9_-]*(?:=|\\s+|[\"']\\s*,\\s*))(\"[^\"]*\"|'[^']*'|[^\\s\"']+)",
         LinearIgnoreCase | RegexOptions.Multiline);
+
+    private static readonly Regex BareSecretFlagRegex = new(
+        "^-{1,2}[A-Za-z0-9_-]*(?:token|secret|pass|pwd|key|auth|credential)[A-Za-z0-9_-]*$", LinearIgnoreCase);
 
     private static readonly Regex AssignmentRegex = new(
         "\\b([A-Za-z0-9_.-]*(?:token|secret|passw(?:or)?d|pwd|api[-_]?key|access[-_]?key|private[-_]?key|credential|cookie)[A-Za-z0-9_.-]*"
@@ -127,9 +130,11 @@ internal sealed partial class Redactor : IRedactor
                 return copy;
             case JsonArray array:
                 var items = new JsonArray();
+                var afterSecretFlag = false;
                 foreach (var item in array)
                 {
-                    items.Add(RedactJson(item, redactAllValues));
+                    items.Add(afterSecretFlag && item is JsonValue ? JsonValue.Create(Marker) : RedactJson(item, redactAllValues));
+                    afterSecretFlag = item is JsonValue flag && flag.TryGetValue<string>(out var flagText) && BareSecretFlagRegex.IsMatch(flagText);
                 }
 
                 return items;
