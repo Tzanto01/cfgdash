@@ -29,8 +29,8 @@ Findings are sorted by severity (critical, warning, info), then `id`. Ids stay s
 | `import-error` | instruction chain nodes flagged `error` (missing target, cycle, depth limit) | warning |
 | `error` | any other row, node or kv entry flagged `error` | warning |
 | `duplicate` | rows flagged `duplicate` (same-name agents, skills or commands where one silently loses) | warning |
-| `collector-error` | collector `state` `unavailable` whose reason is a timeout or exception | warning |
-| `collector-unavailable` | collector `state` `unavailable` for a missing tool | info |
+| `collector-error` | collector `state` `unavailable` whose reason is a timeout, an exception or a failed command run | warning |
+| `collector-unavailable` | any other `unavailable` collector (missing tool or missing input) | info |
 | `overridden` | settings entries flagged `overridden` (layering is normal; shown so the Health view can explain it) | info |
 
 `notPresent` collectors are never findings. Company rows produce findings only where the snapshot already shows them (same rule as the snapshot). Adding a rule later is additive; changing a rule's id or severity is a contract change.
