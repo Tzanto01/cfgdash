@@ -107,7 +107,7 @@ Every block has `type`, a section-unique `id`, `title`, optional `description`.
 }
 ```
 
-A cell is a string, number, boolean, null, or `{ "text": string, "fileId"?: string }`. Row `fileId` opens the row's main file. Row `detailId` (`<collectorId>:<key>`) opens on-demand content through `GET /api/v1/details/{detailId}` instead; a row has at most one of the two. Tree nodes take `detailId` the same way. `flags` (row or kv) render as badges; known flags: `missing-script`, `network-path`, `overridden`, `company`, `redacted`, `link`, `lazy`, `referenced`, `conditional`, `duplicate`, `error`. Unknown flags render as neutral badges.
+A cell is a string, number, boolean, null, or `{ "text": string, "fileId"?: string }`. Row `fileId` opens the row's main file. Row `detailId` (`<collectorId>:<key>`) opens on-demand content through `GET /api/v1/details/{detailId}` instead; a row has at most one of the two. Tree nodes take `detailId` the same way. `flags` (row or kv) render as badges; known flags: `missing-script`, `network-path`, `overridden`, `company`, `redacted`, `link`, `lazy`, `referenced`, `conditional`, `duplicate`, `error`, `missing-command` ([health-v1](health-v1.md)). Unknown flags render as neutral badges.
 
 ### tree
 

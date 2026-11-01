@@ -16,6 +16,7 @@ A request is authenticated when it carries the per-run token as `Authorization: 
 | `GET /api/v1/details/{detailId}?dir=<abs path>` | `{ "id", "title", "contentType": "markdown" \| "json" \| "text", "content", "truncated": bool }` for a `detailId` emitted by the cached snapshot of `dir` (URL-encoded; form `<collectorId>:<key>`). The owning collector resolves it on demand; the core redacts (JSON re-serialized after redaction, text value-pattern redaction), caps at 512 KiB (`truncated: true`) and times out after 20 s (`503 {"error":"unavailable"}`). Id not in that snapshot or unknown to the collector: `404 {"error":"not-found"}`. Details are not part of search |
 | `GET /api/v1/search?q=<text>&dir=<abs path>` | `{ "query", "results": [ { "kind": "row" \| "node" \| "file", "view", "collectorId", "blockId", "itemId"?, "fileId"?, "line"?, "snippet" } ], "truncated": bool }`. Case-insensitive substring over every block value/label in the snapshot and the redacted content of every registered file. Max 200 results. `q` shorter than 2 chars: `400 {"error":"bad-query"}` |
 | `GET /api/v1/dirs?path=<abs path>` | `{ "path", "parent", "entries": [ { "name", "path" } ], "suggestions": [ { "label", "path" } ] }`. Directories only, sorted, max 500, hidden dirs included. `suggestions`: start dir, workspace root, home, config repo, project dirs Claude Code knows (keys of `projects` in `.claude.json`, existing ones only). Missing `path`: answers for the start dir |
+| `GET /api/v1/findings?dir=<abs path>&refresh=true` | health findings for `dir`, see [health-v1](health-v1.md) |
 | `POST /api/v1/shutdown` | `202`, then graceful stop. Bearer header only (cookie rejected) |
 
 Every other method or path under `/api/` answers 404/405. No `/api/v1` endpoint writes, edits or deletes configuration; guarded edits live under `/api/v2` ([edits-v1](edits-v1.md)). Responses carry `Cache-Control: no-store`.
@@ -27,6 +28,7 @@ cfgdash [run] [--port <n>] [--dir <path>] [--tailnet] [--no-open]
 cfgdash stop
 cfgdash update [--check]
 cfgdash export [--dir <path>]
+cfgdash doctor [--dir <path>] [--json]
 cfgdash --version
 ```
 
@@ -35,7 +37,8 @@ cfgdash --version
 - `stop`: reads the run-state file, calls `POST /api/v1/shutdown`, waits up to 10 s, otherwise stops the recorded process (PID + start time + exe path must match) and removes the recorded tailscale serve handler itself. Exit 0 when nothing is running.
 - `update`: `gh release download` of the latest release asset for this OS/arch from the cfgdash repo, verifies it against `SHA256SUMS`, replaces the installed binary (Windows: rename the running exe to `.old`, write the new one, delete `.old` on next start; Linux: write next to it and `rename`). Refuses while an instance is running (prints `cfgdash stop`). `--check` only compares versions. Without gh or gh auth: exit 2 with the reason.
 - `export`: builds the snapshot and writes `<cache>/exports/<hostname>-<UTC timestamp>.json`, prints the path. Never writes anywhere else.
-- Exit codes: 0 ok, 1 error, 2 prerequisite missing (for example gh, tailscale, HTTPS certs).
+- `doctor`: see [health-v1](health-v1.md).
+- Exit codes: 0 ok, 1 error, 2 prerequisite missing (for example gh, tailscale, HTTPS certs), 3 `doctor` found a critical finding.
 
 ## Run state and cache (all under the user cache dir: Windows `%LOCALAPPDATA%\cfgdash`, Linux `$XDG_CACHE_HOME/cfgdash` or `~/.cache/cfgdash`)
 
