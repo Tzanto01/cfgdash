@@ -83,7 +83,11 @@ internal static class JsonEdit
             path.Add(next);
         }
 
-        path[^1].Remove(segments[^1]);
+        if (!path[^1].Remove(segments[^1]))
+        {
+            return null;
+        }
+
         for (var i = path.Count - 1; i > 0 && path[i].Count == 0; i--)
         {
             path[i - 1].Remove(segments[i - 1]);

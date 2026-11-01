@@ -88,18 +88,30 @@ public sealed class EditConfinementTests : IDisposable
     }
 
     [LinuxFact]
-    public async Task A_symlinked_settings_file_inside_the_scope_root_is_written_through_and_the_link_survives()
+    public async Task A_symlinked_user_settings_file_inside_the_config_dir_is_written_through_and_the_link_survives()
     {
-        var shared = f.Tree.Write("proj/shared/settings.json", "{}\n");
-        EditFixture.Link(f.ProjectSettings, shared);
-        var proposal = await f.Propose(EditFixture.Set("verbose", "project", true));
+        var shared = f.Tree.Write("config/.claude/shared/settings.json", "{}\n");
+        EditFixture.Link(f.UserSettings, shared);
+        var proposal = await f.Propose(EditFixture.Set("verbose", "user", true));
 
         var result = await f.Apply(proposal);
 
         Assert.Equal(EditStatus.Ok, result.Status);
         Assert.Equal(EditFixture.Real(shared), EditFixture.Text(proposal.Body["files"]![0]!["path"]));
-        Assert.NotNull(new FileInfo(f.ProjectSettings).LinkTarget);
+        Assert.NotNull(new FileInfo(f.UserSettings).LinkTarget);
         Assert.Equal("{\n  \"verbose\": true\n}\n", File.ReadAllText(shared));
         Assert.Equal(new[] { "settings.json" }, EditFixture.Names(Path.GetDirectoryName(shared)!));
+    }
+
+    [LinuxFact]
+    public async Task A_symlinked_project_settings_file_is_refused_even_inside_the_project()
+    {
+        var shared = f.Tree.Write("proj/shared/settings.json", "{}\n");
+        EditFixture.Link(f.ProjectSettings, shared);
+
+        var result = await f.Propose(EditFixture.Set("verbose", "project", true));
+
+        EditFixture.AssertInvalid(result, "verbose", "unsafe-target");
+        Assert.Equal("{}\n", File.ReadAllText(shared));
     }
 }

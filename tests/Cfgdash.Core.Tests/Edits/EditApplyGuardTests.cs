@@ -132,12 +132,12 @@ public sealed class EditApplyGuardTests : IDisposable
     [LinuxFact]
     public async Task Apply_is_stale_when_a_symlinked_settings_file_is_retargeted()
     {
-        var first = f.Tree.Write("proj/shared/a/settings.json", Sonnet);
-        var second = f.Tree.Write("proj/shared/b/settings.json", Sonnet);
-        EditFixture.Link(f.ProjectSettings, first);
-        var proposal = await f.Propose(EditFixture.Set("model", "project", "opus"));
-        File.Delete(f.ProjectSettings);
-        File.CreateSymbolicLink(f.ProjectSettings, second);
+        var first = f.Tree.Write("config/.claude/a/settings.json", Sonnet);
+        var second = f.Tree.Write("config/.claude/b/settings.json", Sonnet);
+        EditFixture.Link(f.UserSettings, first);
+        var proposal = await f.Propose(EditFixture.Set("model", "user", "opus"));
+        File.Delete(f.UserSettings);
+        File.CreateSymbolicLink(f.UserSettings, second);
 
         var result = await f.Apply(proposal);
 
@@ -159,5 +159,34 @@ public sealed class EditApplyGuardTests : IDisposable
         Assert.Equal(7, results.Count(r => r.Status == EditStatus.NotFound));
         Assert.Single(File.ReadAllLines(f.AuditPath));
         Assert.Equal("{\n  \"model\": \"opus\"\n}\n", File.ReadAllText(f.ProjectSettings));
+    }
+
+    [LinuxFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    public async Task A_failed_write_answers_write_failed_keeps_the_file_and_is_audited_as_failed()
+    {
+        f.WriteProject(Sonnet);
+        var proposal = await f.Propose(EditFixture.Set("model", "project", "opus"));
+        var dir = Path.GetDirectoryName(f.ProjectSettings)!;
+        var mode = File.GetUnixFileMode(dir);
+        File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        EditResult result;
+        try
+        {
+            result = await f.Apply(proposal);
+        }
+        finally
+        {
+            File.SetUnixFileMode(dir, mode);
+        }
+
+        Assert.Equal(EditStatus.WriteFailed, result.Status);
+        Assert.False(result.Wrote);
+        Assert.Equal("write-failed", (string?)result.Body["error"]);
+        Assert.Equal(Sonnet, File.ReadAllText(f.ProjectSettings));
+        var entry = Assert.Single(f.Service.ReadAudit(50)["entries"]!.AsArray())!;
+        Assert.Equal((string?)result.Body["auditId"], (string?)entry["auditId"]);
+        Assert.True((bool?)entry["failed"]);
+        Assert.Empty(entry["files"]!.AsArray());
     }
 }

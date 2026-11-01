@@ -54,7 +54,7 @@ internal sealed class EditTargets(MachineEnvironment environment, PlatformLocati
             || IsManaged(logical) || IsManaged(real)
             || Directory.Exists(real)
             || new FileInfo(real).LinkTarget is not null
-            || (Directory.Exists(parent) ? !PathUtil.IsUnder(parent, realRoot) : !PathUtil.PathEquals(parent, Path.Combine(realRoot, ".claude"))))
+            || (scope == "user" && Directory.Exists(parent) ? !PathUtil.IsUnder(parent, realRoot) : !PathUtil.PathEquals(parent, Path.Combine(realRoot, ".claude"))))
         {
             return null;
         }

@@ -17,8 +17,12 @@ internal static class EditCatalog
     private static readonly Regex EnvName = new("^[A-Za-z_][A-Za-z0-9_]{0,127}\\z", RegexOptions.CultureInvariant);
     private static readonly Regex PluginId = new("^[A-Za-z0-9][A-Za-z0-9._@+-]{0,199}\\z", RegexOptions.CultureInvariant);
     private static readonly (string Prefix, Regex Pattern)[] Templates = [(EnvPrefix, EnvName), (PluginPrefix, PluginId)];
-    private static readonly string[] UnsafeEnvPrefixes = ["LD_", "DYLD_"];
-    private static readonly string[] UnsafeEnvNames = ["BASH_ENV", "ENV", "NODE_OPTIONS", "PATH", "SHELL", "PYTHONPATH", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT"];
+    private static readonly string[] UnsafeEnvPrefixes = ["LD_", "DYLD_", "GIT_CONFIG"];
+    private static readonly string[] UnsafeEnvNames =
+    [
+        "BASH_ENV", "ENV", "NODE_OPTIONS", "NODE_PATH", "PATH", "SHELL", "PYTHONPATH", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT",
+        "JAVA_TOOL_OPTIONS", "DOTNET_STARTUP_HOOKS", "GIT_SSH_COMMAND", "GIT_ASKPASS", "PROMPT_COMMAND", "ZDOTDIR",
+    ];
     private static readonly Dictionary<string, SettingDefinition> ByKey = SettingsCatalogData.Settings.ToDictionary(s => s.Key, StringComparer.Ordinal);
 
     /// <summary>True for the <c>env.*</c> and <c>enabledPlugins.*</c> template entries.</summary>
@@ -72,7 +76,12 @@ internal static class EditCatalog
             case "bool":
                 return value?.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? null : "bad-type";
             case "number":
-                return value is JsonValue number && number.GetValueKind() == JsonValueKind.Number && number.TryGetValue<double>(out var d) && double.IsFinite(d) ? null : "bad-type";
+                if (value is not JsonValue number || number.GetValueKind() != JsonValueKind.Number || !number.TryGetValue<double>(out var d) || !double.IsFinite(d))
+                {
+                    return "bad-type";
+                }
+
+                return d < definition.Min || d > definition.Max || (definition.Integer && d != Math.Floor(d)) ? "out-of-range" : null;
             case "string":
                 return IsString(value) ? null : "bad-type";
             case "stringList":

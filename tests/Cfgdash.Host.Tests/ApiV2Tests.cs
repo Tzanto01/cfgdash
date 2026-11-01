@@ -160,13 +160,14 @@ public sealed class ApiV2Tests(EditsFixture fixture) : IClassFixture<EditsFixtur
     [Fact]
     public async Task Body_of_exactly_64_KiB_is_within_the_size_rule()
     {
-        var head = "{\"dir\":\"/\",\"changes\":[],\"pad\":\"";
+        var head = "{\"dir\":" + JsonSerializer.Serialize(Host.StartDir) + ",\"changes\":[],\"pad\":\"";
         var body = head + new string('a', 64 * 1024 - head.Length - 2) + "\"}";
         Assert.Equal(64 * 1024, Encoding.UTF8.GetByteCount(body));
 
         var response = await UiPostAsync("/api/v2/proposals", body);
 
-        Assert.NotEqual(403, response.Status);
+        Assert.Equal(400, response.Status);
+        Assert.Equal("bad-request", response.Reason);
     }
 
     [Theory]

@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
+using Cfgdash.Core.Environment;
 using Cfgdash.Core.Redaction;
+using Cfgdash.Core.Tests.Support;
 
 namespace Cfgdash.Core.Tests.Edits;
 
@@ -193,13 +195,12 @@ public sealed class EditSettingsReadTests : IDisposable
     }
 
     [Theory]
-    [InlineData("", true)]
-    [InlineData("?? .claude/settings.json\n", false)]
-    [InlineData("!! .claude/settings.json\n", false)]
-    public async Task A_file_counts_as_git_tracked_unless_git_reports_it_untracked_or_ignored(string status, bool tracked)
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task A_file_counts_as_git_tracked_only_when_git_finds_it_in_the_index(int exitCode, bool tracked)
     {
         using var g = new EditFixture(
-            processes: new StubProcessRunner(status),
+            processes: new StubProcessRunner(".claude/settings.json\n", exitCode),
             tools: new Dictionary<string, string> { ["git"] = "git" });
         g.Tree.Dir("proj/.git");
         g.WriteProject("{}\n");
@@ -251,5 +252,26 @@ public sealed class EditSettingsReadTests : IDisposable
         Assert.False((bool?)row["editable"] ?? true);
         Assert.Null(row["effective"]);
         Assert.DoesNotContain("machine", body["files"]!.AsArray().Select(x => EditFixture.Text(x!["scope"])));
+    }
+
+    [LinuxFact]
+    public async Task Git_tracking_is_read_from_the_index_without_running_repository_filters()
+    {
+        var marker = f.Tree.Path("filter-ran");
+        var globalConfig = f.Tree.Write("gitconfig", string.Empty);
+        using var g = new EditFixture(processes: new ProcessRunner(), tools: new Dictionary<string, string> { ["git"] = "git" });
+        g.WriteProject("{}\n");
+        TestGit.Run(g.Project, globalConfig, "init", "-q");
+        TestGit.Run(g.Project, globalConfig, "add", ".claude/settings.json");
+        TestGit.Run(g.Project, globalConfig, "commit", "-q", "-m", "init");
+        g.Tree.Write("proj/.gitattributes", ".claude/settings.json filter=planted\n");
+        File.AppendAllText(Path.Combine(g.Project, ".git", "config"), $"[filter \"planted\"]\n\tclean = touch '{marker}'\n");
+        File.SetLastWriteTimeUtc(g.ProjectSettings, new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var body = await Get(g);
+
+        var project = body["files"]!.AsArray().First(x => EditFixture.Text(x!["scope"]) == "project")!;
+        Assert.True((bool?)project["gitTracked"]);
+        Assert.False(File.Exists(marker));
     }
 }

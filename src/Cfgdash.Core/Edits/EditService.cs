@@ -119,7 +119,6 @@ internal sealed partial class EditService(
             return Invalid(null, "bad-request");
         }
 
-        var changes = new List<Change>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var files = new Dictionary<string, (EditTarget Target, List<Change> Changes)>(PathUtil.Comparer);
         var order = new List<string>();
@@ -172,7 +171,6 @@ internal sealed partial class EditService(
             }
 
             change = change with { Segments = segments };
-            changes.Add(change);
             if (!files.TryGetValue(target.Real, out var file))
             {
                 file = (target, []);
@@ -234,7 +232,7 @@ internal sealed partial class EditService(
         }
 
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, changes);
+        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)]);
         Store(id, proposal);
         return new EditResult(EditStatus.Ok, new JsonObject
         {
@@ -277,7 +275,7 @@ internal sealed partial class EditService(
         var now = time.GetUtcNow();
         var auditId = now.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "-" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
         var temps = new string?[proposal.Files.Count];
-        var written = new List<string>();
+        var written = new List<PlannedFile>();
         try
         {
             var editsDir = PrivateDirectory(Path.Combine(cacheDir, "edits"));
@@ -295,38 +293,25 @@ internal sealed partial class EditService(
                 temps[i] = WriteTemp(file);
             }
 
-            if (!proposal.Files.All(f => IsCurrent(proposal.Dir, f)))
-            {
-                return Error(EditStatus.Stale, "stale");
-            }
-
-            AppendAudit(new JsonObject
-            {
-                ["auditId"] = auditId,
-                ["at"] = IsoTime.Format(now),
-                ["listener"] = "ui",
-                ["files"] = Nodes(proposal.Files.Select(f => new JsonObject { ["path"] = f.Path, ["sha256Before"] = f.Sha256Before, ["sha256After"] = f.Sha256After })),
-                ["changes"] = Nodes(proposal.Changes.Select(c => new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = c.Unset ? "unset" : "set" })),
-            });
-
             for (var i = 0; i < proposal.Files.Count; i++)
             {
                 var file = proposal.Files[i];
                 if (!IsCurrent(proposal.Dir, file))
                 {
-                    return Failed(auditId, written);
+                    return written.Count == 0 ? Error(EditStatus.Stale, "stale") : Failed(auditId, now, proposal, written);
                 }
 
                 File.Move(temps[i]!, file.Target.Real, overwrite: true);
                 temps[i] = null;
-                written.Add(file.Path);
+                written.Add(file);
             }
 
+            AppendAudit(AuditLine(auditId, now, proposal, written, failed: false));
             return new EditResult(EditStatus.Ok, new JsonObject { ["applied"] = true, ["auditId"] = auditId }, Wrote: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            return Failed(auditId, written);
+            return Failed(auditId, now, proposal, written);
         }
         finally
         {
@@ -340,23 +325,38 @@ internal sealed partial class EditService(
         }
     }
 
-    private EditResult Failed(string auditId, List<string> written)
+    private EditResult Failed(string auditId, DateTimeOffset at, Proposal proposal, List<PlannedFile> written)
     {
         try
         {
-            AppendAudit(new JsonObject
-            {
-                ["auditId"] = auditId,
-                ["at"] = IsoTime.Format(time.GetUtcNow()),
-                ["failed"] = true,
-                ["written"] = Nodes(written.Select(p => JsonValue.Create(p))),
-            });
+            AppendAudit(AuditLine(auditId, at, proposal, written, failed: true));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
         }
 
-        return new EditResult(EditStatus.WriteFailed, new JsonObject { ["error"] = "write-failed", ["auditId"] = auditId }, Wrote: written.Count > 0);
+        return new EditResult(
+            EditStatus.WriteFailed,
+            new JsonObject { ["error"] = "write-failed", ["auditId"] = auditId, ["written"] = Nodes(written.Select(f => JsonValue.Create(f.Path))) },
+            Wrote: written.Count > 0);
+    }
+
+    private static JsonObject AuditLine(string auditId, DateTimeOffset at, Proposal proposal, List<PlannedFile> written, bool failed)
+    {
+        var line = new JsonObject
+        {
+            ["auditId"] = auditId,
+            ["at"] = IsoTime.Format(at),
+            ["listener"] = "ui",
+            ["files"] = Nodes(written.Select(f => new JsonObject { ["path"] = f.Path, ["sha256Before"] = f.Sha256Before, ["sha256After"] = f.Sha256After })),
+            ["changes"] = Nodes(proposal.Changes.Select(c => new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = c.Unset ? "unset" : "set" })),
+        };
+        if (failed)
+        {
+            line["failed"] = true;
+        }
+
+        return line;
     }
 
     private bool IsCurrent(string dir, PlannedFile file) =>

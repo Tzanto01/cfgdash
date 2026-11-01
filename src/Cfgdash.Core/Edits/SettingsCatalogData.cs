@@ -3,12 +3,13 @@ namespace Cfgdash.Core.Edits;
 internal sealed record SettingCategory(string Id, string Label);
 
 internal sealed record SettingDefinition(string Key, string Category, string Label, string Description, string Type,
-    IReadOnlyList<string>? Options, IReadOnlyList<string> Scopes, string Doc, string DocRead, IReadOnlyList<string>? UserOnlyOptions = null);
+    IReadOnlyList<string>? Options, IReadOnlyList<string> Scopes, string Doc, string DocRead, IReadOnlyList<string>? UserOnlyOptions = null,
+    double? Min = null, double? Max = null, bool Integer = false);
 
 /// <summary>
 /// Editable Claude Code settings.json keys, transcribed from the settings reference at
 /// https://code.claude.com/docs/en/settings-reference (read on 2026-11-01). Managed-only, global-config,
-/// object-typed, helper-command and credential-like keys are deliberately absent.
+/// object-typed, command-running, multi-field and credential-like keys are deliberately absent.
 /// </summary>
 internal static class SettingsCatalogData
 {
@@ -66,9 +67,9 @@ internal static class SettingsCatalogData
         E("awaySummaryEnabled", "notifications", "Away summary", "bool", Any, "awaysummaryenabled", "Shows a one-line recap after returning from a short absence."),
         E("axScreenReader", "interface", "Screen reader mode", "bool", UserOnly, "axscreenreader", "Renders flat screen-reader-friendly text with the classic renderer."),
         E("bashEditDiffEnabled", "interface", "Bash edit diffs", "bool", UserOnly, "basheditdiffenabled", "Records Git files changed by Bash for diffs and PostToolUse hooks; v2.1.269+."),
-        E("bashOutputMaxChars", "memory", "Bash output limit", "number", Any, "bashoutputmaxchars", "Inline limit for Bash or PowerShell output before saving to file; v2.1.261+."),
+        E("bashOutputMaxChars", "memory", "Bash output limit", "number", Any, "bashoutputmaxchars", "Inline limit for Bash or PowerShell output before saving to file; v2.1.261+.", min: 1, integer: true),
         E("claudeMdExcludes", "memory", "CLAUDE.md excludes", "stringList", Any, "claudemdexcludes", "Skips matching user, project, and local CLAUDE.md files."),
-        E("cleanupPeriodDays", "privacy", "Transcript cleanup period (days)", "number", Any, "cleanupperioddays", "Days before session transcripts are deleted; 0 fails validation."),
+        E("cleanupPeriodDays", "privacy", "Transcript cleanup period (days)", "number", Any, "cleanupperioddays", "Days before session transcripts are deleted; 0 fails validation.", min: 1, integer: true),
         E("companyAnnouncements", "interface", "Company announcements", "stringList", Any, "companyannouncements", "Startup announcements; one is picked at random per session."),
         E("defaultShell", "interface", "Default shell", "enum", Any, "defaultshell", "Shell for ! commands; powershell is the default on Windows without Bash.", ["bash", "powershell"]),
         E("dialogExpiry", "interface", "Dialog expiry", "enum", UserOnly, "dialogexpiry", "Deadline for forwarded dialogs, then cancels to a no-action default; v2.1.224+.", ["60s", "5m", "10m", "never"]),
@@ -93,10 +94,8 @@ internal static class SettingsCatalogData
         E("fallbackModel", "model", "Fallback models", "stringList", Any, "fallbackmodel", "Backup models tried in order when the primary is unavailable."),
         E("fastMode", "model", "Fast mode", "bool", Any, "fastmode", "Turns fast mode on where available."),
         E("feedbackDrafts", "privacy", "Feedback drafts", "enum", UserOnly, "feedbackdrafts", "Controls Claude-drafted feedback cards and queueing; default notify.", ["notify", "quiet", "off"]),
-        E("feedbackSurveyRate", "privacy", "Feedback survey rate", "number", Any, "feedbacksurveyrate", "Probability the session quality survey appears; 0 stops it."),
+        E("feedbackSurveyRate", "privacy", "Feedback survey rate", "number", Any, "feedbacksurveyrate", "Probability the session quality survey appears; 0 stops it.", min: 0, max: 1),
         E("fileCheckpointingEnabled", "memory", "File checkpointing", "bool", Any, "filecheckpointingenabled", "Snapshots files before edits so /rewind can restore them."),
-        E("fileSuggestion.type", "interface", "File suggestion type", "enum", Any, "filesuggestion", "Always \"command\".", ["command"]),
-        E("fileSuggestion.command", "interface", "File suggestion command", "string", Any, "filesuggestion", "Reads query on stdin; prints up to 15 paths within 5 seconds."),
         E("forceLoginGatewayUrl", "auth", "Login gateway URL", "string", UserOnly, "forcelogingatewayurl", "Gateway URL the /login Cloud gateway screen connects to."),
         E("forceLoginMethod", "auth", "Login method", "enum", Any, "forceloginmethod", "Restricts which account type can log in.", ["claudeai", "console", "gateway"]),
         E("httpHookAllowedEnvVars", "hooks", "HTTP hook allowed env vars", "stringList", Any, "httphookallowedenvvars", "Outer limit on variables HTTP hooks can place in headers."),
@@ -106,7 +105,7 @@ internal static class SettingsCatalogData
         E("isolatePeerMachines", "agents", "Isolate peer machines", "bool", Any, "isolatepeermachines", "Requires approval before SendMessage reaches a session on another machine; v2.1.224+."),
         E("language", "model", "Response language", "string", Any, "language", "Language Claude responds in; passed through without validation."),
         E("maxEffortLevel", "model", "Maximum effort level", "enum", Any, "maxeffortlevel", "Caps the effort level a session can use; v2.1.267+.", ["low", "medium", "high", "xhigh", "max"]),
-        E("maxProseWidth", "interface", "Maximum prose width", "number", Any, "maxprosewidth", "Wraps prose to this many columns; v2.1.282+."),
+        E("maxProseWidth", "interface", "Maximum prose width", "number", Any, "maxprosewidth", "Wraps prose to this many columns; v2.1.282+.", min: 1, integer: true),
         E("minimumVersion", "updates", "Minimum version", "string", Any, "minimumversion", "Prevents updates from installing any version below this one."),
         E("model", "model", "Default model", "string", Any, "model", "Model that new sessions start with."),
         E("modelPicker.replaceBuiltInOptions", "model", "Replace built-in model options", "bool", UserOnly, "modelpicker", "Replaces the built-in picker options when true."),
@@ -126,7 +125,6 @@ internal static class SettingsCatalogData
         E("preferredNotifChannel", "notifications", "Notification channel", "enum", Any, "preferrednotifchannel", "Chooses how completion and permission notifications appear; default auto.", ["auto", "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty", "notifications_disabled"]),
         E("prefersReducedMotion", "interface", "Reduced motion", "bool", Any, "prefersreducedmotion", "Reduces or disables spinner, shimmer, and flash animations."),
         E("prependPlugins", "plugins", "Prepend plugins", "stringList", UserOnly, "prependplugins", "Managed plugins that run before user-installed plugins, in listed order."),
-        E("processWrapper", "agents", "Process wrapper", "string", UserOnly, "processwrapper", "Puts a corporate launcher in front of background processes; ignored on Windows; v2.1.210+."),
         E("promptCacheTtl", "model", "Prompt cache TTL", "enum", Any, "promptcachettl", "Prompt cache lifetime for the main conversation; v2.1.242+.", ["5m", "1h"]),
         E("promptSuggestionEnabled", "interface", "Prompt suggestions", "bool", Any, "promptsuggestionenabled", "Shows or hides grayed-out prompt suggestions."),
         E("prUrlTemplate", "git", "PR URL template", "string", Any, "prurltemplate", "Points rendered PR links at another review tool."),
@@ -152,17 +150,16 @@ internal static class SettingsCatalogData
         E("sandbox.network.allowMachLookup", "sandbox", "Allow Mach lookup", "stringList", Any, "sandbox-network-allowmachlookup", "Extra XPC and Mach services the macOS sandbox may look up."),
         E("sandbox.network.allowUnixSockets", "sandbox", "Allow Unix sockets", "stringList", Any, "sandbox-network-allowunixsockets", "On macOS, socket paths commands may connect to; ignored on Linux and WSL2."),
         E("sandbox.network.deniedDomains", "sandbox", "Denied domains", "stringList", Any, "sandbox-network-denieddomains", "Blocks domains even when an allow entry matches."),
-        E("sandbox.network.httpProxyPort", "sandbox", "HTTP proxy port", "number", Any, "sandbox-network-httpproxyport", "Routes sandbox HTTP traffic through your own proxy."),
-        E("sandbox.network.socksProxyPort", "sandbox", "SOCKS proxy port", "number", Any, "sandbox-network-socksproxyport", "Routes sandbox SOCKS5 traffic through your own proxy."),
+        E("sandbox.network.httpProxyPort", "sandbox", "HTTP proxy port", "number", Any, "sandbox-network-httpproxyport", "Routes sandbox HTTP traffic through your own proxy.", min: 1, max: 65535, integer: true),
+        E("sandbox.network.socksProxyPort", "sandbox", "SOCKS proxy port", "number", Any, "sandbox-network-socksproxyport", "Routes sandbox SOCKS5 traffic through your own proxy.", min: 1, max: 65535, integer: true),
         E("sandbox.network.strictAllowlist", "sandbox", "Strict allowlist", "bool", UserOnly, "sandbox-network-strictallowlist", "true denies hosts outside the allowlist instead of prompting; v2.1.219+."),
         E("sandbox.network.tlsTerminate.caCertPath", "sandbox", "TLS terminate CA certificate path", "string", UserOnly, "sandbox-network-tlsterminate", "Path to the CA certificate used for TLS termination."),
-        E("sandbox.ripgrep.command", "sandbox", "Ripgrep command", "string", UserOnly, "sandbox-ripgrep", "Path to the ripgrep executable."),
         E("sandbox.ripgrep.args", "sandbox", "Ripgrep arguments", "stringList", UserOnly, "sandbox-ripgrep", "Optional arguments for the ripgrep binary."),
         E("showClearContextOnPlanAccept", "interface", "Clear context on plan accept", "bool", Any, "showclearcontextonplanaccept", "Adds a clear-context first option to the plan approval menu."),
         E("showThinkingSummaries", "model", "Show thinking summaries", "bool", Any, "showthinkingsummaries", "Shows full thinking summaries instead of a collapsed stub."),
         E("showTurnDuration", "interface", "Show turn duration", "bool", Any, "showturnduration", "Shows or hides the turn duration message."),
-        E("skillListingBudgetFraction", "memory", "Skill listing budget fraction", "number", Any, "skilllistingbudgetfraction", "Caps per-turn skill listing as a share of the context window."),
-        E("skillListingMaxDescChars", "memory", "Skill description character limit", "number", Any, "skilllistingmaxdescchars", "Caps characters of each skill description and when_to_use text."),
+        E("skillListingBudgetFraction", "memory", "Skill listing budget fraction", "number", Any, "skilllistingbudgetfraction", "Caps per-turn skill listing as a share of the context window.", min: 0, max: 1),
+        E("skillListingMaxDescChars", "memory", "Skill description character limit", "number", Any, "skilllistingmaxdescchars", "Caps characters of each skill description and when_to_use text.", min: 0, integer: true),
         E("skipAutoPermissionPrompt", "permissions", "Skip auto mode notice", "bool", UserOnly, "skipautopermissionprompt", "Skips the one-time notice shown when you enter auto mode yourself."),
         E("skipDangerousModePermissionPrompt", "permissions", "Skip bypassPermissions confirmation", "bool", UserLocal, "skipdangerousmodepermissionprompt", "Skips the bypassPermissions confirmation; Claude Code writes true after acceptance."),
         E("skipWebFetchPreflight", "privacy", "Skip WebFetch preflight", "bool", Any, "skipwebfetchpreflight", "Skips the WebFetch domain check that contacts api.anthropic.com."),
@@ -174,16 +171,7 @@ internal static class SettingsCatalogData
         E("spinnerTipsOverride.tipsFile", "interface", "Spinner tips file", "string", Any, "spinnertipsoverride", "JSON file of tips, read once per process."),
         E("spinnerTipsOverride.label", "interface", "Spinner tips label", "string", Any, "spinnertipsoverride", "Prefix for tips from user, --settings, and managed sources."),
         E("spinnerTipsOverride.excludeDefault", "interface", "Hide built-in spinner tips", "bool", Any, "spinnertipsoverride", "When true, hides the built-in tips."),
-        E("spinnerVerbs.mode", "interface", "Spinner verbs mode", "enum", Any, "spinnerverbs", "append adds to built-ins; replace shows only yours.", ["append", "replace"]),
-        E("spinnerVerbs.verbs", "interface", "Spinner verbs", "stringList", Any, "spinnerverbs", "The verbs; an empty list with replace keeps built-ins."),
-        E("statusLine.type", "interface", "Status line type", "enum", Any, "statusline", "Always \"command\".", ["command"]),
-        E("statusLine.command", "interface", "Status line command", "string", Any, "statusline", "Shell command whose output is shown in the status line."),
-        E("statusLine.padding", "interface", "Status line padding", "number", Any, "statusline", "Horizontal spacing."),
-        E("statusLine.refreshInterval", "interface", "Status line refresh interval", "number", Any, "statusline", "Re-runs the command periodically."),
-        E("statusLine.hideVimModeIndicator", "interface", "Hide vim mode indicator", "bool", Any, "statusline", "Hides the built-in vim mode indicator."),
         E("subagentPromptCacheTtl", "model", "Subagent prompt cache TTL", "enum", Any, "subagentpromptcachettl", "Cache lifetime for subagents and requests outside the main conversation.", ["5m", "1h"]),
-        E("subagentStatusLine.type", "interface", "Subagent status line type", "enum", Any, "subagentstatusline", "Always \"command\".", ["command"]),
-        E("subagentStatusLine.command", "interface", "Subagent status line command", "string", Any, "subagentstatusline", "Reads tasks JSON on stdin; writes back id and content lines."),
         E("switchModelsOnFlag", "model", "Switch models on flag", "bool", Any, "switchmodelsonflag", "Chooses fallback model switch or pause when a safety classifier flags a request."),
         E("syncClaudeAiPlugins", "plugins", "Sync claude.ai plugins", "bool", UserLocal, "syncclaudeaiplugins", "false stops loading account-synced plugins; v2.1.273+."),
         E("syncClaudeAiSkills", "plugins", "Sync claude.ai skills", "bool", UserLocal, "syncclaudeaiskills", "false stops loading account-synced skills; true matches unset."),
@@ -218,6 +206,6 @@ internal static class SettingsCatalogData
     ];
 
     private static SettingDefinition E(string key, string category, string label, string type, IReadOnlyList<string> scopes,
-        string anchor, string description, IReadOnlyList<string>? options = null) =>
-        new(key, category, label, description, type, options, scopes, Source + "#" + anchor, ReadOn);
+        string anchor, string description, IReadOnlyList<string>? options = null, double? min = null, double? max = null, bool integer = false) =>
+        new(key, category, label, description, type, options, scopes, Source + "#" + anchor, ReadOn, null, min, max, integer);
 }

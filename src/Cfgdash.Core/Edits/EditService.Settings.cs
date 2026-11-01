@@ -218,9 +218,8 @@ internal sealed partial class EditService
         var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
         var result = await processes.RunAsync(git,
             ["--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=", "--git-dir=" + Path.Combine(root, ".git"), "--work-tree=" + root,
-                "status", "--porcelain=v1", "--ignored", "--", relative],
+                "ls-files", "--error-unmatch", "--", relative],
             GitTimeout, cancellationToken);
-        return !result.TimedOut && result.ExitCode == 0
-            && !result.StandardOutput.StartsWith("??", StringComparison.Ordinal) && !result.StandardOutput.StartsWith("!!", StringComparison.Ordinal);
+        return !result.TimedOut && result.ExitCode == 0;
     }
 }
