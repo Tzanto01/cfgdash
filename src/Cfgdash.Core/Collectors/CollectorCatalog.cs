@@ -29,6 +29,9 @@ internal static class CollectorCatalog
             new CrontabCollector(),
             new SessionsTranscriptsCollector(CfgdashPaths.CacheDir(environmentReader)),
             new EngramMemoryCollector(),
+            new T3SettingsCollector(),
+            new CodexConfigCollector(environmentReader),
+            new OpenCodeConfigCollector(environmentReader),
         ];
     }
 }
