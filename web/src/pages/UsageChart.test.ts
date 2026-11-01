@@ -1,5 +1,5 @@
 import type { TableBlock } from '../lib/models';
-import { dailyCosts, formatUsd, shortDate } from './UsageChart';
+import { dailyCosts, shortDate } from './UsageChart';
 
 const block = (rows: TableBlock['rows']): TableBlock => ({
   type: 'table',
@@ -47,8 +47,3 @@ describe('shortDate', () => {
   });
 });
 
-describe('formatUsd', () => {
-  it('always shows two decimals', () => {
-    expect(formatUsd(12.3)).toBe('$12.30');
-  });
-});

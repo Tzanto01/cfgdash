@@ -29,7 +29,7 @@ export function shortDate(text: string): string {
 
 /** The `by-day` rows oldest first. */
 export function dailyCosts(block: TableBlock): DayCost[] {
-  return [...block.rows].reverse().map((row) => {
+  return [...(block.rows ?? [])].reverse().map((row) => {
     const date = row.cells['date'];
     const cost = row.cells['cost'];
     return {
@@ -107,7 +107,7 @@ export function UsageChart({ days }: { days: DayCost[] }) {
         {days.map((day, index) => {
           const x = LEFT + slot * index;
           const height = day.cost ? base - y(day.cost) : 0;
-          const showDate = (last - index) % 7 === 0;
+          const showDate = (last - index) % 7 === 0 && (index === last || last - index >= 7 || slot * 7 >= 56);
           const endLabel = index === last && days.length > 1;
           return (
             <g key={`${day.date}-${index}`}>

@@ -35,6 +35,19 @@ describe('findings store', () => {
     expect(healthTile()).not.toContain('1 critical');
   });
 
+  it('abandons a pending findings request when a refreshed snapshot arrives', async () => {
+    const h = await startApp(`/overview${DIR_QUERY}`);
+    await h.settle();
+    const first = h.pending(isFindings);
+
+    await h.click(h.button('Refresh'));
+    await h.answer('/api/v1/snapshot', makeSnapshot());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings({ counts: { critical: 3, warning: 0, info: 0 } }));
+
+    expect(first?.aborted).toBe(true);
+    expect(healthTile()).toContain('3 critical');
+  });
+
   it('drops the findings of the old folder and requests the new folder with its own dir', async () => {
     const h = await startApp(`/overview${DIR_QUERY}`);
     await answerWhenSent(h, '/api/v1/findings', makeFindings({ counts: { critical: 7, warning: 0, info: 0 } }));

@@ -97,6 +97,10 @@ describe('usage page', () => {
 
     expect(chart.tagName.toLowerCase()).toBe('svg');
     expect(chart.getAttribute('aria-label')).toBe('Cost per day for the last 3 days, from $0.00 to $2.00, total $3.50');
+    expect(chart.querySelectorAll('path')).toHaveLength(2);
+    expect([...chart.querySelectorAll('text')].map((t) => t.textContent)).toEqual(
+      expect.arrayContaining(['USD', '0.0', '2.0', 'Oct 3'])
+    );
   });
 
   it('renders the by-day, by-model, by-machine and by-project tables with their rows', async () => {

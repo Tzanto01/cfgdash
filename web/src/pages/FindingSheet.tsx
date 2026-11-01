@@ -58,7 +58,10 @@ export function FindingSheet({ finding, onClose }: { finding: Finding; onClose()
           <div className="flex flex-wrap gap-2">
             <Link
               to={findingHref(finding, url.dir)}
-              onClick={() => {
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                  return;
+                }
                 focus.handOff(false);
                 onClose();
               }}
