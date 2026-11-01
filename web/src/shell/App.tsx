@@ -1,5 +1,5 @@
 import { LazyMotion, MotionConfig } from 'motion/react';
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react';
 import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 'react-router';
 import { TooltipProvider } from '../components/ui/tooltip';
 import { setAccessProblem, useAccessProblem } from '../lib/access';
@@ -16,7 +16,8 @@ import { focusMainHeading, LoadingPanel, Shell } from './Shell';
 
 const FileSheet = lazy(() => import('./FileSheet'));
 const FolderPicker = lazy(() => import('./FolderPicker'));
-const CommandPalette = lazy(() => import('./CommandPalette'));
+const loadPalette = () => import('./CommandPalette');
+const CommandPalette = lazy(loadPalette);
 const SearchPage = lazy(() => import('../pages/SearchPage'));
 
 function isTyping(target: EventTarget | null): boolean {
@@ -46,6 +47,14 @@ function Root() {
   const params = readParams(location.search);
 
   useEffect(() => applyTheme(theme), [theme]);
+
+  const loaded = store.snapshot !== null;
+  const [Palette, setPalette] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (loaded) {
+      void loadPalette().then((m) => setPalette(() => m.default));
+    }
+  }, [loaded]);
 
   useEffect(() => {
     if (redirect) {
@@ -120,11 +129,14 @@ function Root() {
           <FolderPicker />
         </Suspense>
       )}
-      {paletteOpen && (
-        <Suspense fallback={null}>
-          <CommandPalette />
-        </Suspense>
-      )}
+      {paletteOpen &&
+        (Palette ? (
+          <Palette />
+        ) : (
+          <Suspense fallback={null}>
+            <CommandPalette />
+          </Suspense>
+        ))}
     </>
   );
 }
