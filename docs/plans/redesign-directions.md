@@ -75,3 +75,31 @@ Thesis: a status board; a tile grid shows the machine's live state with counts t
 - Ports: shadcn/ui sidebar, command, sheet, tabs, card, sonner (MIT); Magic UI number ticker (MIT); Motion; lucide.
 - Risks: most "template" look; most reduced-motion work; tile count misread as importance; 14px tile radius vs tight views; bottom tab bar hides views behind More.
 - Rejects: ambient motion, full-page gradients, decorative charts, ring gauges, mono-only Overview.
+
+## D. Control panel: C's style, A's clarity (revision 2)
+
+Requested by Nico on 2026-11-01: "keep the style of C and the cleanness of A". Thesis: C's identity (indigo palette, Instrument Sans, rounded surfaces, bento overview, route lineage, motion on change) on A's reading structure (ruled rows, mono values, one accent, color only where state lives).
+
+What makes C harder to read than A, and the fix in D:
+
+| C | A | D |
+|---|---|---|
+| Settings as a grid of key cards | One ruled row per key | A's rows, inside one rounded section card per group |
+| Icon rail hides labels | Labelled 208px sidebar | Labelled 208px sidebar in C's style (accent-tint active pill, count pills), collapsible to C's 64px rail |
+| Route with connectors and accent ring in every card | Compact four-cell strip | Strip in rows (C's rounded nodes, no connectors, no ring); full route only in the expanded row and the palette preview |
+| Health as list plus detail pane | Severity table | C's segmented severity bar on top, A's table below, detail in the side sheet |
+| Accent on tiles, bars and rings | Accent only for action and focus | Accent for action, focus, active nav and token bars; no accent rings except focus |
+
+- Tokens: C's palette unchanged (light and dark), C's fonts (Instrument Sans for UI 14/20, JetBrains Mono 12.5/18 for keys, values, paths and numbers in tables).
+- Shell: header 52px (C: folder pill, machine, Search Ctrl K, theme, Edit). Sidebar 208px on `surface`, sentence-case group labels 12/16 500 muted, items 36px with 8px radius, active item accent tint plus accent text, counts as small pills.
+- Views: page head (h1 24/30 600, muted count), a toolbar with filter and chips, then one card per section (`surface`, 1px `border`, 8px radius) with a 40px section header (14/20 600, sentence case) and A-style rows inside: 32px high (44px coarse), 1px rules, no row radius, columns key / value / lineage / flags. Selection: `hover` background plus a 2px accent inset on the left.
+- Lineage in rows: four 18px nodes, 5px radius, 1.5px border in the layer color, 2px gap, no connectors. Winner filled; overridden outlined with a struck glyph; not set dotted and dim; merged half-filled. Expanded row (inline, `raised`): C's route with 12px connectors (dashed into overridden layers) above A's contribution lines and "Open file".
+- Flag badges: 22px pills, 12px sans, icon plus label, tint plus status border.
+- Instructions: one card. Header: total in 28/32 600 tabular "4,600 tok est." with C's segmented bar (one segment per loaded file). Rows: A's tree table with 96x6 bars, 3px radius, accent at 70%; error node dashed danger outline; referenced file faint and not counted.
+- Overview: C's bento (4 columns, 12px gap, 12px tile radius, no shadows). Tile numbers 32/36 600 tabular, labels 12/16 muted; Health 2x2 with the segmented bar and the top two findings as A-style rows; Identity 2x1 in mono; Collectors 2x1 with reasons. No accent ring on tiles; only focus shows a ring.
+- Health: segmented severity bar with counts as text, then a card with A's table (severity icon plus word, rule mono, target copyable, message, Open); `j`/`k` and Enter; detail opens the side sheet.
+- Diff review: C's `raised` card (8px radius) with a 40px sticky file header (path, scope pill, "dry run", `+n -n`) and a collapsible hunk row; A's diff body (two 40px gutters, `+`/`-` column, 14% tints). Pinned Apply bar: C's floating 64px footer card.
+- Palette: C's 640px dialog, 12px radius, results plus preview pane above 768px (preview shows the route); 36px items with 8px radius highlight; A's footer hints.
+- Motion: C's grammar on the Overview only (tickers 600ms after a refresh, one border pulse, springs for sheet and palette); inside views A's 100ms feedback and the 400ms row tint flash. Reduced motion as in A and C.
+- 375 px: C's 48px top bar and 56px bottom tab bar; A's stacked rows (key and lineage on line 1, value on line 2, flags on line 3); bento 2-up with Health full width.
+- Rejects: card grids for lists, connectors and rings in dense rows, ambient motion, uppercase tracked labels.
