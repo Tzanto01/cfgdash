@@ -1,5 +1,6 @@
-import { makeSnapshot } from '../test/fixtures';
+import { makeFindings, makeSnapshot } from '../test/fixtures';
 import { startApp } from '../test/harness';
+import { answerWhenSent } from '../test/lazy';
 
 const SELECTED = 'D%3A%2Fws%2Fapp';
 
@@ -33,6 +34,22 @@ describe('overview', () => {
     expect(tile('Other')?.getAttribute('href')).toBe(`/other?dir=${SELECTED}`);
     expect(tile('Jobs')).toBeUndefined();
     expect(tile('Overview')).toBeUndefined();
+  });
+
+  it('shows the three severity counts and the first two findings in the Health tile, linking to /health with the folder, and has no count tile for Health', async () => {
+    const h = await startApp(`/overview?dir=${SELECTED}`);
+    await answerWhenSent(h, '/api/v1/findings', makeFindings({ counts: { critical: 1, warning: 5, info: 9 } }));
+    const health = [...h.el.querySelectorAll('section')].find((s) => s.querySelector('h2')?.textContent === 'Health');
+    const links = [...(health?.querySelectorAll('a') ?? [])];
+
+    expect(health?.textContent).toMatch(/1 critical.*5 warning.*9 info/);
+    expect(links).toHaveLength(3);
+    expect(links[0].textContent).toBe('View all findings');
+    expect(links[1].textContent).toMatch(/^Critical\s*Hook script not found$/);
+    expect(links[2].textContent).toMatch(/^Warning\s*Setting overridden$/);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(Array(3).fill(`/health?dir=${SELECTED}`));
+    expect(health?.textContent).not.toContain('Collector unavailable');
+    expect(tile('Health')).toBeUndefined();
   });
 
   it('counts the items of each view in its tile and flags unavailable sources', async () => {

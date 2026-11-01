@@ -1,25 +1,27 @@
-import type { Snapshot } from '../lib/models';
-import { makeSnapshot } from '../test/fixtures';
+import type { CollectorStatus, Snapshot } from '../lib/models';
+import { makeFindings, makeSnapshot } from '../test/fixtures';
 import { startApp } from '../test/harness';
+import { answerWhenSent } from '../test/lazy';
 
-const navLabels = () =>
-  [...document.querySelectorAll('nav[aria-label="Views"] a')].map((a) => a.querySelector('span')?.textContent?.trim());
+const navLinks = () => [...document.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Views"] a')];
+const navLabels = () => navLinks().map((a) => a.querySelector('span')?.textContent?.trim());
+const navLink = (label: string) => navLinks().find((a) => a.querySelector('span')?.textContent?.trim() === label);
+const groupOf = (label: string) => navLink(label)?.closest('div')?.querySelector('p')?.textContent;
 
 const interactiveNames = () =>
   [...document.querySelectorAll('a, button')].map((e) => (e.getAttribute('aria-label') ?? e.textContent ?? '').replace(/\s+/g, ' ').trim());
 
-function withUsage(): Snapshot {
-  const snapshot = makeSnapshot();
-  snapshot.collectors.push({ id: 'usage.local', title: 'usage.local', version: '1.0.0', view: 'usage', state: 'active', requirements: {}, durationMs: 1 });
-  snapshot.sections = [
-    ...snapshot.sections,
-    {
-      collectorId: 'usage.local',
-      view: 'usage',
-      title: 'Usage',
-      blocks: [{ type: 'kv', id: 'usage', title: 'Usage', rows: [{ key: 'calls', value: '3' }] }]
-    }
-  ];
+function withView(snapshot: Snapshot, view: string, state: CollectorStatus['state'], title: string): Snapshot {
+  const collectorId = `${view}.main`;
+  snapshot.collectors.push({ id: collectorId, title, version: '1.0.0', view, state, requirements: {}, durationMs: 1 });
+  if (state === 'active') {
+    snapshot.sections.push({
+      collectorId,
+      view,
+      title,
+      blocks: [{ type: 'kv', id: `${view}-kv`, title: `${title} settings`, rows: [{ key: 'calls', value: '3' }] }]
+    });
+  }
   return snapshot;
 }
 
@@ -27,7 +29,84 @@ describe('navigation', () => {
   it('lists nav views in contract order, adds Other for unknown ids and hides notPresent-only views', async () => {
     await startApp('/overview');
 
-    expect(navLabels()).toEqual(['Overview', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+  });
+
+  it('lists Health under Machine', async () => {
+    await startApp('/overview');
+
+    expect(groupOf('Health')).toBe('Machine');
+  });
+
+  it.each([
+    ['t3', 'T3 Code'],
+    ['codex', 'Codex'],
+    ['opencode', 'OpenCode']
+  ])('lists the active %s collector as %s under Harness and renders its sections at its own path', async (view, label) => {
+    const h = await startApp('/overview', withView(makeSnapshot(), view, 'active', label));
+
+    expect(groupOf(label)).toBe('Harness');
+    await h.navigate(`/${view}`);
+    expect(h.el.querySelector('main h1')?.textContent).toBe(label);
+    expect(h.text()).toContain(`${label} settings`);
+    expect(h.text()).toContain('calls');
+  });
+
+  it('orders T3 Code, Codex and OpenCode by the contract, after Hooks and before Other', async () => {
+    const snapshot = makeSnapshot();
+    withView(snapshot, 'opencode', 'active', 'OpenCode');
+    withView(snapshot, 't3', 'active', 'T3 Code');
+    withView(snapshot, 'codex', 'active', 'Codex');
+    await startApp('/overview', snapshot);
+
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'T3 Code', 'Codex', 'OpenCode', 'Other']);
+  });
+
+  it('hides T3 Code, Codex and OpenCode whose collectors are not on this machine', async () => {
+    const snapshot = makeSnapshot();
+    withView(snapshot, 't3', 'notPresent', 'T3 Code');
+    withView(snapshot, 'codex', 'notPresent', 'Codex');
+    withView(snapshot, 'opencode', 'notPresent', 'OpenCode');
+    await startApp('/overview', snapshot);
+
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+  });
+
+  it('lists Usage under Activity between Sessions and Memory when its collector is active', async () => {
+    const snapshot = makeSnapshot();
+    withView(snapshot, 'memory', 'active', 'Memory');
+    withView(snapshot, 'usage', 'active', 'Usage');
+    withView(snapshot, 'sessions', 'active', 'Sessions');
+    await startApp('/overview', snapshot);
+
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Sessions', 'Usage', 'Memory', 'Other']);
+    expect(groupOf('Usage')).toBe('Activity');
+  });
+
+  it('hides Usage when its collector is not on this machine', async () => {
+    await startApp('/overview', withView(makeSnapshot(), 'usage', 'notPresent', 'Usage'));
+
+    expect(navLabels()).not.toContain('Usage');
+  });
+
+  it.each([
+    [{ critical: 1, warning: 2, info: 5 }, '3 findings need attention'],
+    [{ critical: 0, warning: 1, info: 0 }, '1 finding needs attention']
+  ])('badges the Health entry with the critical and warning findings: %j', async (counts, text) => {
+    const h = await startApp('/overview');
+
+    await answerWhenSent(h, '/api/v1/findings', makeFindings({ counts }));
+
+    expect(navLink('Health')?.textContent).toContain(text);
+  });
+
+  it('shows no Health badge before the findings load or when only info findings exist', async () => {
+    const h = await startApp('/overview');
+
+    expect(navLink('Health')?.textContent?.trim()).toBe('Health');
+    await answerWhenSent(h, '/api/v1/findings', makeFindings({ counts: { critical: 0, warning: 0, info: 5 } }));
+
+    expect(navLink('Health')?.textContent?.trim()).toBe('Health');
   });
 
   it('marks the current view in the nav', async () => {
@@ -47,26 +126,21 @@ describe('navigation', () => {
   });
 
   it('puts a view id this UI does not know under Other and never in the nav as its own entry', async () => {
-    const h = await startApp('/overview', withUsage());
+    const h = await startApp('/overview', withView(makeSnapshot(), 'omega', 'active', 'Omega'));
 
-    expect(navLabels()).toEqual(['Overview', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
     await h.navigate('/other');
     expect(h.el.querySelector('main h1')?.textContent).toBe('Other');
-    expect([...h.el.querySelectorAll('main h2')].map((e) => e.textContent)).toEqual(['zeta', 'usage']);
+    expect([...h.el.querySelectorAll('main h2')].map((e) => e.textContent)).toEqual(['zeta', 'omega']);
     expect(h.text()).toContain('calls');
   });
 
-  it.each(['/overview', '/settings', '/other', '/hooks'])('offers no Health, Usage or Edit link or button on %s', async (path) => {
-    const h = await startApp(path, withUsage());
+  it.each(['/overview', '/settings', '/other', '/hooks'])('offers a Health link and no Edit link or button on %s', async (path) => {
+    const h = await startApp(path);
 
-    expect(interactiveNames().filter((name) => /^(health|usage|edit)\b/i.test(name))).toEqual([]);
-    expect(h.el.querySelector('nav[aria-label="Views"]')?.textContent).not.toMatch(/health|usage|edit/i);
-  });
-
-  it('shows no Health tile on the overview', async () => {
-    const h = await startApp('/overview');
-
-    expect(h.text()).not.toMatch(/health/i);
+    expect(interactiveNames().filter((name) => /^edit\b/i.test(name))).toEqual([]);
+    expect(h.el.querySelector('nav[aria-label="Views"]')?.textContent).not.toMatch(/edit/i);
+    expect(navLink('Health')?.getAttribute('href')).toBe('/health');
   });
 });
 
