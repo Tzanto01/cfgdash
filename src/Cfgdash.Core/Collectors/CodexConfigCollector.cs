@@ -220,7 +220,7 @@ internal sealed class CodexConfigCollector(IEnvironmentReader environmentReader)
         string? target = null;
         if (ToolConfig.Text(entry["command"]) is { } command)
         {
-            var args = (entry["args"] as JsonArray)?.Select(a => ToolConfig.Text(a) ?? a?.ToJsonString() ?? "null") ?? [];
+            var args = (redactor.RedactJson(entry["args"]) as JsonArray)?.Select(a => ToolConfig.Text(a) ?? a?.ToJsonString() ?? "null") ?? [];
             target = string.Join(' ', [command, .. args]);
         }
         else

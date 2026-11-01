@@ -399,7 +399,7 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
                 break;
             }
 
-            var mcpTarget = server["command"] is JsonArray command
+            var mcpTarget = redactor.RedactJson(server["command"]) is JsonArray command
                 ? string.Join(' ', command.Select(a => ToolConfig.Text(a) ?? a?.ToJsonString() ?? "null"))
                 : ToolConfig.Text(server["command"]) ?? ToolConfig.Text(server["url"]);
             var winner = Winner("mcp", name);
