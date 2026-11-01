@@ -6,6 +6,7 @@ import { formatRelative, formatTime } from '../lib/format';
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { VIEW_GROUPS } from '../lib/views';
+import { useFindings } from '../state/findings';
 import { useNow } from '../state/hooks';
 import { useSnapshotStore } from '../state/snapshot';
 import { useUi } from '../state/ui';
@@ -14,6 +15,10 @@ import { useUi } from '../state/ui';
 export function NavList({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?(): void }) {
   const store = useSnapshotStore();
   const url = useUrl();
+  const findings = useFindings();
+  const counts = findings.request.phase === 'error' ? undefined : findings.findings?.counts;
+  const critical = counts?.critical ?? 0;
+  const attention = critical + (counts?.warning ?? 0);
   return (
     <nav aria-label="Views" className="space-y-4">
       {VIEW_GROUPS.map((group) => {
@@ -49,7 +54,28 @@ export function NavList({ collapsed = false, onNavigate }: { collapsed?: boolean
                         <span className="sr-only">, has an unavailable source</span>
                       </>
                     )}
-                    {!collapsed && (
+                    {view.id === 'health' ? (
+                      attention > 0 && (
+                        <>
+                          {collapsed ? (
+                            <span className={cn('size-2 shrink-0 rounded-full', critical ? 'bg-danger' : 'bg-warn')} aria-hidden="true" />
+                          ) : (
+                            <span
+                              className={cn(
+                                'shrink-0 rounded-full border px-1 font-mono text-[10px] leading-4 tabular',
+                                critical ? 'tint-danger border-danger text-danger' : 'tint-warn border-warn text-warn'
+                              )}
+                              aria-hidden="true"
+                            >
+                              {attention}
+                            </span>
+                          )}
+                          <span className="sr-only">
+                            , {attention} {attention === 1 ? 'finding needs' : 'findings need'} attention
+                          </span>
+                        </>
+                      )
+                    ) : !collapsed && (
                       <span className="shrink-0 rounded-full border border-border bg-raised px-1 font-mono text-[10px] leading-4 text-muted tabular">
                         {view.itemCount}
                         <span className="sr-only"> items</span>

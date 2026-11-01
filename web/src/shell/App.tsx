@@ -9,6 +9,7 @@ import { VIEW_DEFINITIONS } from '../lib/views';
 import { OverviewPage } from '../pages/OverviewPage';
 import { ViewPage } from '../pages/ViewPage';
 import { AnnouncerProvider, useAnnounce } from '../state/announcer';
+import { FindingsProvider } from '../state/findings';
 import { SnapshotProvider, useSnapshotStore } from '../state/snapshot';
 import { applyTheme, useTheme } from '../state/theme';
 import { UiProvider, useUi } from '../state/ui';
@@ -20,6 +21,9 @@ const FolderPicker = lazy(() => import('./FolderPicker'));
 const loadPalette = () => import('./CommandPalette');
 const CommandPalette = lazy(loadPalette);
 const SearchPage = lazy(() => import('../pages/SearchPage'));
+const HealthPage = lazy(() => import('../pages/HealthPage'));
+const UsagePage = lazy(() => import('../pages/UsagePage'));
+const SettingsEditor = lazy(() => import('../pages/SettingsEditor'));
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -32,7 +36,7 @@ function needsRedirect(pathname: string): boolean {
 
 function pageTitle(pathname: string): string {
   const id = pathname.split('/').filter(Boolean)[0];
-  return id === 'search' ? 'Search' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
+  return id === 'search' ? 'Search' : id === 'edit' ? 'Edit settings' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
 }
 
 function Root() {
@@ -156,15 +160,17 @@ export function App() {
   return (
     <AnnouncerProvider>
       <SnapshotProvider>
-        <UiProvider>
-          <TooltipProvider delayDuration={300}>
-            <LazyMotion features={loadMotionFeatures} strict>
-              <MotionConfig reducedMotion="user">
-                <Root />
-              </MotionConfig>
-            </LazyMotion>
-          </TooltipProvider>
-        </UiProvider>
+        <FindingsProvider>
+          <UiProvider>
+            <TooltipProvider delayDuration={300}>
+              <LazyMotion features={loadMotionFeatures} strict>
+                <MotionConfig reducedMotion="user">
+                  <Root />
+                </MotionConfig>
+              </LazyMotion>
+            </TooltipProvider>
+          </UiProvider>
+        </FindingsProvider>
       </SnapshotProvider>
     </AnnouncerProvider>
   );
@@ -197,6 +203,30 @@ export const routes: RouteObject[] = [
         element: (
           <Suspense fallback={<LoadingPanel text="Loading search..." />}>
             <SearchPage />
+          </Suspense>
+        )
+      },
+      {
+        path: 'health',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading health..." />}>
+            <HealthPage />
+          </Suspense>
+        )
+      },
+      {
+        path: 'usage',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading usage..." />}>
+            <UsagePage />
+          </Suspense>
+        )
+      },
+      {
+        path: 'edit',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading settings..." />}>
+            <SettingsEditor />
           </Suspense>
         )
       },

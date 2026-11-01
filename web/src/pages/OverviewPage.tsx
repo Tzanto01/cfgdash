@@ -1,4 +1,4 @@
-import { CircleDot, Monitor } from 'lucide-react';
+import { CircleDot, HeartPulse, Monitor } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { StateChip } from '../blocks/Badges';
@@ -6,9 +6,11 @@ import { formatCount, formatRelative, formatTime } from '../lib/format';
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { navViewId, type ViewModel } from '../lib/views';
+import { useFindings } from '../state/findings';
 import { useNow, useReducedMotion } from '../state/hooks';
 import { useSnapshotStore } from '../state/snapshot';
 import { SectionCard } from './SectionCard';
+import { SeverityBar, SeverityLabel } from './SeverityBar';
 import { useReveal } from './useReveal';
 
 const TILE = 'rounded-xl border border-border bg-surface p-4';
@@ -16,7 +18,7 @@ const TILE_LABEL = 'flex items-center gap-2 text-xs font-medium text-muted [&_sv
 
 /** Previous item counts of the views whose count changed with the last refresh of folder `dir`; empty on first paint and after a folder change. */
 function useChangedCounts(views: ViewModel[], refreshes: number, dir: string | undefined): Map<string, number> {
-  const counts = useMemo(() => new Map(views.map((v) => [v.id, v.itemCount])), [views]);
+  const counts = useMemo(() => new Map(views.filter((v) => v.id !== 'health').map((v) => [v.id, v.itemCount])), [views]);
   const previous = useRef({ refreshes, counts, dir });
   const [changed, setChanged] = useState({ dir, counts: new Map<string, number>() });
   useEffect(() => {
@@ -79,7 +81,7 @@ export function OverviewPage() {
   }
 
   const collectorsById = new Map(s.collectors.map((c) => [c.id, c]));
-  const tiles = store.navViews.filter((v) => v.id !== 'overview');
+  const tiles = store.navViews.filter((v) => v.id !== 'overview' && v.id !== 'health');
   const active = s.collectors.filter((c) => c.state === 'active').length;
   const nonActive = s.collectors.filter((c) => c.state !== 'active');
   const collected = formatTime(s.machine.collectedAt);
@@ -119,6 +121,8 @@ export function OverviewPage() {
             <span>cfgdash {s.machine.cfgdashVersion}</span>
           </p>
         </section>
+
+        <HealthTile />
 
         {tiles.map((view) => {
           const Icon = view.icon;
@@ -201,6 +205,49 @@ export function OverviewPage() {
         </div>
       )}
     </>
+  );
+}
+
+function HealthTile() {
+  const health = useFindings();
+  const url = useUrl();
+  const response = health.request.phase === 'error' ? null : health.findings;
+  return (
+    <section className={cn(TILE, 'col-span-2 lg:row-span-2')} aria-labelledby="health-title">
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="health-title" className={TILE_LABEL}>
+          <HeartPulse strokeWidth={1.75} aria-hidden="true" />
+          Health
+        </h2>
+        <Link to={url.link('/health')} className="touch-target text-xs text-accent hover:underline">
+          View all<span className="sr-only"> findings</span>
+        </Link>
+      </div>
+      {health.request.phase === 'error' ? (
+        <p className="mt-3 text-muted">Couldn't load findings</p>
+      ) : !response ? (
+        <p className="mt-3 text-muted">Checking...</p>
+      ) : (
+        <>
+          <SeverityBar counts={response.counts} className="mt-3" />
+          {response.findings.length > 0 && (
+            <ul className="mt-3">
+              {response.findings.slice(0, 2).map((finding) => (
+                <li key={finding.id} className="border-t border-border">
+                  <Link
+                    to={url.link('/health')}
+                    className="touch-row flex items-center gap-3 py-1.5 transition-colors duration-100 hover:bg-hover"
+                  >
+                    <SeverityLabel severity={finding.severity} className="w-20 shrink-0 text-xs" />
+                    <span className="min-w-0 flex-1 truncate">{finding.title}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

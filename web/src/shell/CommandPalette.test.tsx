@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { DirSuggestion, SearchHit } from '../lib/models';
-import { FILE_USER } from '../test/fixtures';
+import type { CollectorStatus, DirSuggestion, SearchHit, Snapshot } from '../lib/models';
+import { FILE_USER, makeSnapshot } from '../test/fixtures';
 import { startApp, type AppHarness } from '../test/harness';
 import { answerWhenSent, currentParams } from '../test/lazy';
 
@@ -31,8 +31,8 @@ const fileHit: SearchHit = {
   snippet: 'sonnet in a file'
 };
 
-async function openPalette(url = '/overview', suggestions: DirSuggestion[] = []) {
-  const h = await startApp(url);
+async function openPalette(url = '/overview', suggestions: DirSuggestion[] = [], snapshot: Snapshot = makeSnapshot()) {
+  const h = await startApp(url, snapshot);
   await user().keyboard('{Control>}k{/Control}');
   await screen.findByRole('dialog', { name: 'Search cfgdash' });
   await answerWhenSent(h, '/api/v1/dirs', dirsReply(suggestions));
@@ -112,12 +112,28 @@ describe('entries', () => {
     await waitFor(() => expect(palette()).toBeNull());
   });
 
-  it('offers no Health, Usage or Edit entry', async () => {
-    await openPalette();
+  it('offers Health as a view entry that opens it with the folder, and no Edit entry', async () => {
+    const h = await openPalette(`/overview${DIR_QUERY}`);
     const names = screen.getAllByRole('option').map((o) => o.textContent ?? '');
 
-    expect(names.length).toBeGreaterThan(0);
-    expect(names.filter((name) => /health|usage|edit/i.test(name))).toEqual([]);
+    expect(names.filter((name) => /\bedit/i.test(name))).toEqual([]);
+    expect(names.some((name) => name.startsWith('Health'))).toBe(true);
+    await h.click(option('Health'));
+
+    expect(h.url()).toBe(`/health${DIR_QUERY}`);
+  });
+
+  it.each<[CollectorStatus['state'], boolean]>([
+    ['active', true],
+    ['notPresent', false]
+  ])('with the usage collector %s the Usage entry is offered: %s', async (state: CollectorStatus['state'], offered: boolean) => {
+    const snapshot = makeSnapshot();
+    snapshot.collectors.push({ id: 'usage.metrics', title: 'Usage and cost', version: '1.0.0', view: 'usage', state, requirements: {}, durationMs: 1 });
+    await openPalette('/overview', [], snapshot);
+
+    const names = screen.getAllByRole('option').map((o) => o.textContent ?? '');
+
+    expect(names.some((name) => name.startsWith('Usage'))).toBe(offered);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Block, CollectorStatus, FileRef, Section, Snapshot, TableRow } from '../lib/models';
+import type { Block, CollectorStatus, FileRef, FindingsResponse, Section, Snapshot, TableRow } from '../lib/models';
 
 export const FILE_USER = '0f1e2d3c4b5a6978';
 export const FILE_LOCAL = 'a1b2c3d4e5f60718';
@@ -138,6 +138,48 @@ const sections: Section[] = [
   }
 ];
 
+/**
+ * Findings for the folder of `makeSnapshot()`: a critical one on a hooks table row (with a file), a warning on a settings
+ * kv row (by key) and an info one with collector-only evidence.
+ */
+export function makeFindings(overrides: Partial<FindingsResponse> = {}): FindingsResponse {
+  return {
+    dir: 'D:/ws/app',
+    collectedAt: '2026-10-27T10:00:00Z',
+    counts: { critical: 1, warning: 1, info: 1 },
+    findings: [
+      {
+        id: 'missing-script:hooks.registered:hooks:h-alpha',
+        rule: 'missing-script',
+        severity: 'critical',
+        title: 'Hook script not found',
+        detail: 'alpha.ps1 does not exist.',
+        evidence: { collectorId: 'hooks.registered', blockId: 'hooks', itemId: 'h-alpha', fileId: FILE_HOOK },
+        view: 'hooks'
+      },
+      {
+        id: 'overridden:settings.effective:effective:model',
+        rule: 'overridden',
+        severity: 'warning',
+        title: 'Setting overridden',
+        detail: 'model is set in more than one layer.',
+        evidence: { collectorId: 'settings.effective', blockId: 'effective', key: 'model' },
+        view: 'settings'
+      },
+      {
+        id: 'collector-unavailable:agents.company-core',
+        rule: 'collector-unavailable',
+        severity: 'info',
+        title: 'Collector unavailable',
+        detail: 'agents.company-core: pwsh not installed',
+        evidence: { collectorId: 'agents.company-core' },
+        view: 'agents'
+      }
+    ],
+    ...overrides
+  };
+}
+
 /** A synthetic snapshot; views listed in the contract order differ from the order of the collectors on purpose. */
 export function makeSnapshot(overrides: { hostname?: string; targetDir?: string } = {}): Snapshot {
   return {
@@ -158,7 +200,7 @@ export function makeSnapshot(overrides: { hostname?: string; targetDir?: string 
       collector('settings.effective', 'settings', 'active', undefined, true),
       collector('overview.machine', 'overview', 'active')
     ],
-    sections,
+    sections: [...sections],
     files: [
       file(FILE_USER, 'C:/Users/user/.claude/settings.json', 'settings'),
       file(FILE_LOCAL, 'D:/ws/app/.claude/settings.local.json', 'settings'),

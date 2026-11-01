@@ -1,24 +1,45 @@
 import { setAccessProblem } from './access';
-import type { DetailContent, DirsResponse, FileContent, SearchResponse, Snapshot } from './models';
+import type {
+  ApplyResult,
+  DetailContent,
+  DirsResponse,
+  FileContent,
+  FindingsResponse,
+  HealthInfo,
+  Proposal,
+  SearchResponse,
+  SettingChange,
+  SettingsResponse,
+  Snapshot
+} from './models';
 
 /** A non-2xx answer (`status` > 0) or a network failure (`status` 0). */
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly reason?: string;
+  /** The rest of the error body (for example `key`, `auditId`, `written` of `/api/v2`). */
+  readonly body?: Record<string, unknown>;
 
-  constructor(status: number, code?: string, reason?: string) {
+  constructor(status: number, code?: string, reason?: string, body?: Record<string, unknown>) {
     super(`API error ${status}${code ? ` ${code}` : ''}`);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.reason = reason;
+    this.body = body;
   }
 }
 
 /** True for an error caused by aborting the request; never shown as an error state. */
 export function isAbort(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
+}
+
+function errorFrom(status: number, body: Record<string, unknown> | null): ApiError {
+  const code = body?.['error'];
+  const reason = body?.['reason'];
+  return new ApiError(status, typeof code === 'string' ? code : undefined, typeof reason === 'string' ? reason : undefined, body ?? undefined);
 }
 
 async function get<T>(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
@@ -37,16 +58,40 @@ async function get<T>(path: string, params: URLSearchParams, signal?: AbortSigna
     throw new ApiError(0);
   }
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: unknown; reason?: unknown } | null;
-    const code = typeof body?.error === 'string' ? body.error : undefined;
-    const reason = typeof body?.reason === 'string' ? body.reason : undefined;
-    const error = new ApiError(response.status, code, reason);
+    const error = errorFrom(response.status, await response.json().catch(() => null));
     if (!signal?.aborted) {
       noteAccessProblem(error);
     }
     throw error;
   }
   return (await response.json()) as T;
+}
+
+/**
+ * A guarded `/api/v2` POST (edits-v1): JSON body and `X-Cfgdash-Request: 1`. Only 401 goes to the access panel; every
+ * other failure (including 403 from the origin and header checks) is thrown for the caller to show inline.
+ */
+async function post<T>(path: string, body: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Cfgdash-Request': '1' },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    throw new ApiError(0);
+  }
+  const json = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!response.ok) {
+    const error = errorFrom(response.status, json);
+    if (error.status === 401) {
+      setAccessProblem({ kind: 'signed-out' });
+    }
+    throw error;
+  }
+  return json as T;
 }
 
 function noteAccessProblem(error: ApiError): void {
@@ -75,6 +120,9 @@ export const api = {
     }
     return get<Snapshot>('/api/v1/snapshot', params, signal);
   },
+  findings(dir: string | undefined, signal?: AbortSignal): Promise<FindingsResponse> {
+    return get<FindingsResponse>('/api/v1/findings', withDir(new URLSearchParams(), dir), signal);
+  },
   file(id: string, dir?: string, signal?: AbortSignal): Promise<FileContent> {
     return get<FileContent>(`/api/v1/files/${encodeURIComponent(id)}`, withDir(new URLSearchParams(), dir), signal);
   },
@@ -83,6 +131,18 @@ export const api = {
   },
   search(q: string, dir?: string, signal?: AbortSignal): Promise<SearchResponse> {
     return get<SearchResponse>('/api/v1/search', withDir(new URLSearchParams({ q }), dir), signal);
+  },
+  health(signal?: AbortSignal): Promise<HealthInfo> {
+    return get<HealthInfo>('/api/v1/health', new URLSearchParams(), signal);
+  },
+  settings(dir: string | undefined, signal?: AbortSignal): Promise<SettingsResponse> {
+    return get<SettingsResponse>('/api/v2/settings', withDir(new URLSearchParams(), dir), signal);
+  },
+  propose(dir: string, changes: SettingChange[]): Promise<Proposal> {
+    return post<Proposal>('/api/v2/proposals', { dir, changes });
+  },
+  apply(id: string, confirm: string): Promise<ApplyResult> {
+    return post<ApplyResult>(`/api/v2/proposals/${encodeURIComponent(id)}/apply`, { confirm });
   },
   dirs(path?: string, signal?: AbortSignal): Promise<DirsResponse> {
     return get<DirsResponse>('/api/v1/dirs', path ? new URLSearchParams({ path }) : new URLSearchParams(), signal);
