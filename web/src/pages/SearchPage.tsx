@@ -174,7 +174,7 @@ export default function SearchPage() {
           Search everything
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} aria-hidden="true" />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} aria-hidden="true" />
           <input
             id="search-page-input"
             type="search"
