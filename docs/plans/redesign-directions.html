@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfgdash redesign directions (revision 1)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:#d4d4d8;color:#18181b}
+.x-bar{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px;padding:10px 20px;background:#18181b;color:#fafafa}
+.x-bar h1{margin:0;font-size:15px;font-weight:600}
+.x-bar h1 span{margin-left:6px;font-weight:400;color:#a1a1aa}
+.x-grp{display:flex;align-items:center;gap:8px}
+.x-lbl{font-size:12px;color:#a1a1aa}
+.x-seg{display:flex;gap:2px;padding:2px;background:#3f3f46;border-radius:6px}
+.x-seg button{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:0;border-radius:4px;background:none;color:#f4f4f5;font:inherit;font-size:13px;cursor:pointer}
+.x-seg button:hover{background:#52525b}
+.x-seg [aria-selected=true],.x-seg [aria-pressed=true]{background:#fafafa;color:#18181b}
+.x-seg button:focus-visible{outline:2px solid #93c5fd;outline-offset:2px}
+.x-seg em{padding:0 6px;border-radius:3px;background:#166534;color:#fff;font-style:normal;font-size:11px}
+.x-note{flex-basis:100%;margin:0;font-size:12px;color:#d4d4d8}
+#stage{overflow-x:auto;padding:24px 20px 60px}
+#frame{margin:0 auto}
+.w-desk{width:1280px}.w-mob{width:375px}
+.x-thesis{max-width:900px;margin:0 0 24px;color:#27272a}
+.x-fr{margin:0 0 40px}
+.x-fr figcaption{margin:0 0 8px;font-size:13px;color:#3f3f46}
+.x-fr figcaption b{color:#18181b}
+.x-fr figcaption code{font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;font-size:12px}
+
+.dir-a{--ui:"Geist","Geist Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"Geist Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;--dt:14%;--dbg:var(--surface)}
+.dir-a[data-theme=light]{--bg:#f2f3f5;--surface:#fafafb;--raised:#ffffff;--hover:#e8eaee;--border:#d5d9de;--bs:#7f8791;--text:#14181d;--muted:#565f6b;--accent:#00677a;--afg:#ffffff;--focus:#0086a3;--ok:#166534;--warn:#7a4f00;--danger:#b42318;--co:#6d3fc0;--lm:#0a2540;--ll:#1b4a8a;--lp:#2f5f9f;--lu:#476e9f;--lfg:#ffffff;--tp:12%;--sh:0 8px 24px rgb(0 0 0/.12)}
+.dir-a[data-theme=dark]{--bg:#0a0c0f;--surface:#101318;--raised:#171b21;--hover:#1d222a;--border:#262c34;--bs:#6b7580;--text:#e8eaed;--muted:#9ba4ae;--accent:#56d4e8;--afg:#06242b;--focus:#9fe6f3;--ok:#74d39a;--warn:#e3b55e;--danger:#f29a95;--co:#c3a8f2;--lm:#f0f4fa;--ll:#b4ceff;--lp:#8fb0ec;--lu:#6f8fc2;--lfg:#0a0c0f;--tp:14%;--sh:0 8px 24px rgb(0 0 0/.35)}
+.dir-b{--ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;--serif:"Fraunces",Georgia,"Times New Roman",serif;--dt:12%;--dbg:var(--raised)}
+.dir-b[data-theme=light]{--bg:#f6f1e7;--surface:#fffdf8;--raised:#ffffff;--hover:#ede6d7;--border:#ddd4c3;--bs:#857a66;--text:#1f1b16;--muted:#5c5448;--accent:#a13d1e;--afg:#ffffff;--focus:#2456c7;--ok:#166534;--warn:#7a4f00;--danger:#b42318;--co:#6d3fc0;--lm:#1f1b16;--ll:#0e5c6b;--lp:#1f5fa6;--lu:#5b5f6b;--lfg:#ffffff;--tp:12%;--sh:0 8px 24px rgb(0 0 0/.12)}
+.dir-b[data-theme=dark]{--bg:#16130f;--surface:#1d1914;--raised:#26211a;--hover:#2e281f;--border:#3a3328;--bs:#7d7260;--text:#f0e9db;--muted:#b0a692;--accent:#f0a07a;--afg:#26140b;--focus:#8fb4ff;--ok:#74d39a;--warn:#e3b55e;--danger:#f29a95;--co:#c3a8f2;--lm:#f0e9db;--ll:#6fd0dc;--lp:#8db4f2;--lu:#a3a6b3;--lfg:#16130f;--tp:14%;--sh:0 8px 24px rgb(0 0 0/.35)}
+.dir-c{--ui:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;--dt:14%;--dbg:var(--raised)}
+.dir-c[data-theme=light]{--bg:#eef0f7;--surface:#f8f9fd;--raised:#ffffff;--hover:#e3e6f3;--border:#d3d7e8;--bs:#7a82a8;--text:#12152b;--muted:#4e5578;--accent:#3a49d6;--afg:#ffffff;--focus:#2a3bd0;--ok:#166534;--warn:#7a4f00;--danger:#b42318;--co:#a3207f;--lm:#2a3bd0;--ll:#0a6490;--lp:#7a4fd1;--lu:#5a6286;--lfg:#ffffff;--tp:12%;--sh:0 8px 24px rgb(0 0 0/.12)}
+.dir-c[data-theme=dark]{--bg:#0c0e18;--surface:#131627;--raised:#1b1f36;--hover:#232844;--border:#2a3050;--bs:#6a7399;--text:#eceefa;--muted:#a3a9c9;--accent:#8b9cff;--afg:#0c0e18;--focus:#c0c9ff;--ok:#74d39a;--warn:#e3b55e;--danger:#f29a95;--co:#f0a0dc;--lm:#aab6ff;--ll:#62c3ee;--lp:#c2a2ff;--lu:#9aa2c4;--lfg:#0c0e18;--tp:14%;--sh:0 8px 24px rgb(0 0 0/.35)}
+
+.scr{position:relative;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--ui);border:1px solid #71717a}
+:where(.scr) button,:where(.scr) input{margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:inherit;cursor:pointer}
+:where(.scr) input{cursor:text}
+:where(.scr) input::placeholder{color:var(--muted);opacity:1}
+:where(.scr) code{font-family:var(--mono);font-size:inherit}
+:where(.scr) h1,:where(.scr) h2,:where(.scr) p{margin:0}
+:where(.scr) kbd{padding:0 4px;border:1px solid var(--border);border-radius:3px;background:var(--surface);color:var(--muted);font:11px/16px var(--mono)}
+.scr :focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.ic{flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.dir-c .ic{stroke-width:1.75}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.app{position:relative;display:flex;flex-direction:column;min-height:600px}
+.m .app{min-height:740px}
+.bd{display:flex;flex:1;min-height:0}
+.col{display:flex;flex:1;flex-direction:column;min-width:0}
+.mn{flex:1;min-width:0}
+.sp{flex:1}
+.hd{display:flex;flex:none;align-items:center;gap:8px}
+.ni{display:flex;align-items:center;gap:10px;width:100%;white-space:nowrap}
+.ib{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:4px;color:var(--muted)}
+.ib.sm{width:24px;height:24px}
+.ib:hover,.ni:hover,.fs:hover,.crumb:hover,.kb:hover{background:var(--hover)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--bs);background:var(--raised);color:var(--text);white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.sm{height:24px;padding:0 8px;font-size:12px}
+.btn.pri{border-color:var(--accent);background:var(--accent);color:var(--afg);font-weight:600}
+.btn.pri:hover{background:color-mix(in srgb,var(--accent) 88%,var(--text))}
+.btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.kb{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.kb kbd{margin-left:auto}
+.flt:focus-within{outline:2px solid var(--focus);outline-offset:1px}
+.flt input,.pin input{flex:1;min-width:0;color:var(--text);outline:none}
+.bdg{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--c);border:1px solid var(--c);background:color-mix(in srgb,var(--c) var(--tp),var(--surface))}
+.bdg.t-n{border-color:var(--bs);background:var(--surface);color:var(--muted)}
+.t-danger{--c:var(--danger)}.t-warn{--c:var(--warn)}.t-ok{--c:var(--ok)}.t-co{--c:var(--co)}.t-n{--c:var(--muted)}
+.fl{display:flex;flex-wrap:wrap;gap:4px}
+.plus{color:var(--ok)}.minus{color:var(--danger)}
+.dbody{overflow-x:auto;background:var(--dbg)}
+.dl{display:flex;width:max-content;min-width:100%;--rb:var(--dbg);background:var(--rb)}
+.dl.add{--rb:color-mix(in srgb,var(--ok) var(--dt),var(--dbg))}
+.dl.del{--rb:color-mix(in srgb,var(--danger) var(--dt),var(--dbg))}
+.dl .g{position:sticky;left:0;flex:none;width:40px;padding-right:8px;background:var(--rb);color:var(--muted);font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.dl .g+.g{left:40px}
+.dl .sg{flex:none;width:16px;font-family:var(--mono);text-align:center}
+.dl.add .sg{color:var(--ok)}.dl.del .sg{color:var(--danger)}
+.dl code{padding-right:16px;white-space:pre}
+.dh{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px}
+.dh code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ban{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) var(--tp),var(--surface));color:var(--text)}
+.ban>.ic{margin-top:2px;color:var(--danger)}
+.ban>div{flex:1}
+.m .ban{flex-wrap:wrap}
+.abar{position:sticky;bottom:0;display:flex;flex:none;align-items:center;gap:8px;margin-top:auto}
+.scrim{position:absolute;inset:0;z-index:5;background:rgb(0 0 0/.45)}
+.pal{position:absolute;z-index:6;left:50%;display:flex;flex-direction:column;overflow:hidden;transform:translateX(-50%);background:var(--raised);border:1px solid var(--border);box-shadow:var(--sh)}
+.m .pal{top:8px!important;width:calc(100% - 16px)!important;transform:translateX(-50%)!important}
+.pin{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);color:var(--muted)}
+.pin:focus-within{box-shadow:inset 0 -2px var(--focus)}
+.pbody{display:flex;min-height:0}
+.plist{flex:1;min-width:0;padding:4px 0}
+.pgh{color:var(--muted)}
+.pi{display:flex;align-items:center;gap:10px;padding:0 14px;cursor:pointer}
+.pi:hover,.pi[aria-selected=true]{background:var(--hover)}
+.pi kbd{margin-left:auto}
+.pt{flex:1;min-width:0}
+.pi u{text-underline-offset:2px}
+.pd{color:var(--muted)}
+.pf{padding:8px 14px;border-top:1px solid var(--border);color:var(--muted);font:11px/16px var(--mono)}
+.dir-a.m .cr,.dir-c.m .cr{grid-template-columns:20px minmax(0,1fr) auto;grid-template-areas:"no pa est" ". fl bar";height:auto;min-height:44px;padding:8px 16px;row-gap:4px}
+.dir-a.m .cr>.no,.dir-c.m .cr>.no{grid-area:no}
+.dir-a.m .cr>.pa,.dir-c.m .cr>.pa{grid-area:pa;white-space:normal;overflow-wrap:anywhere}
+.dir-a.m .cr>.est,.dir-c.m .cr>.est{grid-area:est}
+.dir-a.m .cr>.fl,.dir-c.m .cr>.fl{grid-area:fl}
+.dir-a.m .cr>.bar,.dir-c.m .cr>.bar{grid-area:bar;align-self:center}
+.m .cr.th{display:none}
+
+.dir-a .scr{font-size:13px;line-height:18px;font-weight:500}
+.dir-a .scr :is(button,.flt){transition:background-color .1s linear,color .1s linear,border-color .1s linear}
+.dir-a .hd{height:40px;padding:0 8px 0 12px;border-bottom:1px solid var(--border);background:var(--surface)}
+.dir-a .mach{display:flex;align-items:center;gap:6px;padding-right:10px;border-right:1px solid var(--border);font:600 12.5px/18px var(--mono)}
+.dir-a .fs{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:3px;font:12.5px/18px var(--mono)}
+.dir-a .kb{height:28px;min-width:220px;padding:0 4px 0 8px;border-radius:3px}
+.dir-a .ib,.dir-a .btn{border-radius:3px}
+.dir-a .sb{display:flex;flex:none;flex-direction:column;width:208px;padding:6px 0;background:var(--surface);border-right:1px solid var(--border)}
+.dir-a .gl{padding:14px 12px 4px;color:var(--muted);font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dir-a .ni{position:relative;height:28px;padding:0 12px}
+.dir-a .ni .ic{color:var(--muted)}
+.dir-a .ni.on{background:var(--hover)}
+.dir-a .ni.on::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent)}
+.dir-a .nc{margin-left:auto;color:var(--muted);font:12px var(--mono)}
+.dir-a .clp{margin-top:auto;color:var(--muted)}
+.dir-a .ph{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 16px;border-bottom:1px solid var(--border)}
+.dir-a h1{font-size:20px;line-height:28px;font-weight:600}
+.dir-a .cnt{color:var(--muted);font:12.5px var(--mono)}
+.dir-a .tool{display:flex;align-items:center;gap:6px;min-height:40px;padding:0 16px;border-bottom:1px solid var(--border)}
+.dir-a .flt{display:flex;align-items:center;gap:6px;width:260px;height:28px;margin-right:6px;padding:0 8px;border:1px solid var(--bs);border-radius:3px;background:var(--raised);color:var(--muted)}
+.dir-a .flt input,.dir-a .pin input{font:12.5px var(--mono)}
+.dir-a .chip{height:24px;padding:0 8px;border:1px solid var(--border);border-radius:3px;color:var(--muted)}
+.dir-a .chip:hover{background:var(--hover)}
+.dir-a .chip[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) var(--tp),var(--surface));color:var(--accent)}
+.dir-a .sec,.dir-a .sec0,.dir-a .th{color:var(--muted);font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dir-a .th{font-size:11px}
+.dir-a .sec{padding:14px 16px 6px;border-bottom:1px solid var(--border)}
+.dir-a .row{display:grid;grid-template-columns:300px minmax(0,1fr) 84px 240px;align-items:center;gap:12px;width:100%;height:28px;padding:0 16px;border-bottom:1px solid var(--border)}
+.dir-a .row:hover{background:var(--hover)}
+.dir-a .row.sel,.dir-a .hrow.sel{background:var(--hover);box-shadow:inset 2px 0 var(--accent)}
+.dir-a .k,.dir-a .v{overflow:hidden;font-size:12.5px;text-overflow:ellipsis;white-space:nowrap}
+.dir-a .bdg{height:20px;padding:0 6px;border-radius:2px;font:11px/18px var(--mono)}
+.dir-a .lin{display:inline-flex;gap:2px}
+.dir-a .lin i,.dir-a .lg{display:grid;place-items:center;width:18px;height:18px;border:1px solid var(--l);border-radius:2px;color:var(--l);font:600 11px/1 var(--mono);font-style:normal}
+.dir-a .lin .s-w,.dir-a .el.s-w .lg{background:var(--l);color:var(--lfg);font-weight:800}
+.dir-a .lin .s-o,.dir-a .el.s-o .lg{text-decoration:line-through}
+.dir-a .lin .s-n{border-style:dotted;border-color:var(--bs);color:var(--muted)}
+.dir-a .lin .s-m,.dir-a .el.s-m .lg{background:linear-gradient(135deg,var(--l) 50%,transparent 50%);color:var(--text)}
+.dir-a .exp{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px;padding:3px 16px 3px 30px;background:var(--raised);border-bottom:1px solid var(--border)}
+.dir-a .el{grid-column:1;display:grid;grid-template-columns:16px 140px 160px auto;align-items:center;gap:10px;height:21px;font:12.5px/18px var(--mono)}
+.dir-a .el .lg{width:16px;height:16px;font-size:10px}
+.dir-a .el.s-o .ev{color:var(--muted);text-decoration:line-through}
+.dir-a .ew{color:var(--muted)}
+.dir-a .el.s-w .ew{color:var(--ok)}
+.dir-a .exp .btn{grid-column:2;grid-row:1/span 2}
+.dir-a .tot{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.dir-a .tbar{display:flex;flex:1;gap:1px;height:6px}
+.dir-a .tbar i{background:var(--muted)}
+.dir-a .tbar i:nth-child(even){opacity:.6}
+.dir-a .cr{display:grid;grid-template-columns:28px minmax(0,1fr) 220px 96px 80px;align-items:center;gap:12px;height:28px;padding:0 16px;border-bottom:1px solid var(--border)}
+.dir-a .no{color:var(--muted);font:12px var(--mono);text-align:right}
+.dir-a .pa{overflow:hidden;padding-left:calc(var(--d)*16px);font-size:12.5px;text-overflow:ellipsis;white-space:nowrap}
+.dir-a .tr{color:var(--muted)}
+.dir-a .bar{width:96px;height:6px;background:var(--hover)}
+.dir-a .bar i{display:block;height:100%;background:var(--muted)}
+.dir-a .est{font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+.dir-a .cr.err .pa,.dir-a .cr.err .est{color:var(--danger)}
+.dir-a .cr.err .bar{background:none;outline:1px solid var(--danger)}
+.dir-a .cr.ref .bar i{opacity:.4}
+.dir-a .cr.ref .est{color:var(--muted)}
+.dir-a .idn{display:flex;flex-wrap:wrap;gap:4px 24px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);font:12.5px/18px var(--mono)}
+.dir-a .idn span:first-child{font-weight:700}
+.dir-a .ov{display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.dir-a .ov>div+div{border-left:1px solid var(--border)}
+.dir-a .crow{display:grid;grid-template-columns:72px minmax(0,1fr) 16px;align-items:center;gap:16px;width:100%;padding:4px 16px;border-bottom:1px solid var(--border)}
+.dir-a .crow:hover{background:var(--hover)}
+.dir-a .crow .ic{color:var(--muted)}
+.dir-a .big{font:500 28px/32px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.dir-a .vt{display:flex;align-items:baseline;gap:16px}
+.dir-a .vt b{flex:none;width:150px;font-weight:600}
+.dir-a .vd{color:var(--muted)}
+.dir-a .ua{display:flex;justify-content:space-between;gap:12px;padding:5px 16px;border-bottom:1px solid var(--border)}
+.dir-a .ua code{font-size:12.5px}
+.dir-a .ua span{color:var(--muted)}
+.dir-a .hint{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px}
+.dir-a .hrow{display:grid;grid-template-columns:104px 130px 230px minmax(0,1fr) 64px;align-items:center;gap:12px;min-height:28px;padding:2px 16px;border-bottom:1px solid var(--border)}
+.dir-a .hrow:not(.th):hover{background:var(--hover)}
+.dir-a .sev{display:inline-flex;align-items:center;gap:6px;color:var(--c);font-weight:600}
+.dir-a .rl,.dir-a .tg code{font-size:12.5px}
+.dir-a .tg{display:flex;align-items:center;gap:2px}
+.dir-a .dfile{margin:16px;border:1px solid var(--border)}
+.dir-a .dh{height:32px;padding:0 10px;background:var(--raised);border-bottom:1px solid var(--border);font:12.5px/18px var(--mono)}
+.dir-a .ban{border-width:0 0 1px}
+.dir-a .dl{font-size:12.5px;line-height:20px}
+.dir-a .abar{height:56px;padding:0 16px;background:var(--surface);border-top:1px solid var(--border);font:12.5px var(--mono)}
+.dir-a .pal{top:12%;width:560px;border-radius:3px}
+.dir-a .pin{height:44px}
+.dir-a .pgh{padding:8px 12px 4px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dir-a .pi{height:30px;padding:0 12px}
+.dir-a .pi[aria-selected=true]{box-shadow:inset 2px 0 var(--accent)}
+.dir-a .pt{display:flex;align-items:baseline;gap:10px;overflow:hidden;white-space:nowrap}
+.dir-a .pl{font:12.5px var(--mono)}
+.dir-a .pd{overflow:hidden;font-size:12px;text-overflow:ellipsis}
+.dir-a.m .hd{height:44px;padding:0}
+.dir-a.m .ttl{flex:1;font-size:15px;font-weight:600}
+.dir-a.m .ib{width:44px;height:44px}
+.dir-a.m .ph{flex-wrap:wrap;gap:4px 12px;padding:10px 16px}
+.dir-a.m .tool{flex-wrap:wrap;padding:8px 16px}
+.dir-a.m .flt{width:100%;height:44px;margin:0 0 4px}
+.dir-a.m .chip{height:32px}
+.dir-a.m .row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"k lin" "v v" "fl fl";row-gap:4px;height:auto;min-height:44px;padding:8px 16px}
+.dir-a.m .row .k{grid-area:k}.dir-a.m .row .v{grid-area:v}.dir-a.m .row .lin{grid-area:lin}.dir-a.m .row .fl{grid-area:fl}
+.dir-a.m .fl:empty{display:none}
+.dir-a.m .exp{grid-template-columns:1fr;padding:8px 16px}
+.dir-a.m .el{grid-template-columns:16px auto minmax(0,1fr) auto;height:auto;min-height:24px}
+.dir-a.m .exp .btn{grid-column:1;grid-row:auto;justify-self:start;height:36px;margin-top:6px}
+.dir-a.m .tot{flex-wrap:wrap}
+.dir-a.m .ov{grid-template-columns:1fr}
+.dir-a.m .ov>div+div{border-left:0}
+.dir-a.m .crow{grid-template-columns:56px minmax(0,1fr) 16px}
+.dir-a.m .vt{flex-direction:column;gap:0}
+.dir-a.m .hrow{grid-template-columns:minmax(0,1fr) auto;row-gap:4px;padding:10px 16px}
+.dir-a.m .hrow.th,.dir-a.m .hint{display:none}
+.dir-a.m .tg,.dir-a.m .msg{grid-column:1/-1}
+.dir-a.m .dfile{margin:0;border-width:0 0 1px}
+.dir-a.m .abar{height:auto;min-height:56px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+
+.dir-b .scr{font-size:15px;line-height:24px}
+.dir-b .sb{flex:none;width:232px;padding:16px 12px;background:var(--surface);border-right:1px solid var(--border)}
+.dir-b .wm{padding:4px 8px 12px;font:600 22px/28px var(--serif);letter-spacing:-.01em}
+.dir-b .gl{padding:18px 12px 6px;color:var(--muted);font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dir-b .ni{position:relative;height:36px;padding:0 10px 0 12px;border-radius:6px}
+.dir-b .ni .ic{color:var(--muted)}
+.dir-b .ni.on,.dir-b .ni.on .ic{color:var(--accent);font-weight:600}
+.dir-b .ni.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--accent)}
+.dir-b .nc{margin-left:auto;color:var(--muted);font-size:13px;font-weight:400;font-variant-numeric:tabular-nums}
+.dir-b .hd{height:48px;padding:0 24px;border-bottom:1px solid var(--border)}
+.dir-b .crumb{display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:6px;font-size:13px}
+.dir-b .crumb i{color:var(--muted);font-style:normal}
+.dir-b .kb{height:32px;min-width:240px;padding:0 8px 0 10px;border-color:var(--bs);border-radius:6px;font-size:13px}
+.dir-b .ib{border-radius:6px}
+.dir-b .btn{height:32px;padding:0 12px;border-radius:6px;font-size:13px}
+.dir-b .btn.sm{height:28px}
+.dir-b .bdg{height:22px;padding:0 8px;border-radius:999px;font-size:12px}
+.dir-b .mn{padding:28px 40px 40px}
+.dir-b .ph{max-width:720px;margin-bottom:24px}
+.dir-b h1{font:600 32px/38px var(--serif);letter-spacing:-.01em}
+.dir-b .ph p{margin-top:4px;color:var(--muted)}
+.dir-b h2{max-width:720px;margin:28px 0 12px;padding-top:12px;border-top:1px solid var(--border);font:600 22px/28px var(--serif)}
+.dir-b .sec{padding:16px 10px 6px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dir-b .sec:first-child{padding-top:0;border-top:0}
+.dir-b .md{display:grid;grid-template-columns:minmax(0,1fr) 400px;align-items:start;gap:32px}
+.dir-b .srow{display:grid;grid-template-columns:minmax(0,1fr) 104px 56px 112px;align-items:center;gap:12px;width:100%;min-height:36px;padding:6px 10px;border-bottom:1px solid var(--border)}
+.dir-b .srow:hover{background:var(--hover)}
+.dir-b .srow.sel{background:var(--surface);box-shadow:inset 3px 0 var(--accent)}
+.dir-b .k,.dir-b .v{font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.dir-b .lc{display:inline-flex;align-items:center;gap:3px;color:var(--muted);font:13px/20px var(--mono)}
+.dir-b .lc i{width:8px;height:8px;border-radius:50%;background:var(--l)}
+.dir-b .spec{position:sticky;top:16px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px}
+.dir-b .pn{color:var(--muted);font:600 13px/16px var(--serif);letter-spacing:.06em;text-transform:uppercase}
+.dir-b .sk{margin:6px 0 4px;padding:0;border:0;font:600 20px/28px var(--mono)}
+.dir-b .lede{color:var(--muted);font-size:14px;line-height:22px}
+.dir-b .lede code{color:var(--text);font-size:13px}
+.dir-b .strata{display:flex;flex-direction:column;gap:6px;margin:16px 0;padding:0;list-style:none}
+.dir-b .strata li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;column-gap:10px;padding:8px 12px 8px 10px;background:var(--raised);border-left:3px solid var(--l);border-radius:0 6px 6px 0}
+.dir-b .strata .num{grid-row:span 3;color:var(--muted);font:600 20px/24px var(--serif)}
+.dir-b .strata .ln{font-size:14px;line-height:20px}
+.dir-b .strata .sw{color:var(--muted);font-size:13px;line-height:20px;text-align:right}
+.dir-b .strata .pth,.dir-b .strata .val{grid-column:2/4;font-size:12px;line-height:18px}
+.dir-b .strata .pth{color:var(--muted)}
+.dir-b .strata .val{font-size:13px;line-height:20px}
+.dir-b .strata .s-w{font-weight:600}
+.dir-b .strata .s-w .sw{color:var(--ok)}
+.dir-b .strata .s-w .num{color:var(--text)}
+.dir-b .strata .s-o .val{color:var(--muted);text-decoration:line-through}
+.dir-b .strata .s-n{background:none;border-left-style:dashed}
+.dir-b .acts{display:flex;gap:8px}
+.dir-b .acc{padding:4px 0 8px 10px;border-bottom:1px solid var(--border)}
+.dir-b .toc{max-width:720px}
+.dir-b .tr{padding:10px 0;border-bottom:1px solid var(--border)}
+.dir-b .tr.ch{padding-left:20px}
+.dir-b .tl{display:flex;align-items:baseline;gap:8px}
+.dir-b .tn{min-width:20px;color:var(--muted);font:600 15px/24px var(--serif)}
+.dir-b .br{color:var(--muted)}
+.dir-b .tp{min-width:0;font-size:13px;line-height:20px}
+.dir-b .ld{flex:1;min-width:24px;border-bottom:2px dotted var(--bs);transform:translateY(-4px)}
+.dir-b .tt{font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dir-b .tfl{display:flex;gap:6px;margin:6px 0 0 28px}
+.dir-b .tb4{height:4px;margin:8px 0 0 28px;overflow:hidden;background:var(--hover);border-radius:2px}
+.dir-b .tb4 i{display:block;height:100%;background:var(--muted)}
+.dir-b .tr.err .tp,.dir-b .tr.err .tt{color:var(--danger)}
+.dir-b .tf{margin-top:14px;font:italic 400 17px/24px var(--serif)}
+.dir-b .prose{max-width:720px;font:400 24px/34px var(--serif)}
+.dir-b .lnk{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.dir-b .meta{margin-top:10px;color:var(--muted);font-size:14px}
+.dir-b .idx{max-width:860px}
+.dir-b .ix{display:grid;grid-template-columns:200px minmax(0,1fr) 64px;align-items:baseline;gap:16px;width:100%;padding:8px 0;border-bottom:1px solid var(--border)}
+.dir-b .ix:hover .in{color:var(--accent);text-decoration:underline}
+.dir-b .in{font:600 17px/24px var(--serif)}
+.dir-b .id{color:var(--muted);font-size:14px}
+.dir-b .ic2{text-align:right;font-variant-numeric:tabular-nums}
+.dir-b .na{margin:0;padding-left:20px;color:var(--muted)}
+.dir-b .na code{color:var(--text);font-size:13px}
+.dir-b .hcard{max-width:720px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--c);border-radius:6px}
+.dir-b .hh{display:flex;align-items:center;gap:8px;color:var(--c)}
+.dir-b .hh code{margin-left:auto;color:var(--muted);font-size:13px}
+.dir-b .hcard p{margin:6px 0 10px}
+.dir-b .ht{display:flex;align-items:center;gap:8px}
+.dir-b .ht code{flex:1;font-size:13px}
+.dir-b .prop{max-width:860px}
+.dir-b .pt2{margin-top:0;padding:0;border:0}
+.dir-b .prop .meta{display:flex;align-items:center;gap:8px;margin:4px 0 16px}
+.dir-b .ban{margin-bottom:12px;border-radius:6px;font-size:14px}
+.dir-b .dcard{overflow:hidden;background:var(--raised);border:1px solid var(--border);border-radius:6px}
+.dir-b .dh{height:40px;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px}
+.dir-b .dl{font-size:13px;line-height:20px}
+.dir-b .abar{gap:12px;padding:12px 40px;background:var(--surface);border-top:1px solid var(--border)}
+.dir-b .abar p{flex:1}
+.dir-b .pal{top:50%;width:640px;transform:translate(-50%,-50%);border-radius:6px}
+.dir-b .pin{height:52px}
+.dir-b .pgh{padding:12px 16px 4px;color:var(--text);font:600 15px/20px var(--serif)}
+.dir-b .pi{min-height:44px;padding:6px 16px;font-size:15px;line-height:22px}
+.dir-b .pi[aria-selected=true]{box-shadow:inset 3px 0 var(--accent)}
+.dir-b .pt{display:flex;flex-direction:column}
+.dir-b .pd{font-size:13px;line-height:18px}
+.dir-b .pf{padding:8px 16px}
+.dir-b.m .hd{height:48px;padding:0 4px 0 16px}
+.dir-b.m .hd .wm{padding:0;font-size:20px}
+.dir-b.m .ib{width:44px;height:44px}
+.dir-b.m .mn{padding:20px 16px 24px}
+.dir-b.m h1{font-size:28px;line-height:34px}
+.dir-b.m .srow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"k lc" "v v" "fl fl";min-height:44px;padding:8px 10px}
+.dir-b.m .srow .k{grid-area:k}.dir-b.m .srow .v{grid-area:v}.dir-b.m .srow .lc{grid-area:lc}.dir-b.m .srow .fl{grid-area:fl}
+.dir-b.m .srow .fl:empty{display:none}
+.dir-b.m .prose{font-size:20px;line-height:28px}
+.dir-b.m .ix{grid-template-columns:minmax(0,1fr) auto;gap:0 12px}
+.dir-b.m .id{grid-column:1/-1;grid-row:2}
+.dir-b.m .abar{flex-wrap:wrap;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.dir-b.m .abar p{flex-basis:100%;font-size:14px;line-height:20px}
+
+.dir-c .scr{font-size:14px;line-height:20px}
+.dir-c .sb{display:flex;flex:none;flex-direction:column;gap:2px;width:64px;padding:10px 8px;overflow:hidden;background:var(--surface);border-right:1px solid var(--border)}
+.dir-c .sb:hover,.dir-c .sb:focus-within{width:232px}
+.dir-c .gl,.dir-c .nl{display:none}
+.dir-c .sb:hover .nl,.dir-c .sb:focus-within .nl{display:inline}
+.dir-c .ng+.ng{margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
+.dir-c .ni{position:relative;height:40px;padding:0 15px;border-radius:8px;color:var(--muted)}
+.dir-c .ni.on{background:color-mix(in srgb,var(--accent) var(--tp),var(--surface));color:var(--accent)}
+.dir-c .nc{position:absolute;left:28px;top:5px;min-width:16px;height:16px;padding:0 4px;background:var(--raised);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:10px;line-height:14px;text-align:center}
+.dir-c .sb:hover .nc,.dir-c .sb:focus-within .nc{position:static;margin-left:auto}
+.dir-c .pinb{margin-top:auto}
+.dir-c .hd{height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.dir-c .fs{display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font:12.5px var(--mono)}
+.dir-c .mach{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.dir-c .kb{height:32px;min-width:220px;padding:0 8px 0 10px;border-radius:6px}
+.dir-c .ib,.dir-c .btn{border-radius:6px}
+.dir-c .btn{height:32px;padding:0 12px}
+.dir-c .btn.sm{height:28px}
+.dir-c .btn.lg{height:44px;padding:0 24px;font-size:15px}
+.dir-c .bdg{height:22px;padding:0 8px;border-radius:999px;font-size:12px}
+.dir-c .mn{padding:20px 24px 28px}
+.dir-c .vhd{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-height:40px;margin-bottom:16px}
+.dir-c h1{font-size:24px;line-height:30px;font-weight:600}
+.dir-c h2{font-size:17px;line-height:24px;font-weight:600}
+.dir-c .cnt{color:var(--muted);font-size:12px;font-weight:500}
+.dir-c .flt{display:flex;align-items:center;gap:6px;width:260px;height:32px;padding:0 10px;border:1px solid var(--bs);border-radius:6px;background:var(--raised);color:var(--muted)}
+.dir-c .card{background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.dir-c .ch{padding:12px 16px 0;color:var(--muted);font-size:12px;font-weight:500}
+.dir-c .kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px 16px 16px}
+.dir-c .kc{display:flex;flex-direction:column;gap:8px;padding:12px 14px;background:var(--raised);border:1px solid var(--border);border-radius:8px}
+.dir-c .kc:hover{border-color:var(--bs)}
+.dir-c .kc.sel{grid-column:1/-1;border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.dir-c .kt{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dir-c .k{font-weight:600;overflow-wrap:anywhere}
+.dir-c .v{font-size:12.5px;line-height:18px}
+.dir-c .route{display:inline-flex;align-items:center;padding:3px}
+.dir-c .route i,.dir-c .kl i{display:grid;flex:none;place-items:center;width:20px;height:20px;border:1.5px solid var(--l);border-radius:6px;color:var(--l);font:700 11px/1 var(--mono);font-style:normal}
+.dir-c .route .s-w{background:var(--l);color:var(--lfg);outline:2px solid var(--accent);outline-offset:2px}
+.dir-c .route .s-o,.dir-c .kl.s-o i{text-decoration:line-through}
+.dir-c .route .s-n{border-color:var(--bs);color:var(--muted);opacity:.55}
+.dir-c .route .s-m{background:linear-gradient(135deg,var(--l) 50%,transparent 50%);color:var(--text)}
+.dir-c .cn{width:12px;border-top:1.5px solid var(--bs)}
+.dir-c .cn.d{border-top-style:dashed}
+.dir-c .kd{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--border)}
+.dir-c .kl{display:flex;align-items:center;gap:8px}
+.dir-c .kl.s-w i{background:var(--l);color:var(--lfg)}
+.dir-c .kl code{font-size:12.5px}
+.dir-c .kl.s-o code{color:var(--muted);text-decoration:line-through}
+.dir-c .ew{color:var(--muted);font-size:12px}
+.dir-c .ihead{display:flex;align-items:center;gap:24px;padding:16px;border-bottom:1px solid var(--border)}
+.dir-c .num{font-size:36px;line-height:40px;font-weight:600;font-variant-numeric:tabular-nums}
+.dir-c .num small{color:var(--muted);font-size:14px;font-weight:500}
+.dir-c .tl{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;line-height:16px;font-weight:500}
+.dir-c .sbar{display:flex;flex:1;gap:2px;height:10px;overflow:hidden;border-radius:5px}
+.dir-c .sbar i{background:var(--accent)}
+.dir-c .sbar i:nth-child(2){opacity:.75}.dir-c .sbar i:nth-child(3){opacity:.55}.dir-c .sbar i:nth-child(4){opacity:.35}
+.dir-c .cr{display:grid;grid-template-columns:24px minmax(0,1fr) 220px 120px 88px;align-items:center;gap:12px;min-height:32px;padding:0 16px;border-bottom:1px solid var(--border)}
+.dir-c .cr:last-child{border-bottom:0}
+.dir-c .no{color:var(--muted);font-size:12px;text-align:right}
+.dir-c .pa{padding-left:calc(var(--d)*20px);font-size:12.5px;overflow-wrap:anywhere}
+.dir-c .bar{height:8px;overflow:hidden;background:var(--hover);border-radius:4px}
+.dir-c .bar i{display:block;height:100%;background:color-mix(in srgb,var(--accent) 70%,transparent);border-radius:4px}
+.dir-c .est{font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+.dir-c .cr.err .pa,.dir-c .cr.err .est{color:var(--danger)}
+.dir-c .cr.err .bar{background:none;outline:1px dashed var(--danger)}
+.dir-c .cr.ref .bar i{opacity:.4}
+.dir-c .cr.ref .est{color:var(--muted)}
+.dir-c .bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-flow:dense;gap:12px;max-width:1200px}
+.dir-c .tile{position:relative;display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:14px;text-align:left}
+.dir-c button.tile:hover{border-color:var(--bs)}
+.dir-c .w2{grid-column:span 2}.dir-c .h2{grid-row:span 2}
+.dir-c .tile.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.dir-c .svb{display:flex;gap:2px;width:100%;height:10px;overflow:hidden;border-radius:5px}
+.dir-c .svb i{flex:1;background:var(--c)}
+.dir-c .svb.lg{height:12px;margin-bottom:8px;border-radius:6px}
+.dir-c .svt{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px}
+.dir-c .svt span{display:inline-flex;align-items:center;gap:4px;color:var(--c)}
+.dir-c .top{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.dir-c .tf{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--raised);border:1px solid var(--border);border-radius:8px}
+.dir-c .tf .ic{color:var(--c)}
+.dir-c .tf span{margin-left:auto;color:var(--muted);font:12px var(--mono)}
+.dir-c .idt{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+.dir-c .idt b{font-size:24px;line-height:30px}
+.dir-c .idt span,.dir-c .idt code{color:var(--muted)}
+.dir-c .chg{position:absolute;top:14px;right:14px;display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+.dir-c .chg::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.dir-c .ua{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.dir-c .ua span{color:var(--muted)}
+.dir-c .hsum{margin-bottom:16px}
+.dir-c .hsplit{display:grid;grid-template-columns:320px minmax(0,1fr);align-items:start;gap:16px}
+.dir-c .hl{padding:6px}
+.dir-c .hi{display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:6px;cursor:pointer}
+.dir-c .hi>.ic{margin-top:2px;color:var(--c)}
+.dir-c .hi>span{display:flex;flex-direction:column}
+.dir-c .hi code{color:var(--muted);font-size:12.5px}
+.dir-c .hi:hover{background:var(--hover)}
+.dir-c .hi[aria-selected=true]{background:color-mix(in srgb,var(--accent) var(--tp),var(--surface));box-shadow:inset 0 0 0 1px var(--accent)}
+.dir-c .hdet{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:20px}
+.dir-c .sev{display:inline-flex;align-items:center;gap:6px;color:var(--c);font-weight:600}
+.dir-c .hdet dl{display:grid;grid-template-columns:80px 1fr;gap:6px 12px;margin:0}
+.dir-c .hdet dt{color:var(--muted);font-size:12px}
+.dir-c .hdet dd{margin:0}
+.dir-c .dcard{overflow:hidden;background:var(--raised);border:1px solid var(--border);border-radius:8px}
+.dir-c .dcard.bad{border-color:var(--danger)}
+.dir-c .dh{height:48px;padding:0 14px;background:var(--raised);border-bottom:1px solid var(--border)}
+.dir-c .dh code{font-size:12.5px}
+.dir-c .ban{border-width:0 0 1px;font-size:13px}
+.dir-c .hk{display:flex;align-items:center;gap:6px;width:100%;height:28px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border);color:var(--muted);font-size:12px}
+.dir-c .dl{font-size:12.5px;line-height:20px}
+.dir-c .abar{bottom:16px;gap:10px;height:64px;margin:0 24px 16px;padding:0 12px 0 20px;background:var(--raised);border:1px solid var(--border);border-radius:8px}
+.dir-c .abar>div{display:flex;flex-direction:column}
+.dir-c .abar>div span{color:var(--muted);font-size:12px}
+.dir-c .pal{top:12%;width:640px;border-radius:14px}
+.dir-c .pin{height:52px;font-size:15px}
+.dir-c .pgh{padding:10px 14px 4px;font-size:12px;font-weight:500}
+.dir-c .pi{height:36px;margin:0 6px;padding:0 8px;border-radius:8px}
+.dir-c .pi[aria-selected=true]{background:color-mix(in srgb,var(--accent) var(--tp),var(--raised))}
+.dir-c .pt{display:flex;align-items:baseline;gap:8px;overflow:hidden;white-space:nowrap}
+.dir-c .pd{overflow:hidden;font-size:12px;text-overflow:ellipsis}
+.dir-c .pv{display:flex;flex:none;flex-direction:column;align-items:flex-start;gap:10px;width:240px;padding:14px;background:var(--surface);border-left:1px solid var(--border)}
+.dir-c .pv p{color:var(--muted);font-size:13px}
+.m .pv{display:none}
+.dir-c .wm{display:flex;align-items:center;gap:8px;font-weight:600}
+.dir-c .tabs{position:sticky;bottom:0;display:grid;flex:none;grid-template-columns:repeat(5,1fr);height:56px;background:var(--surface);border-top:1px solid var(--border)}
+.dir-c .tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font-size:11px;line-height:14px}
+.dir-c .tabs .on{color:var(--accent);font-weight:600}
+.dir-c.m .hd{height:48px;padding:0 4px 0 16px}
+.dir-c.m .ib{width:44px;height:44px}
+.dir-c.m .mn{padding:16px}
+.dir-c.m .flt{width:100%;height:44px}
+.dir-c.m .kgrid{grid-template-columns:1fr;padding:12px}
+.dir-c.m .ihead{flex-wrap:wrap;gap:12px}
+.dir-c.m .sbar{flex-basis:100%}
+.dir-c.m .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+.dir-c.m .h2{grid-row:auto}
+.dir-c.m .hsplit{grid-template-columns:1fr}
+.dir-c.m .abar{margin:0 8px 8px;padding:0 8px 0 14px}
+.dir-c.m .btn.lg{padding:0 18px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="x-bar">
+  <h1>cfgdash redesign directions<span>revision 1, concept only, synthetic data</span></h1>
+  <div class="x-seg" role="tablist" aria-label="Direction">
+    <button type="button" role="tab" id="tab-a" data-dir="a" aria-selected="true" aria-controls="root">A Instrument panel <em>recommended</em></button>
+    <button type="button" role="tab" id="tab-b" data-dir="b" aria-selected="false" aria-controls="root" tabindex="-1">B Field guide</button>
+    <button type="button" role="tab" id="tab-c" data-dir="c" aria-selected="false" aria-controls="root" tabindex="-1">C Control room</button>
+  </div>
+  <div class="x-grp"><span class="x-lbl" id="lt">Theme</span><div class="x-seg" role="group" aria-labelledby="lt"><button type="button" data-theme-set="light" aria-pressed="true">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div></div>
+  <div class="x-grp"><span class="x-lbl" id="lw">Width</span><div class="x-seg" role="group" aria-labelledby="lw"><button type="button" data-w="d" aria-pressed="true">Desktop 1280</button><button type="button" data-w="m" aria-pressed="false">Mobile 375</button></div></div>
+  <p class="x-note">Fonts are approximated with local fallbacks; the build self-hosts the named OFL fonts.</p>
+</header>
+<div id="stage"><div id="frame" class="w-desk"><div id="root" class="dir dir-a" data-theme="light" role="tabpanel" aria-labelledby="tab-a"></div></div></div>
+<script>
+const P={
+search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+pencil:'<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+home:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+'file-text':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
+'file-warning':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 11v4M12 18h.01"/>',
+bot:'<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4H8M2 14h2M20 14h2M15 13v2M9 13v2"/>',
+sparkles:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/>',
+zap:'<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+plug:'<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/>',
+leaf:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z"/><path d="M2 21c0-3 1.9-5.4 5.2-6.1"/>',
+terminal:'<path d="m4 17 6-6-6-6M12 19h8"/>',
+gauge:'<path d="m12 14 4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/>',
+database:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/>',
+calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>',
+'chev-d':'<path d="m6 9 6 6 6-6"/>',
+'chev-r':'<path d="m9 18 6-6-6-6"/>',
+octagon:'<path d="M7.9 2h8.2L22 7.9v8.2L16.1 22H7.9L2 16.1V7.9z"/><path d="m15 9-6 6M9 9l6 6"/>',
+copy:'<rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/>',
+strike:'<path d="M16 4H9a3 3 0 0 0-2.8 4M14 12a4 4 0 0 1 0 8H6M4 12h16"/>',
+building:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+'eye-off':'<path d="M10.7 5.1A10 10 0 0 1 22 12a13 13 0 0 1-1.7 2.7M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/>',
+link:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+alert:'<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"/><path d="M12 9v4M12 17h.01"/>',
+info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+ext:'<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+panel:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+merge:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>'
+};
+let cur='a',T=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light',M=false;
+const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const fmt=n=>n.toLocaleString('en-US');
+const ic=(n,s=16)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${P[n]}</svg>`;
+const thI=()=>T==='dark'?'moon':'sun';
+const sc=s=>s[0].toUpperCase()+s.slice(1);
+
+const F={'missing-script':['file-warning','danger'],error:['octagon','danger'],duplicate:['copy','warn'],overridden:['strike','n'],company:['building','co'],redacted:['eye-off','n'],link:['link','n'],referenced:['link','n'],lazy:['clock','n'],merged:['merge','n'],'output style':['file-text','n']};
+const bdg=f=>{const[i,t]=F[f];const l=cur==='a'?f.replace(/ /g,'-'):sc(f.replace(/-/g,' '));return `<span class="bdg t-${t}">${ic(i,12)}${l}</span>`};
+const bdgs=a=>a.map(bdg).join('');
+
+const ORD=['M','L','P','U'];
+const LN={M:'managed',L:'project (local)',P:'project',U:'user'};
+const LP={M:'/etc/claude-code/managed-settings.json',L:'/home/user/ws/app/.claude/settings.local.json',P:'/home/user/ws/app/.claude/settings.json',U:'~/.claude/settings.json'};
+const LV={M:'--lm',L:'--ll',P:'--lp',U:'--lu'};
+const SW={w:'applied',o:'overridden',m:'merged',n:'not set'};
+const S=[
+ {g:'model',k:'model',v:'opus',l:{L:['w','opus'],U:['o','sonnet']},f:['overridden']},
+ {g:'permissions',k:'permissions.defaultMode',v:'acceptEdits',l:{P:['w','acceptEdits']},f:[]},
+ {g:'permissions',k:'permissions.allow',v:'2 entries',l:{P:['m','"Bash(npm test)"'],U:['m','"Read(./docs/**)"']},f:['merged']},
+ {g:'env',k:'env.OTEL_EXPORTER_OTLP_HEADERS',v:'[redacted]',l:{U:['w','[redacted]']},f:['redacted']}
+];
+const st=(s,k)=>(s.l[k]||['n'])[0];
+const by=(s,t)=>ORD.filter(k=>st(s,k)===t).map(k=>LN[k]);
+const lab=s=>{const w=by(s,'w'),m=by(s,'m'),o=by(s,'o');return (w.length?'Effective from '+w.join(', '):'Merged from '+m.join(' and '))+(o.length?'; overridden: '+o.join(', '):'')};
+const tip=s=>ORD.filter(k=>s.l[k]).map(k=>LN[k]+': '+s.l[k][1]).join('\n');
+const layersOf=s=>ORD.filter(k=>s.l[k]).map(k=>[k,...s.l[k]]);
+const glyphs=s=>ORD.map(k=>`<i class="s-${st(s,k)}" style="--l:var(${LV[k]})">${k}</i>`);
+const linA=s=>`<span class="lin" role="img" aria-label="${lab(s)}" title="${esc(tip(s))}">${glyphs(s).join('')}</span>`;
+const linC=s=>`<span class="route" role="img" aria-label="${lab(s)}" title="${esc(tip(s))}">${glyphs(s).map((g,i)=>(i?`<b class="cn${st(s,ORD[i])==='o'?' d':''}"></b>`:'')+g).join('')}</span>`;
+const chipB=s=>{const w=ORD.filter(k=>'wm'.includes(st(s,k))&&s.l[k]);return `<span class="lc" title="${lab(s)}">${w.map(k=>`<i style="--l:var(${LV[k]})"></i>`).join('')}${w.join('+')}</span>`};
+const mt=p=>p.length>30?p.slice(0,12)+'…'+p.slice(-15):p;
+const strata=s=>`<ol class="strata" aria-label="${lab(s)}">${ORD.map((k,i)=>{const[t,v]=s.l[k]||['n',''];return `<li class="s-${t}" style="--l:var(${LV[k]})"><span class="num">${i+1}</span><span class="ln">${LN[k]}</span><span class="sw">${SW[t]}</span><code class="pth" title="${LP[k]}">${mt(LP[k])}</code>${v?`<code class="val">${esc(v)}</code>`:''}</li>`}).join('')}</ol>`;
+
+const IN=[
+ {p:'~/.claude/CLAUDE.md',t:2250,d:0,f:[]},
+ {p:'/home/user/ws/app/CLAUDE.md',t:1300,d:0,f:[]},
+ {p:'@AGENTS.md',t:1000,d:1,f:['link']},
+ {p:'docs/AGENTS.override.md',t:200,d:1,f:['referenced'],x:1},
+ {p:'@docs/missing.md',t:0,d:1,f:['error'],err:1},
+ {p:'Output style: Concise',t:0,d:0,f:['output style']},
+ {p:'web/CLAUDE.md',t:50,d:0,f:['lazy']}
+];
+const TOT=4600;
+const LOADED=IN.filter(r=>r.t&&!r.x);
+const estOf=(r,u='')=>r.err?'not found':r.t?fmt(r.t)+u:'—';
+const H=[
+ {sev:'danger',w:'Danger',i:'octagon',r:'missing-script',t:'hooks/guard.sh',m:'Hook command points to a script that does not exist.'},
+ {sev:'warn',w:'Warning',i:'alert',r:'duplicate',t:'agents/reviewer.md',m:'Agent "reviewer" is defined in both user and project scope.'},
+ {sev:'n',w:'Info',i:'info',r:'unavailable',t:'jobs.systemd-user',m:'Collector unavailable on this machine: Linux only.'}
+];
+const VW=[['Settings','sliders',42,'Effective settings and where each value comes from'],['Instructions','file-text',4,'Instruction files in load order'],['Agents','bot',7,'Subagent definitions by scope'],['Skills & commands','sparkles',12,'Installed skills and slash commands'],['Hooks','zap',5,'Hook commands and their scripts'],['MCP & permissions','plug',3,'MCP servers and permission rules'],['Environment','leaf',18,'Allowlisted environment variables'],['Jobs','calendar',0,'Scheduled jobs'],['Sessions','terminal',24,'Recent sessions'],['Usage','gauge',null,'Token usage over time'],['Memory','database',118,'Engram observations']];
+const NAV=[['Machine',[['Overview','home'],['Health','activity',3]]],['Harness',VW.slice(0,8)],['Activity',VW.slice(8)]];
+const ID=['devbox','windows x64','tailnet devbox.example.ts.net','collected 10:00Z','v0.1.0'];
+const UA=[['jobs.systemd-user','Linux only'],['jobs.launchd','macOS only']];
+const DL=[[' ',1,1,'{'],['-',2,0,'  "model": "sonnet",'],['+',0,2,'  "model": "opus",'],['+',0,3,'  "permissions": { "defaultMode": "acceptEdits" },'],[' ',3,4,'  "env": {'],[' ',4,5,'    "OTEL_EXPORTER_OTLP_HEADERS": "[redacted]"'],[' ',5,6,'  }'],[' ',6,7,'}']];
+const PG=[
+ ['Views',[['sliders','Settings','<u>model</u> is set here','G S']]],
+ ['Folders',[['folder','/home/user/ws/app','<u>model</u>: opus',''],['folder','/home/user/ws/site','<u>model</u>: sonnet','']]],
+ ['Search results',[['sliders','<u>model</u>','opus, from project (local)','↵'],['file-text','~/.claude/settings.json:2','"<u>model</u>": "sonnet"','']]],
+ ['Actions',[['pencil','Edit <u>model</u> in user settings','','E'],['copy','Copy key <u>model</u>','','']]]
+];
+
+const navH=v=>NAV.map(([g,items])=>`<div class="ng"><div class="gl">${g}</div>${items.map(([n,i,c])=>`<button class="ni${n===v?' on':''}"${n===v?' aria-current="page"':''} title="${n}">${ic(i)}<span class="nl">${n}</span>${c!=null?`<span class="nc">${c}</span>`:''}</button>`).join('')}</div>`).join('');
+const chips=a=>a.map((c,i)=>`<button class="chip" aria-pressed="${!i}">${c}</button>`).join('');
+const col=(b,o)=>`<div class="col"><main class="mn">${b}</main>${o.bar||''}</div>`;
+const fsBtn=()=>`<button class="fs">${ic('folder',14)}<span>/home/user/ws/app</span>${ic('chev-d',14)}</button>`;
+const kbBtn=()=>`<button class="kb">${ic('search',14)}<span>Search</span><kbd>Ctrl K</kbd></button>`;
+const thBtn=()=>`<button class="ib" aria-label="Theme: ${T}">${ic(thI())}</button>`;
+const drows=()=>DL.map(([s,o,n,t])=>`<div class="dl${s==='+'?' add':s==='-'?' del':''}"><span class="g">${o||''}</span><span class="g">${n||''}</span><span class="sg">${s==='+'?'+<span class="sr">added</span>':s==='-'?'-<span class="sr">removed</span>':''}</span><code>${esc(t)}</code></div>`).join('');
+const ban=()=>`<div class="ban" role="alert">${ic('octagon')}<div><b>File changed on disk.</b> <code>~/.claude/settings.json</code> was modified after the dry run. Your staged changes are kept; run the dry run again before applying.</div><button class="btn sm">Run dry run again</button></div>`;
+const pm=(a,r)=>`<code class="pm"><span class="plus">+${a}</span> <span class="minus">-${r}</span></code>`;
+const pal=(x='')=>`<div class="scrim"></div><div class="pal" role="dialog" aria-modal="true" aria-label="Command palette"><div class="pin">${ic('search')}<input value="model" readonly aria-label="Search"></div><div class="pbody"><div class="plist" role="listbox" aria-label="Results">${PG.map(([g,items],gi)=>`<div role="group" aria-label="${g}"><div class="pgh">${g}</div>${items.map(([i,l,d,k],ii)=>`<div class="pi" role="option" aria-selected="${gi===2&&ii===0}">${ic(i)}<span class="pt"><span class="pl">${l}</span>${d?`<span class="pd">${d}</span>`:''}</span>${k?`<kbd>${k}</kbd>`:''}</div>`).join('')}</div>`).join('')}</div>${x}</div><div class="pf">↑↓ move, ↵ open, esc close</div></div>`;
+
+const shA=(v,b,o={})=>`<div class="app">${M
+ ?`<header class="hd"><button class="ib" aria-label="Open navigation">${ic('menu')}</button><span class="ttl">${v}</span><button class="ib" aria-label="Open command palette">${ic('search')}</button></header>${col(b,o)}`
+ :`<header class="hd"><span class="mach">${ic('monitor',14)}devbox</span>${fsBtn()}<span class="sp"></span>${kbBtn()}${thBtn()}<button class="btn">${ic('pencil',14)}Edit</button></header><div class="bd"><nav class="sb" aria-label="Views">${navH(v)}<button class="ni clp">${ic('panel')}<span class="nl">Collapse</span></button></nav>${col(b,o)}</div>`}${o.over||''}</div>`;
+const phA=(t,c,x='')=>`<div class="ph"><h1>${t}</h1><span class="cnt">${c}</span><span class="sp"></span>${x}</div>`;
+const expA=s=>`<div class="exp">${layersOf(s).map(([k,t,v])=>`<div class="el s-${t}"><i class="lg" style="--l:var(${LV[k]})">${k}</i><span class="en">${LN[k]}</span><span class="ev">${esc(v)}</span><span class="ew">${SW[t]}</span></div>`).join('')}<button class="btn sm">${ic('ext',14)}Open file</button></div>`;
+const setA=()=>{let g='';return phA('Settings','42 keys · 1 overridden · 1 redacted')+`<div class="tool"><label class="flt">${ic('search',14)}<input placeholder="Filter keys" aria-label="Filter keys"></label>${chips(['All','Overridden','Redacted','Company'])}</div>`+S.map((s,i)=>{const h=s.g!==g?`<div class="sec">${g=s.g}</div>`:'';return h+`<button class="row${i?'':' sel'}" aria-expanded="${!i}"><code class="k">${s.k}</code><code class="v">${esc(s.v)}</code>${linA(s)}<span class="fl">${bdgs(s.f)}</span></button>${i?'':expA(s)}`}).join('')};
+const insA=()=>phA('Instructions','4 files · 4,600 tok est.')+`<div class="tot"><span class="sec0">Total</span><span class="tbar" role="img" aria-label="Share of 4,600 estimated tokens by file">${LOADED.map(r=>`<i style="flex:${r.t}" title="${esc(r.p)}: ${fmt(r.t)}"></i>`).join('')}</span><code class="est">4,600 est.</code></div><div class="cr th"><span class="no">#</span><span>Path</span><span>Flags</span><span>Share</span><span class="est">est.</span></div>`+IN.map((r,i)=>`<div class="cr${r.err?' err':''}${r.x?' ref':''}"><span class="no">${i+1}</span><code class="pa" style="--d:${r.d}">${r.d?'<span class="tr">└ </span>':''}${esc(r.p)}</code><span class="fl">${bdgs(r.f)}</span><span class="bar"><i style="width:${r.t/TOT*100}%"></i></span><code class="est">${estOf(r)}</code></div>`).join('');
+const ovA=()=>phA('Overview','',`<button class="bdg t-danger">${ic('octagon',12)}Health: 3 findings, 1 danger</button>`)+`<div class="idn">${ID.map(x=>`<span>${x}</span>`).join('')}</div><div class="ov"><div><div class="sec">Views</div>${VW.map(([n,,c,d])=>`<button class="crow"><span class="big">${c??'–'}</span><span class="vt"><b>${n}</b><span class="vd">${d}</span></span>${ic('chev-r')}</button>`).join('')}</div><div><div class="sec">Unavailable</div>${UA.map(([c,r])=>`<div class="ua"><code>${c}</code><span>${r}</span></div>`).join('')}</div></div>`;
+const hA=()=>phA('Health','3 findings')+`<div class="tool">${chips(['All 3','Danger 1','Warning 1','Info 1'])}<span class="sp"></span><span class="hint"><kbd>j</kbd><kbd>k</kbd> move <kbd>Enter</kbd> open</span></div><div class="hrow th"><span>Severity</span><span>Rule</span><span>Target</span><span>Message</span><span></span></div>`+H.map((h,i)=>`<div class="hrow t-${h.sev}${i?'':' sel'}"><span class="sev">${ic(h.i)}${h.w}</span><code class="rl">${h.r}</code><span class="tg"><code>${h.t}</code><button class="ib sm" aria-label="Copy ${h.t}">${ic('copy',14)}</button></span><span class="msg">${h.m}</span><button class="btn sm">Open</button></div>`).join('');
+const dfA=e=>phA('Edit settings','dry run')+`<div class="dfile"><div class="dh">${ic('file-text',14)}<code>~/.claude/settings.json</code><span class="bdg t-n">user</span><span class="sp"></span>${pm(2,1)}</div>${e?ban():''}<div class="dbody">${drows()}</div></div>`;
+const barA=e=>`<div class="abar"><code>2 files, <span class="plus">+3</span> <span class="minus">-1</span>, ${e?'dry run out of date':'dry run'}</code><span class="sp"></span><button class="btn">Cancel</button><button class="btn pri"${e?' aria-disabled="true"':''}>Apply</button></div>`;
+
+const shB=(v,b,o={})=>`<div class="app">${M
+ ?`<header class="hd"><span class="wm">cfgdash</span><span class="sp"></span><button class="ib" aria-label="Open command palette">${ic('search')}</button><button class="ib" aria-label="Open navigation">${ic('menu')}</button></header>${col(b,o)}`
+ :`<div class="bd"><nav class="sb" aria-label="Views"><div class="wm">cfgdash</div>${navH(v)}</nav><div class="col"><header class="hd"><button class="crumb">${ic('folder',14)}<span>devbox</span><i>/</i>home<i>/</i>user<i>/</i>ws<i>/</i><b>app</b>${ic('chev-d',14)}</button><span class="sp"></span>${kbBtn()}${thBtn()}</header><main class="mn">${b}</main>${o.bar||''}</div></div>`}${o.over||''}</div>`;
+const phB=(t,s)=>`<div class="ph"><h1>${t}</h1><p>${s}</p></div>`;
+const specIn=s=>`<h2 class="sk">${s.k}</h2><p class="lede">Applied value <code>opus</code> comes from project (local). The user value <code>sonnet</code> is overridden.</p>${strata(s)}`;
+const setB=()=>{let g='';const rows=S.map((s,i)=>{const h=s.g!==g?`<div class="sec">${g=s.g}</div>`:'';return h+`<button class="srow${i?'':' sel'}" ${M?'aria-expanded':'aria-pressed'}="${!i}"><code class="k">${s.k}</code><code class="v">${esc(s.v)}</code>${chipB(s)}<span class="fl">${bdgs(s.f)}</span></button>`+(!i&&M?`<div class="acc">${specIn(s)}<div class="acts"><button class="btn">${ic('ext',14)}Open file</button></div></div>`:'')}).join('');return phB('Settings','Effective settings and where each value comes from.')+(M?rows:`<div class="md"><div>${rows}</div><aside class="spec" aria-label="Specimen for model"><div class="pn">Specimen</div>${specIn(S[0])}<div class="acts"><button class="btn">${ic('ext',14)}Open file</button><button class="btn">${ic('copy',14)}Copy path</button></div></aside></div>`)};
+const insB=()=>phB('Instructions','The files Claude reads for this folder, in load order.')+`<div class="toc">${IN.map((r,i)=>`<div class="tr${r.d?' ch':''}${r.err?' err':''}"><div class="tl"><span class="tn">${i+1}</span>${r.d?'<span class="br">└</span>':''}<code class="tp">${esc(r.p).replace(/\//g,'/<wbr>')}</code><span class="ld"></span><span class="tt">${estOf(r)}</span></div>${r.f.length?`<div class="tfl">${bdgs(r.f)}</div>`:''}${r.t?`<div class="tb4"><i style="width:${r.t/2250*100}%"></i></div>`:''}</div>`).join('')}<p class="tf">4 files, 4,600 tokens est.</p></div>`;
+const ovB=()=>phB('Overview','One machine, as it is configured right now.')+`<p class="prose">devbox is a Windows x64 machine. 4 of 6 collectors are active. <button class="lnk">3 findings</button> need attention.</p><p class="meta">Tailnet <code>devbox.example.ts.net</code> · collected 10:00Z · v0.1.0</p><h2>Index</h2><div class="idx">${VW.map(([n,,c,d])=>`<button class="ix"><span class="in">${n}</span><span class="id">${d}</span><span class="ic2">${c??'–'}</span></button>`).join('')}</div><h2>Not available here</h2><ul class="na">${UA.map(([c,r])=>`<li><code>${c}</code>: ${r}</li>`).join('')}</ul>`;
+const hB=()=>phB('Health','Things worth checking on this machine.')+[['Needs attention',0],['Worth a look',1],['For information',2]].map(([t,i])=>{const h=H[i];return `<h2>${t} (1)</h2><article class="hcard t-${h.sev}"><div class="hh">${ic(h.i)}<b>${h.w}</b><code>${h.r}</code></div><p>${h.m}</p><div class="ht"><code>${h.t}</code><button class="btn sm">${ic('ext',14)}Open</button></div></article>`}).join('');
+const dfB=e=>phB('Review changes','Nothing is written until you apply.')+`<section class="prop"><h2 class="pt2">Proposal 1 of 2</h2><p class="meta"><span class="bdg t-n">User scope</span><code>~/.claude/settings.json</code></p>${e?ban():''}<div class="dcard"><div class="dh"><code>~/.claude/settings.json</code><span class="sp"></span>${pm(2,1)}</div><div class="dbody">${drows()}</div></div></section>`;
+const barB=e=>`<div class="abar"><p>${e?'The dry run is out of date. Run it again to apply.':'Apply 3 changes to user settings. A dry run showed no conflicts.'}</p><button class="btn">Cancel</button><button class="btn pri"${e?' aria-disabled="true"':''}>Apply</button></div>`;
+
+const TABS=[['Overview','home'],['Health','activity'],['Settings','sliders'],['Search','search'],['More','more']];
+const shC=(v,b,o={})=>{const tv=TABS.some(t=>t[0]===v)?v:'More';return `<div class="app">${M
+ ?`<header class="hd"><span class="wm">${ic('home')}cfgdash</span><span class="sp"></span>${thBtn()}</header>${col(b,o)}<nav class="tabs" aria-label="Views">${TABS.map(([n,i])=>`<button${n===tv?' class="on" aria-current="page"':''}>${ic(i,20)}<span>${n}</span></button>`).join('')}</nav>`
+ :`<div class="bd"><nav class="sb" aria-label="Views">${navH(v)}<button class="ni pinb" title="Pin sidebar">${ic('panel')}<span class="nl">Pin sidebar</span></button></nav><div class="col"><header class="hd">${fsBtn()}<span class="mach">${ic('monitor',14)}devbox</span><span class="sp"></span>${kbBtn()}${thBtn()}<button class="btn">${ic('pencil',14)}Edit</button></header><main class="mn">${b}</main>${o.bar||''}</div></div>`}${o.over||''}</div>`};
+const vhC=(t,x='')=>`<div class="vhd"><h1>${t}</h1>${x}</div>`;
+const svb=c=>`<span class="svb${c}" role="img" aria-label="1 danger, 1 warning, 1 info">${H.map(h=>`<i class="t-${h.sev}"></i>`).join('')}</span><span class="svt">${H.map(h=>`<span class="t-${h.sev}">${ic(h.i,14)}1 ${h.w.toLowerCase()}</span>`).join('')}</span>`;
+const setC=()=>vhC('Settings',`<span class="cnt">42 keys</span><span class="sp"></span><label class="flt">${ic('search',14)}<input placeholder="Filter keys" aria-label="Filter keys"></label>`)+`<div class="card"><div class="ch">Effective settings</div><div class="kgrid">${S.map((s,i)=>`<button class="kc${i?'':' sel'}" aria-expanded="${!i}"><span class="kt"><span class="k">${s.k}</span><span class="fl">${bdgs(s.f)}</span></span><code class="v">${esc(s.v)}</code>${linC(s)}${i?'':`<span class="kd">${layersOf(s).map(([k,t,v])=>`<span class="kl s-${t}"><i style="--l:var(${LV[k]})">${k}</i>${LN[k]}<code>${esc(v)}</code><span class="ew">${SW[t]}</span></span>`).join('')}</span>`}</button>`).join('')}</div></div>`;
+const insC=()=>vhC('Instructions')+`<div class="card"><div class="ihead"><div><div class="tl">Loaded for /home/user/ws/app</div><div class="num">4,600 <small>tok est.</small></div></div><span class="sbar" role="img" aria-label="Share of 4,600 estimated tokens by file">${LOADED.map(r=>`<i style="flex:${r.t}" title="${esc(r.p)}: ${fmt(r.t)}"></i>`).join('')}</span></div>${IN.map((r,i)=>`<div class="cr${r.err?' err':''}${r.x?' ref':''}"><span class="no">${i+1}</span><code class="pa" style="--d:${r.d}">${r.d?'└ ':''}${esc(r.p)}</code><span class="fl">${bdgs(r.f)}</span><span class="bar"><i style="width:${r.t/TOT*100}%"></i></span><code class="est">${estOf(r,' tok')}</code></div>`).join('')}</div>`;
+const TILE=['Settings','Instructions','Agents','Skills & commands','Hooks','MCP & permissions','Sessions','Memory'];
+const ovC=()=>vhC('Overview',`<span class="cnt">devbox · collected 10:00Z</span>`)+`<div class="bento"><button class="tile w2 h2 on"><span class="tl">${ic('activity',20)}Health</span><span class="num">3 <small>findings</small></span>${svb('')}<span class="top">${H.slice(0,2).map(h=>`<span class="tf t-${h.sev}">${ic(h.i,14)}<code>${h.r}</code><span>${h.t}</span></span>`).join('')}</span></button><div class="tile w2"><span class="tl">${ic('monitor',20)}Identity</span><span class="idt"><b>devbox</b><span>windows x64</span><code>devbox.example.ts.net</code><span>v0.1.0</span></span></div>${VW.filter(x=>TILE.includes(x[0])).map(([n,i,c])=>`<button class="tile"><span class="tl">${ic(i,20)}${n}</span><span class="num">${c}</span>${n==='Memory'?'<span class="chg">changed</span>':''}</button>`).join('')}<div class="tile w2"><span class="tl">${ic('info',20)}Collectors</span><span class="num">4 <small>of 6 active</small></span>${UA.map(([c,r])=>`<span class="ua"><code>${c}</code><span>${r}</span></span>`).join('')}</div></div>`;
+const hC=()=>vhC('Health',`<span class="cnt">3 findings</span>`)+`<div class="hsum">${svb(' lg')}</div><div class="hsplit"><div class="card hl" role="listbox" aria-label="Findings">${H.map((h,i)=>`<div class="hi t-${h.sev}" role="option" aria-selected="${!i}">${ic(h.i)}<span><b>${h.w}</b><code>${h.t}</code></span></div>`).join('')}</div><div class="card hdet"><span class="sev t-danger">${ic('octagon')}Danger</span><h2>Hook script is missing</h2><p>${H[0].m}</p><dl><dt>Target</dt><dd><code>hooks/guard.sh</code></dd><dt>Rule</dt><dd><code>missing-script</code></dd></dl><button class="btn pri">${ic('ext',14)}Open file</button></div></div>`;
+const dfC=e=>vhC('Review changes',`<span class="cnt">2 files</span>`)+`<div class="dcard${e?' bad':''}"><div class="dh">${ic('file-text')}<code>~/.claude/settings.json</code><span class="bdg t-n">User</span><span class="bdg t-n">Dry run</span><span class="sp"></span>${pm(2,1)}</div>${e?ban():''}<button class="hk" aria-expanded="true">${ic('chev-d',14)}<code>@@ -1,6 +1,7 @@</code></button><div class="dbody">${drows()}</div></div>`;
+const barC=e=>`<div class="abar"><div><b>3 changes</b><span>2 files, dry run ${e?'out of date':'passed'}</span></div><span class="sp"></span><button class="btn">Cancel</button><button class="btn pri lg"${e?' aria-disabled="true"':''}>Apply</button></div>`;
+const pvC=()=>`<div class="pv"><span class="tl">Preview</span><code class="k">model</code><code class="v">opus</code>${linC(S[0])}<p>Applied from project (local); the user value sonnet is overridden.</p><button class="btn sm">${ic('ext',14)}Open in Settings</button></div>`;
+
+const DIRS={
+a:{sh:shA,set:setA,ins:insA,ov:ovA,h:hA,df:dfA,bar:barA,pal:()=>pal(),
+ thesis:'A. Instrument panel (recommended). The interface reads like a precise instrument; everything is a labelled row of mono values with a four-cell lineage strip, and color appears only where state lives.',
+ mob:'375 px: 44px top bar with a hamburger nav sheet (folder switcher inside), rows stack key / value / lineage plus flags, tap expands, the file sheet goes full height, the diff scrolls horizontally with sticky gutters, the Apply bar keeps a safe-area inset.',
+ cap:{set:'Header 40px, sidebar 208px (collapses to a 48px icon rail), page head 56px, toolbar 40px, rows 28px. Row <code>model</code> is expanded inline; "Open file" opens a 480px side sheet (not shown). Hover, focus and selection: 100ms linear.',
+  ins:'Tree table under a full-width total bar; 96x6 token bars in muted; the error node is outlined in danger. The total counts the four loaded files; the referenced file is listed but not counted.',
+  ov:'No cards: mono identity strip, counts table with one linked row per view, Unavailable list, Health count chip.',
+  h:'Table sorted by severity with filter chips; j / k move, Enter opens.',
+  df:'Unified diff with two 40px gutters, sticky 32px file header, pinned 56px Apply bar. After apply the changed row tint-flashes 400ms (reduced motion: a static 6px "changed" dot).',
+  dfe:'Stale dry run: danger banner between header and diff, staged changes kept, Apply disabled.',
+  pal:'Ctrl/Cmd+K, 560px at 12vh, mono input, matches underlined. Opens with 100ms opacity plus 4px.'}},
+b:{sh:shB,set:setB,ins:insB,ov:ovB,h:hB,df:dfB,bar:barB,pal:()=>pal(),
+ thesis:'B. Field guide. A printed reference for one machine; a warm paper theme and a lamp-lit dark theme, serif headings, and lineage drawn as numbered strata so "why this value" reads like a footnote. Route content fades and rises 8px over 220ms once per route; strata stagger 40ms (max 160ms).',
+ mob:'375 px: 48px top bar (wordmark, palette, drawer), single column, the specimen becomes an inline accordion, leaders kept, paths wrap at /, pinned Apply bar.',
+ cap:{set:'Sidebar 232px with serif wordmark, header 48px with a breadcrumb folder button. Master-detail: sticky 400px specimen at 1100px and wider (a bottom drawer at 768 to 1099px). Rows show a compact layer chip.',
+  ins:'Contents page: dotted leaders to token counts, a 4px bar scaled to the largest file, children indented with └.',
+  ov:'Prose block above a typographic index of views; "Not available here" with reasons.',
+  h:'Grouped by urgency; cards show rule, target and message.',
+  df:'"Proposal 1 of 2" heading over scope and path, diff in a raised card, sticky Apply bar with the dry-run sentence.',
+  dfe:'Stale dry run: danger banner above the diff card, staged changes kept, Apply disabled.',
+  pal:'Centered 640px on raised, serif group headings, 15px items with muted descriptions; results show path and snippet.'}},
+c:{sh:shC,set:setC,ins:insC,ov:ovC,h:hC,df:dfC,bar:barC,pal:()=>pal(M?'':pvC()),
+ thesis:'C. Control room. A status board; a tile grid shows the machine\'s live state with counts that tick, an indigo accent and a route-style lineage make changes visible, and the views behind it stay dense.',
+ mob:'375 px: 48px top bar, 56px bottom tab bar (Overview, Health, Settings, Search, More), bento in one column with count tiles 2-up, the route sits under the key, the Apply bar sits above the tab bar.',
+ cap:{set:'64px icon rail (expands to 232px on hover or focus-within, pinnable), header 52px. Each key is a card with its route; the selected card expands with the contributing layers.',
+  ins:'Tree in a card with 120x8 token bars in accent at 70%; the header shows the total and one segment per loaded file.',
+  ov:'Bento: Health 2x2, Identity 2x1, count tiles, Collectors 2x1. Memory shows the reduced-motion "changed" dot; with motion, counts tick 600ms after a refresh and the tile border pulses once.',
+  h:'Segmented severity bar, 320px findings list and a detail pane (a sheet when narrow).',
+  df:'Raised card per file with a collapsible hunk; pinned 64px footer card with a large Apply. Sheet, palette and list reorder use a spring (stiffness 400, damping 34).',
+  dfe:'Stale dry run: danger banner on the affected card, staged changes kept, Apply disabled.',
+  pal:'640px with results and preview panes above 768px, single pane below.'}}
+};
+const FR=[['set','1','Shell + Settings','Settings'],['ins','2','Instructions','Instructions'],['ov','3','Overview','Overview'],['h','4','Health','Health'],['df','5','Settings edit: diff review','Settings'],['dfe','5b','Settings edit: stale-error variant','Settings'],['pal','6','Command palette over the shell','Settings']];
+function frameHTML(d,k,v){const e=k==='dfe';if(k==='df'||e)return d.sh(v,d.df(e),{bar:d.bar(e)});if(k==='pal')return d.sh(v,d.set(),{over:d.pal()});return d.sh(v,d[k]())}
+const root=document.getElementById('root'),frameEl=document.getElementById('frame');
+function render(){const d=DIRS[cur];root.className='dir dir-'+cur+(M?' m':'');root.dataset.theme=T;root.setAttribute('aria-labelledby','tab-'+cur);root.innerHTML=`<p class="x-thesis">${d.thesis}${M?' '+d.mob:''}</p>`+FR.map(([k,n,t,v])=>`<figure class="x-fr"><figcaption><b>${n}. ${t}.</b> ${d.cap[k]}</figcaption><div class="scr">${frameHTML(d,k,v)}</div></figure>`).join('')}
+function press(b){b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))}
+const tabs=[...document.querySelectorAll('[role=tab]')];
+function sel(t){tabs.forEach(x=>{const on=x===t;x.setAttribute('aria-selected',String(on));x.tabIndex=on?0:-1});cur=t.dataset.dir;render()}
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>sel(t));t.addEventListener('keydown',e=>{const n=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;const x=e.key==='Home'?tabs[0]:e.key==='End'?tabs[tabs.length-1]:n?tabs[(i+n+tabs.length)%tabs.length]:null;if(x){e.preventDefault();x.focus();sel(x)}})});
+document.querySelectorAll('[data-theme-set]').forEach(b=>{if(b.dataset.themeSet===T)press(b);b.addEventListener('click',()=>{T=b.dataset.themeSet;press(b);render()})});
+document.querySelectorAll('[data-w]').forEach(b=>b.addEventListener('click',()=>{M=b.dataset.w==='m';press(b);frameEl.className=M?'w-mob':'w-desk';render()}));
+render();
+</script>
+</body>
+</html>
