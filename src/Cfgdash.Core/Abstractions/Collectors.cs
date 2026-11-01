@@ -32,9 +32,12 @@ public interface ICollector
     Task<CollectorResult> CollectAsync(CollectContext context, CancellationToken cancellationToken);
 }
 
-public sealed record CollectorResult(IReadOnlyList<Block> Blocks, string? UnavailableReason = null, IReadOnlyList<string>? Notes = null)
+public sealed record CollectorResult(IReadOnlyList<Block> Blocks, string? UnavailableReason = null, IReadOnlyList<string>? Notes = null, string? NotPresentReason = null)
 {
     public static CollectorResult Unavailable(string reason) => new([], reason);
+
+    /// <summary>The collector's source is absent on this machine (for example a tool's config dir); the snapshot shows <c>notPresent</c>.</summary>
+    public static CollectorResult NotPresent(string reason) => new([], NotPresentReason: reason);
 }
 
 /// <summary>
