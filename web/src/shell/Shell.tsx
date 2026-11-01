@@ -13,9 +13,20 @@ import { useUi } from '../state/ui';
 import { CollectedLine, FolderPill, NavList, RefreshButton } from './Nav';
 import { ThemeToggle } from './ThemeToggle';
 
+let headingPending = false;
+
 /** Focuses the page heading inside `main`. */
 export function focusMainHeading(): void {
-  document.querySelector<HTMLElement>('main h1')?.focus();
+  const heading = document.querySelector<HTMLElement>('main h1');
+  headingPending = !heading;
+  heading?.focus();
+}
+
+/** Focuses the page heading when the last {@link focusMainHeading} found none because a lazy page was still loading. */
+export function focusPendingHeading(): void {
+  if (headingPending) {
+    focusMainHeading();
+  }
 }
 
 function skipToContent(event: MouseEvent<HTMLAnchorElement>): void {
@@ -23,6 +34,16 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>): void {
   const main = document.getElementById('content');
   main?.focus();
   main?.scrollIntoView();
+}
+
+/** Spinner plus text in a status region. */
+export function LoadingPanel({ text, className }: { text: string; className?: string }) {
+  return (
+    <div role="status" className={cn('flex items-center gap-3 py-12 text-muted', className)}>
+      <LoaderCircle className="size-5 animate-spin" strokeWidth={1.75} aria-hidden="true" />
+      <p>{text}</p>
+    </div>
+  );
 }
 
 const H1 = 'text-2xl leading-[30px] font-semibold';
@@ -71,12 +92,7 @@ function MainContent({ className }: { className?: string }) {
   const request = store.request;
   return (
     <main id="content" tabIndex={-1} className={className}>
-      {request.phase === 'loading' && (
-        <div role="status" className="flex items-center gap-3 py-12 text-muted">
-          <LoaderCircle className="size-5 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-          <p>Reading this machine's harness...</p>
-        </div>
-      )}
+      {request.phase === 'loading' && <LoadingPanel text="Reading this machine's harness..." />}
       {request.phase === 'error' && <ErrorPanel kind={request.kind} />}
       {request.phase === 'content' && (
         <>
@@ -203,7 +219,7 @@ function NarrowShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const snapshot = store.snapshot;
   const viewId = url.path.split('/').filter(Boolean)[0] ?? '';
-  const title = VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '';
+  const title = viewId === 'search' ? 'Search' : (VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '');
   const settingsVisible = store.navViews.some((v) => v.id === 'settings');
   return (
     <div className="min-h-screen">

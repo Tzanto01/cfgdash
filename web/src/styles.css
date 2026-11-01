@@ -296,6 +296,16 @@
   .pulse-once {
     animation: pulse-border 600ms ease-out;
   }
+
+  .sheet-in {
+    animation: sheet-in 160ms ease-out;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes jump-flash {

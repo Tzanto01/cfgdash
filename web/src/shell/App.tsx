@@ -1,8 +1,9 @@
 import { LazyMotion, MotionConfig } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 'react-router';
 import { TooltipProvider } from '../components/ui/tooltip';
 import { setAccessProblem, useAccessProblem } from '../lib/access';
+import { readParams } from '../lib/url';
 import { VIEW_DEFINITIONS } from '../lib/views';
 import { OverviewPage } from '../pages/OverviewPage';
 import { ViewPage } from '../pages/ViewPage';
@@ -11,7 +12,12 @@ import { SnapshotProvider, useSnapshotStore } from '../state/snapshot';
 import { applyTheme, useTheme } from '../state/theme';
 import { UiProvider, useUi } from '../state/ui';
 import { AccessPanel } from './AccessPanel';
-import { focusMainHeading, Shell } from './Shell';
+import { focusMainHeading, LoadingPanel, Shell } from './Shell';
+
+const FileSheet = lazy(() => import('./FileSheet'));
+const FolderPicker = lazy(() => import('./FolderPicker'));
+const CommandPalette = lazy(() => import('./CommandPalette'));
+const SearchPage = lazy(() => import('../pages/SearchPage'));
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -24,7 +30,7 @@ function needsRedirect(pathname: string): boolean {
 
 function pageTitle(pathname: string): string {
   const id = pathname.split('/').filter(Boolean)[0];
-  return VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here';
+  return id === 'search' ? 'Search' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
 }
 
 function Root() {
@@ -35,7 +41,9 @@ function Root() {
   const theme = useTheme();
   const redirect = needsRedirect(location.pathname);
   const lastPath = useRef<string | null>(null);
-  const { setPickerOpen, setPaletteOpen, paletteOpen } = ui;
+  const { setPickerOpen, setPaletteOpen, paletteOpen, pickerOpen } = ui;
+  const { pathname } = location;
+  const params = readParams(location.search);
 
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -73,11 +81,17 @@ function Root() {
         return;
       }
       event.preventDefault();
-      setPaletteOpen(true);
+      const input = slash && pathname === '/search' ? document.getElementById('search-page-input') : null;
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+        input.select();
+      } else {
+        setPaletteOpen(true);
+      }
     };
     document.addEventListener('keydown', onKeydown);
     return () => document.removeEventListener('keydown', onKeydown);
-  }, [problem, paletteOpen, setPaletteOpen]);
+  }, [problem, paletteOpen, setPaletteOpen, pathname]);
 
   if (redirect) {
     return <Navigate to={{ pathname: '/overview', search: location.search }} replace />;
@@ -93,7 +107,26 @@ function Root() {
       />
     );
   }
-  return <Shell />;
+  return (
+    <>
+      <Shell />
+      {(params.file || params.detail) && (
+        <Suspense fallback={null}>
+          <FileSheet />
+        </Suspense>
+      )}
+      {pickerOpen && (
+        <Suspense fallback={null}>
+          <FolderPicker />
+        </Suspense>
+      )}
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 const loadMotionFeatures = () => import('../lib/motion-features').then((m) => m.default);
@@ -125,6 +158,14 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: null },
       { path: 'overview', element: <OverviewPage /> },
+      {
+        path: 'search',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading search..." />}>
+            <SearchPage />
+          </Suspense>
+        )
+      },
       { path: ':view', element: <ViewPage /> },
       { path: '*', element: null }
     ]
