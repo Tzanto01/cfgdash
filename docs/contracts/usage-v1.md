@@ -18,14 +18,14 @@ View `usage`. Requirements: none (the endpoint check is the state rule). State:
 | Endpoint unreachable, timeout, non-2xx, or 401/403 | `unavailable`, one line ("metrics store at <host:port> unreachable", "metrics store needs auth (not supported)") |
 | Store answers but holds no `claude_code` metrics | `active` with the totals kv only and a note |
 
-Blocks (ids are stable; a block whose labels do not exist in the store is omitted):
+Blocks (plain block ids as in snapshot-v1, stable; a block whose labels do not exist in the store is omitted):
 
 | Block id | Kind | Content |
 | --- | --- | --- |
-| `usage.metrics/totals` | kv | `cost-today`, `cost-7d`, `cost-30d` (USD, 2 decimals), `tokens-30d`, `sessions-30d`, `active-time-30d` (when present), `source` (host:port of the store), `range` |
-| `usage.metrics/by-day` | table | last 30 days, newest first: `date`, `cost`, `input`, `output`, `cache-read`, `cache-creation`, `sessions` |
-| `usage.metrics/by-model` | table | 30 days: `model`, `cost`, `input`, `output`, `cache-read`, `cache-creation` |
-| `usage.metrics/by-machine` | table | 30 days per `host.name` or `service.instance.id` label when present: `machine`, `cost`, `tokens`, `sessions` |
-| `usage.metrics/by-project` | table | 30 days per a project-like label when present (`project`, `repo`, or a `OTEL_RESOURCE_ATTRIBUTES` key the store exposes): `project`, `cost`, `tokens`, `sessions` |
+| `totals` | kv | `cost-today`, `cost-7d`, `cost-30d` (USD, 2 decimals), `tokens-30d`, `sessions-30d`, `active-time-30d` (when present), `source` (host:port of the store), `range` |
+| `by-day` | table | last 30 days, newest first: `date`, `cost`, `input`, `output`, `cache-read`, `cache-creation`, `sessions` |
+| `by-model` | table | 30 days: `model`, `cost`, `input`, `output`, `cache-read`, `cache-creation` |
+| `by-machine` | table | 30 days per `host.name` or `service.instance.id` label when present: `machine`, `cost`, `tokens`, `sessions` |
+| `by-project` | table | 30 days per a project-like label when present (`project`, `repo`, or a `OTEL_RESOURCE_ATTRIBUTES` key the store exposes): `project`, `cost`, `tokens`, `sessions` |
 
 Values pass through the redactor like every block. Account, organization, user and session id labels are never shown. Days use the machine's local time zone; the kv `range` names it.
