@@ -8,12 +8,12 @@ Findings are deterministic rules over one snapshot of one target dir. No AI, no 
 
 ```jsonc
 {
-  "id": "missing-script:hooks.registered:hooks.registered/hooks:SessionStart-0-0", // stable: <rule>:<collectorId>:<blockId>:<itemId or kv key>
+  "id": "missing-script:hooks.registered:hooks:SessionStart-0-0", // stable: <rule>:<collectorId>:<blockId>:<itemId or kv key>
   "rule": "missing-script",
   "severity": "critical",           // critical | warning | info
   "title": "Hook script not found",  // short, no paths
   "detail": "SessionStart runs D:/ws/config/.claude/hooks/start.ps1, which does not exist.", // redacted text
-  "evidence": { "collectorId": "hooks.registered", "blockId": "hooks.registered/hooks", "itemId": "SessionStart-0-0", "fileId": "0f1e2d3c4b5a6978" }, // itemId, key, fileId optional
+  "evidence": { "collectorId": "hooks.registered", "blockId": "hooks", "itemId": "SessionStart-0-0", "fileId": "0f1e2d3c4b5a6978" }, // itemId, key, fileId optional
   "view": "hooks"                    // the snapshot section view the evidence lives in
 }
 ```
@@ -25,12 +25,12 @@ Findings are sorted by severity (critical, warning, info), then `id`. Ids stay s
 | Rule | Source in the snapshot | Severity |
 | --- | --- | --- |
 | `missing-script` | any row or kv entry flagged `missing-script` | critical |
-| `missing-command` | any row flagged `missing-command` (new flag: the MCP server's stdio `command` is neither an existing absolute path nor found on `PATH` through `ToolProbe`; network-path commands are not probed and not flagged) | warning |
+| `missing-command` | any row flagged `missing-command` (new flag on applied stdio MCP servers: a bare command name not found on `PATH` through `ToolProbe`, or a path (absolute, or relative resolved against the target dir) that does not exist. Not flagged: commands containing `${`, network paths (never probed), overridden definitions) | warning |
 | `import-error` | instruction chain nodes flagged `error` (missing target, cycle, depth limit) | warning |
 | `error` | any other row, node or kv entry flagged `error` | warning |
 | `duplicate` | rows flagged `duplicate` (same-name agents, skills or commands where one silently loses) | warning |
-| `collector-error` | collector `state` `unavailable` whose reason is a timeout or exception | warning |
-| `collector-unavailable` | collector `state` `unavailable` for a missing tool | info |
+| `collector-error` | collector `state` `unavailable` whose reason is a timeout, an exception or a failed command run | warning |
+| `collector-unavailable` | any other `unavailable` collector (missing tool or missing input) | info |
 | `overridden` | settings entries flagged `overridden` (layering is normal; shown so the Health view can explain it) | info |
 
 `notPresent` collectors are never findings. Company rows produce findings only where the snapshot already shows them (same rule as the snapshot). Adding a rule later is additive; changing a rule's id or severity is a contract change.
