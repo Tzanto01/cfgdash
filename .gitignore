@@ -12,9 +12,8 @@ coverage/
 *.user
 *.suo
 
-# Node and Angular
+# Node
 node_modules/
-.angular/
 dist/
 npm-debug.log*
 

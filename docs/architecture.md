@@ -5,7 +5,7 @@ cfgdash is one self-contained executable per OS (`win-x64`, `linux-x64`) that re
 ```
 src/Cfgdash.Core    collectors, settings merge, redaction, file registry, search, environment discovery
 src/Cfgdash.Host    the `cfgdash` exe: CLI, Kestrel, security, /api/v1, tailscale serve, update, export, embedded UI
-web/                Angular UI, built into the host as embedded resources
+web/                React UI, built into the host as embedded resources
 tests/              xUnit (Core, Host); the UI has its own Vitest tests in web/
 docs/contracts/     the versioned contracts every part builds against
 ```
