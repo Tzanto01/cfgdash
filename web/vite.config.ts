@@ -11,7 +11,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist/cfgdash/browser',
-    emptyOutDir: true
+    emptyOutDir: true,
+    assetsInlineLimit: 0
   },
   test: {
     environment: 'jsdom',
