@@ -43,7 +43,7 @@ Owner: department lead. Every team implements its side; `security-reviewer` chec
 
 Read only by exact name from this allowlist (process scope; on Windows also User and Machine scope for the same names). No prefix scans, no enumeration:
 
-Exactly the names in `src/Cfgdash.Core/Environment/HarnessEnvAllowlist.cs`, read only through `AllowlistEnvironmentReader` (unknown names throw): `Harness` names are shown with their value (redactor still applies), `PresenceOnly` credential names are reported as set or unset and their value never leaves the reader, `Runtime` names are internal probes and never displayed. Adding a name is a contract change.
+Exactly the names in `src/Cfgdash.Core/Environment/HarnessEnvAllowlist.cs`, read only through `AllowlistEnvironmentReader` (unknown names throw): `Harness` names are shown with their value (redactor still applies), `PresenceOnly` credential names are reported as set or unset and their value never leaves the reader, `Runtime` names are internal probes and never displayed. Adding a name is a contract change. Added for v0.4 (`Harness`): `CODEX_HOME`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`.
 
 ## Company data
 
