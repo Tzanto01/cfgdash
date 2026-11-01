@@ -94,7 +94,7 @@ public sealed class EditCatalogDataTests
                 JsonNode? value = s.Type switch
                 {
                     "bool" => true,
-                    "number" => JsonNode.Parse("1"),
+                    "number" => JsonValue.Create(s.Min ?? 1),
                     "stringList" => new JsonArray("x"),
                     "enum" => s.Options!.First(o => scope == "user" || s.UserOnlyOptions?.Contains(o) != true),
                     _ => "x",
