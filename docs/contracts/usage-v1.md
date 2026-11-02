@@ -22,7 +22,7 @@ Blocks (plain block ids as in snapshot-v1, stable; a block whose labels do not e
 
 | Block id | Kind | Content |
 | --- | --- | --- |
-| `totals` | kv | `cost-today`, `cost-7d`, `cost-30d` (USD, 2 decimals), `tokens-30d`, `sessions-30d`, `active-time-30d` (when present), `source` (host:port of the store), `range` |
+| `totals` | kv | `cost-today`, `cost-7d`, `cost-30d` (USD, 2 decimals), `tok-30d`, `sess-30d` (key names avoid the redactor's secret words), `active-time-30d` (when present), `source` (host:port of the store), `range` |
 | `by-day` | table | last 30 days, newest first: `date`, `cost`, `input`, `output`, `cache-read`, `cache-creation`, `sessions` |
 | `by-model` | table | 30 days: `model`, `cost`, `input`, `output`, `cache-read`, `cache-creation` |
 | `by-machine` | table | 30 days per `host.name` or `service.instance.id` label when present: `machine`, `cost`, `tokens`, `sessions` |
