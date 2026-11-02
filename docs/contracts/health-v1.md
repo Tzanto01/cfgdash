@@ -31,6 +31,8 @@ Findings are sorted by severity (critical, warning, info), then `id`. Ids stay s
 | `duplicate` | rows flagged `duplicate` (same-name agents, skills or commands where one silently loses) | warning |
 | `collector-error` | collector `state` `unavailable` whose reason is a timeout, an exception or a failed command run | warning |
 | `collector-unavailable` | any other `unavailable` collector (missing tool or missing input) | info |
+| `mcp-drift` | the same MCP server name defined with a different command, url or args across `mcp.servers`, `codex.config` and `opencode.config` (values compared redacted) | info |
+| `instructions-drift` | an instruction file (`CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`) that one tool loads for the target dir and another tool present on the machine does not | info |
 | `overridden` | settings entries flagged `overridden` (layering is normal; shown so the Health view can explain it) | info |
 
 `notPresent` collectors are never findings. Company rows produce findings only where the snapshot already shows them (same rule as the snapshot). Adding a rule later is additive; changing a rule's id or severity is a contract change.

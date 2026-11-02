@@ -29,6 +29,8 @@ cfgdash stop
 cfgdash update [--check]
 cfgdash export [--dir <path>]
 cfgdash doctor [--dir <path>] [--json]
+cfgdash context [--dir <path>] [--json]
+cfgdash autostart on|off|status
 cfgdash --version
 ```
 
@@ -37,7 +39,7 @@ cfgdash --version
 - `stop`: reads the run-state file, calls `POST /api/v1/shutdown`, waits up to 10 s, otherwise stops the recorded process (PID + start time + exe path must match) and removes the recorded tailscale serve handler itself. Exit 0 when nothing is running.
 - `update`: `gh release download` of the latest release asset for this OS/arch from the cfgdash repo, verifies it against `SHA256SUMS`, replaces the installed binary (Windows: rename the running exe to `.old`, write the new one, delete `.old` on next start; Linux: write next to it and `rename`). Refuses while an instance is running (prints `cfgdash stop`). `--check` only compares versions. Without gh or gh auth: exit 2 with the reason.
 - `export`: builds the snapshot and writes `<cache>/exports/<hostname>-<UTC timestamp>.json`, prints the path. Never writes anywhere else.
-- `doctor`: see [health-v1](health-v1.md).
+- `doctor`: see [health-v1](health-v1.md). `context`: what loads for the folder (instruction chain, effective settings with source, agents, skills, hooks, MCP servers), redacted, text or JSON; see [assistant-v1](assistant-v1.md). `autostart`: see [cfgdash-config-v1](cfgdash-config-v1.md).
 - Exit codes: 0 ok, 1 error, 2 prerequisite missing (for example gh, tailscale, HTTPS certs), 3 `doctor` found a critical finding.
 
 ## Run state and cache (all under the user cache dir: Windows `%LOCALAPPDATA%\cfgdash`, Linux `$XDG_CACHE_HOME/cfgdash` or `~/.cache/cfgdash`)
