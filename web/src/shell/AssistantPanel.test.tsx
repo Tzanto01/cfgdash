@@ -1,5 +1,6 @@
 import { act, fireEvent } from '@testing-library/react';
 import type { AssistantStatus, CfgdashSettings } from '../lib/models';
+import { makeSnapshot } from '../test/fixtures';
 import { startApp, type AppHarness, type RequestRecord } from '../test/harness';
 import { answerWhenSent } from '../test/lazy';
 
@@ -20,8 +21,10 @@ const settings = (): CfgdashSettings => ({
 });
 
 class FakeEventSource extends EventTarget {
+  static readonly CLOSED = 2;
   static all: FakeEventSource[] = [];
   closed = false;
+  readyState = 1;
   constructor(readonly url: string) {
     super();
     FakeEventSource.all.push(this);
@@ -49,16 +52,16 @@ async function emit(name: string, data: unknown, source = FakeEventSource.all[Fa
   });
 }
 
-async function openPanel(status: AssistantStatus = READY): Promise<AppHarness> {
+async function openPanel(status: AssistantStatus = READY, gear: CfgdashSettings = settings(), url = '/settings?dir=D%3A%2Fws%2Fapp'): Promise<AppHarness> {
   FakeEventSource.all = [];
-  const h = await startApp('/settings?dir=D%3A%2Fws%2Fapp');
+  const h = await startApp(url);
   vi.stubGlobal('EventSource', FakeEventSource);
   await h.answer('/api/v1/health', HEALTH_EDITS);
   await h.answer('/api/v2/cfgdash-settings', settings());
   await h.click(h.button('Assistant'));
   await answerWhenSent(h, '/api/v2/assistant/status', status);
   if (status.available) {
-    await h.answer('/api/v2/cfgdash-settings', settings());
+    await h.answer('/api/v2/cfgdash-settings', gear);
   }
   return h;
 }
@@ -126,6 +129,7 @@ describe('assistant panel', () => {
     await emit('done', {});
 
     const text = panel()!.textContent ?? '';
+    expect(text).toContain('Assistant · model output derived from your files; review before pasting');
     expect(text).toContain('The user scope sets');
     expect(text).toContain('model to opus. See docs (https://example.com/settings).');
     expect(text).toContain('get_snapshot: done');
@@ -161,6 +165,60 @@ describe('assistant panel', () => {
     expect(h.requests.some((r) => r.url.pathname === '/api/v2/proposals/p2/apply')).toBe(false);
   });
 
+  it('flags a proposal for a file tracked by git', async () => {
+    const h = await openPanel();
+    await h.answer('/api/v2/settings', { categories: [], files: [{ scope: 'project', path: 'D:/ws/app/.claude/settings.json', exists: true, gitTracked: true }] });
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('proposal', proposal('p1'));
+
+    expect(panel()?.querySelector('section[aria-label="Assistant proposal"]')?.textContent).toContain('tracked by git');
+  });
+
+  it('stops the working state and says so when the event stream is lost', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+    expect(panel()?.textContent).toContain('The assistant is working');
+
+    const source = FakeEventSource.all[0];
+    source.readyState = FakeEventSource.CLOSED;
+    await act(async () => {
+      source.dispatchEvent(new Event('error'));
+    });
+
+    expect(panel()?.textContent).not.toContain('The assistant is working');
+    expect(panel()?.textContent).toContain('Lost the connection to the assistant.');
+    expect(h.button('Full check').disabled).toBe(false);
+  });
+
+  it('falls back to the first model when cfgdash settings give none', async () => {
+    const h = await openPanel(READY, { ...settings(), configError: 'bad JSON' });
+    expect(panel()!.querySelector('select')!.value).toBe('sonnet');
+
+    const start = await startTurn(h);
+
+    expect(body(start)).toMatchObject({ model: 'sonnet', effort: 'medium' });
+  });
+
+  it('keeps at most 8 context chips and drops them when the folder changes', async () => {
+    const h = await openPanel(READY, settings(), '/hooks?dir=D%3A%2Fws%2Fapp');
+    const adds = h.buttons(/^Add Many rows \/ .* to assistant context$/);
+    expect(adds.length).toBeGreaterThan(8);
+
+    for (const button of adds.slice(0, 9)) {
+      await h.click(button);
+    }
+    expect(panel()?.querySelectorAll('ul[aria-label="Context"] li')).toHaveLength(8);
+    expect(panel()?.textContent).toContain('Context 8 of 8');
+
+    await h.navigate('/hooks?dir=D%3A%2Fws%2Fother');
+    await h.answer('/api/v1/snapshot', makeSnapshot({ targetDir: 'D:/ws/other' }));
+
+    expect(panel()?.querySelector('ul[aria-label="Context"]')).toBeNull();
+  });
+
   it('shows a stale apply inline on its proposal', async () => {
     const h = await openPanel();
     await startTurn(h);
@@ -175,7 +233,8 @@ describe('assistant panel', () => {
 
   it.each([
     ['429 on start', '/api/v2/assistant/sessions', 429, { error: 'too-many-sessions' }, 'Too many assistant sessions are running (at most 2). End another one first.'],
-    ['409 on a message', '/api/v2/assistant/sessions/s1/messages', 409, { error: 'turn-running' }, 'The assistant is still answering. Wait for it to finish.']
+    ['409 on a message', '/api/v2/assistant/sessions/s1/messages', 409, { error: 'turn-running' }, 'The assistant is still answering. Wait for it to finish.'],
+    ['400 bad-context', '/api/v2/assistant/sessions/s1/messages', 400, { error: 'bad-context' }, 'Some context items are not available to the assistant. Remove them and send again.']
   ])('shows %s inline', async (_name, path, status, response, words) => {
     const h = await openPanel();
     await type(h, 'Hello');
@@ -187,6 +246,7 @@ describe('assistant panel', () => {
     await h.answer(path, response, status);
 
     expect(panel()?.querySelector('[role="alert"]')?.textContent).toBe(words);
+    expect([...panel()!.querySelectorAll('p')].some((p) => p.textContent === 'Hello')).toBe(false);
   });
 
   it('runs the full check and ends the session with a guarded DELETE', async () => {

@@ -5,7 +5,6 @@ import type { Cell, LinkCell, TableBlock as TableBlockModel, TableColumn, TableR
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { AddToContext } from '../shell/AddToContext';
-import { useAssistant } from '../state/assistant';
 import { useUi } from '../state/ui';
 import { Badges } from './Badges';
 import { cellText, NO_FILTER, tableRowMatches, type RowFilter } from './filter';
@@ -54,9 +53,7 @@ export function TableBlock({
   filter?: RowFilter;
 }) {
   const url = useUrl();
-  const ui = useUi();
-  const assistant = useAssistant();
-  const contextColumn = ui.edits && assistant.open;
+  const contextColumn = useUi().edits;
   const [sortState, setSortState] = useState<{ block: TableBlockModel; sort: Sort | null }>({ block, sort: null });
   const [shownAllFor, setShownAllFor] = useState<TableBlockModel | null>(null);
   const sort = sortState.block === block ? sortState.sort : null;

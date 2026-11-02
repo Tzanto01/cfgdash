@@ -5,14 +5,13 @@ import { MAX_CONTEXT, useAssistant, type ContextItem } from '../state/assistant'
 import { useUi } from '../state/ui';
 
 /**
- * "Add to context" for the assistant (assistant-v1): only where edits are available. `row` renders the compact icon button,
- * and only while the panel is open, so dense rows stay clean.
+ * "Add to context" for the assistant (assistant-v1): only where edits are available. `row` renders the compact icon button.
  */
 export function AddToContext({ item, row = false }: { item: ContextItem; row?: boolean }) {
   const ui = useUi();
   const assistant = useAssistant();
   const announce = useAnnounce();
-  if (!ui.edits || (row && !assistant.open)) {
+  if (!ui.edits) {
     return null;
   }
   const onClick = () => {

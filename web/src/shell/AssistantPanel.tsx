@@ -14,6 +14,7 @@ import { LoadingPanel } from './Shell';
 
 const EFFORTS: AssistantEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const BANNER = 'Proposed by the assistant from your config files';
+const MODEL_OUTPUT = 'Assistant · model output derived from your files; review before pasting';
 const FIELD = 'touch-target h-8 w-full rounded-md border border-border-strong bg-raised px-2 text-sm';
 
 type Entry =
@@ -21,6 +22,7 @@ type Entry =
   | { kind: 'assistant'; text: string }
   | { kind: 'tool'; name: string; status: string }
   | { kind: 'error'; text: string }
+  | { kind: 'note'; text: string }
   | { kind: 'proposal'; proposal: AssistantProposal; result?: { ok: boolean; text: string }; busy?: boolean };
 
 interface Session {
@@ -33,6 +35,12 @@ interface Session {
 /** The inline message for a failed assistant request, in words. */
 function requestFailure(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.status === 400 && error.code === 'bad-context') {
+      return 'Some context items are not available to the assistant. Remove them and send again.';
+    }
+    if (error.status === 400) {
+      return 'The assistant refused the request as not valid.';
+    }
     if (error.status === 409 && error.code === 'budget-spent') {
       return "This session's budget is spent. End the session to start a new one.";
     }
@@ -99,24 +107,38 @@ export default function AssistantPanel() {
   const [cost, setCost] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const [tracked, setTracked] = useState<string[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const events = useRef<EventSource | null>(null);
   const live = useRef<Session | null>(null);
   const pending = useRef(false);
+  const mounted = useRef(true);
+  const effortTouched = useRef(false);
   live.current = session;
 
   useEffect(() => {
+    mounted.current = true;
     headingRef.current?.focus();
     const controller = new AbortController();
     api.assistantStatus(controller.signal).then(
-      (data) => setStatus({ data }),
+      (data) => {
+        setStatus({ data });
+        if (data.available) {
+          api.settings(dir, controller.signal).then(
+            (settings) => setTracked(settings.files.filter((f) => f.gitTracked).map((f) => f.path)),
+            () => undefined
+          );
+        }
+      },
       (error: unknown) => !isAbort(error) && setStatus({ failed: true })
     );
     api.cfgdashSettings(controller.signal).then(
       (settings) => {
         if (!settings.configError) {
           setModel((m) => m || settings.values.assistant.model);
-          setEffort(settings.values.assistant.effort);
+          if (!effortTouched.current) {
+            setEffort(settings.values.assistant.effort);
+          }
         }
       },
       () => undefined
@@ -128,6 +150,7 @@ export default function AssistantPanel() {
     };
     window.addEventListener('pagehide', leave);
     return () => {
+      mounted.current = false;
       window.removeEventListener('pagehide', leave);
       controller.abort();
       events.current?.close();
@@ -183,6 +206,10 @@ export default function AssistantPanel() {
         const data = parse(event);
         push({ kind: 'error', text: str(data['message']) || str(data['error']) || 'The assistant stopped.' });
         setRunning(false);
+      } else if (source.readyState === EventSource.CLOSED) {
+        push({ kind: 'error', text: 'Lost the connection to the assistant. Send again to start a new session.' });
+        setRunning(false);
+        setSession(null);
       }
     });
   };
@@ -193,42 +220,54 @@ export default function AssistantPanel() {
     events.current = null;
     setSession(null);
     setRunning(false);
+    setCost(null);
     if (current) {
       await api.assistantEnd(current.id).catch(() => undefined);
-      push({ kind: 'error', text: 'Session ended.' });
+      push({ kind: 'note', text: 'Session ended.' });
     }
   };
 
   const send = async (check: boolean) => {
     const message = text.trim();
-    if (pending.current || running || !dir || (!check && !message) || !model) {
+    if (pending.current || running || !dir || (!check && !message)) {
+      return;
+    }
+    if (!chosenModel) {
+      setNotice('No model is available. Pick one in cfgdash settings.');
       return;
     }
     pending.current = true;
     setNotice(null);
+    const entry: Entry = { kind: 'user', text: check ? 'Full check' : message };
     try {
       let current = live.current;
-      if (current && (current.dir !== dir || current.model !== model || current.effort !== effort)) {
+      if (current && (current.dir !== dir || current.model !== chosenModel || current.effort !== effort)) {
         await end();
         current = null;
       }
       if (!current) {
-        const { id } = await api.assistantStart(dir, model, effort);
-        current = { id, dir, model, effort };
+        const { id } = await api.assistantStart(dir, chosenModel, effort);
+        if (!mounted.current) {
+          api.assistantEnd(id).catch(() => undefined);
+          return;
+        }
+        current = { id, dir, model: chosenModel, effort };
         setSession(current);
         live.current = current;
         listen(id);
+        push({ kind: 'note', text: `New session: ${chosenModel}, effort ${effort}.` });
       }
       const refs = assistant.items.map((i) => i.ref);
       setRunning(true);
-      push({ kind: 'user', text: check ? 'Full check' : message });
+      push(entry);
       await (check ? api.assistantCheck(current.id) : api.assistantMessage(current.id, message, refs));
       if (!check) {
-        setText('');
-        assistant.clear();
+        setText((t) => (t.trim() === message ? '' : t));
+        assistant.drop(refs);
       }
     } catch (error) {
       setRunning(false);
+      setEntries((prev) => prev.filter((e) => e !== entry));
       setNotice(requestFailure(error));
       if (error instanceof ApiError && error.status === 404) {
         events.current?.close();
@@ -263,8 +302,9 @@ export default function AssistantPanel() {
   };
 
   const data = status?.data;
-  const models = data?.models.length ? data.models : [];
-  const modelOptions = model && !models.includes(model) ? [model, ...models] : models;
+  const models = data?.models ?? [];
+  const chosenModel = model || models[0] || '';
+  const modelOptions = chosenModel && !models.includes(chosenModel) ? [chosenModel, ...models] : models;
 
   return (
     <aside
@@ -317,7 +357,12 @@ export default function AssistantPanel() {
                     </p>
                   );
                 case 'assistant':
-                  return <Markdown key={index} text={entry.text} />;
+                  return (
+                    <div key={index} className="border-l-2 border-border-strong pl-3">
+                      <p className="mb-1 text-xs text-muted">{MODEL_OUTPUT}</p>
+                      <Markdown text={entry.text} />
+                    </div>
+                  );
                 case 'tool':
                   return (
                     <p key={index} className="font-mono text-xs text-muted">
@@ -330,13 +375,19 @@ export default function AssistantPanel() {
                       {entry.text}
                     </p>
                   );
+                case 'note':
+                  return (
+                    <p key={index} className="text-xs text-muted">
+                      {entry.text}
+                    </p>
+                  );
                 default:
                   return (
                     <section key={index} aria-label="Assistant proposal" className="space-y-2 rounded-lg border border-accent p-2">
                       <p className="tint-accent rounded-md px-2 py-1 text-sm font-medium text-accent">{BANNER}</p>
                       {entry.proposal.rationale && <p className="whitespace-pre-wrap">{entry.proposal.rationale}</p>}
                       {entry.proposal.files.map((file) => (
-                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={false} />
+                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
                       ))}
                       {entry.result ? (
                         <p role={entry.result.ok ? 'status' : 'alert'} className={cn('text-sm font-medium', entry.result.ok ? 'text-ok' : 'text-danger')}>
@@ -363,7 +414,7 @@ export default function AssistantPanel() {
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs font-medium text-muted">
                 Model
-                <select value={model} onChange={(event) => setModel(event.target.value)} className={cn(FIELD, 'mt-1 text-text')}>
+                <select value={chosenModel} onChange={(event) => setModel(event.target.value)} className={cn(FIELD, 'mt-1 text-text')}>
                   {modelOptions.map((m) => (
                     <option key={m} value={m}>
                       {m}
@@ -373,7 +424,10 @@ export default function AssistantPanel() {
               </label>
               <label className="text-xs font-medium text-muted">
                 Effort
-                <select value={effort} onChange={(event) => setEffort(event.target.value as AssistantEffort)} className={cn(FIELD, 'mt-1 text-text')}>
+                <select value={effort} onChange={(event) => {
+                    effortTouched.current = true;
+                    setEffort(event.target.value as AssistantEffort);
+                  }} className={cn(FIELD, 'mt-1 text-text')}>
                   {EFFORTS.map((e) => (
                     <option key={e} value={e}>
                       {e}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 
 /** The label on every code block of model output (assistant-v1 UI rules). */
 export const SUGGESTED_LABEL = 'model output derived from your files; review before pasting';
@@ -6,16 +6,27 @@ export const SUGGESTED_LABEL = 'model output derived from your files; review bef
 type MdBlock =
   | { type: 'code'; text: string }
   | { type: 'heading'; text: string }
-  | { type: 'list'; ordered: boolean; items: string[] }
+  | { type: 'list'; ordered: boolean; start: number; items: string[] }
   | { type: 'p'; text: string };
 
 const FENCE = /^\s*(`{3,}|~{3,})/;
 const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/;
 const ITEM = /^\s*([-*+]|\d{1,9}[.)])\s+(.*)$/;
-const INLINE = /(`[^`\n]+`)|(!\[([^\]\n]*)\]\(([^)\s]*)[^)\n]*\))|(\[([^\]\n]+)\]\(([^)\s]*)[^)\n]*\))|(\*\*([^*\n]+)\*\*)|(<(https?:\/\/[^>\s]+)>)/g;
+const INLINE = /(`[^`\n]{1,2000}`)|(!\[([^\]\n]{0,500})\]\(([^)\n]{0,2048})\))|(\[([^\]\n]{1,500})\]\(([^)\n]{0,2048})\))|(\*\*([^*\n]{1,500})\*\*)|(<(https?:\/\/[^>\s]{1,2048})>)/g;
+const HIDDEN = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+/** A URL for display: normalized (punycode host) when it parses, else as written. */
+function shownUrl(raw: string): string {
+  const url = raw.trim().split(/\s/)[0] ?? '';
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
+}
 
 function parse(source: string): MdBlock[] {
-  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  const lines = source.replace(HIDDEN, '\uFFFD').replace(/\r\n?/g, '\n').split('\n');
   const blocks: MdBlock[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -24,7 +35,7 @@ function parse(source: string): MdBlock[] {
     if (fence) {
       const body: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].trimStart().startsWith(fence[1])) {
+      while (i < lines.length && !(lines[i].trim().startsWith(fence[1]) && /^[`~]+$/.test(lines[i].trim()))) {
         body.push(lines[i]);
         i++;
       }
@@ -57,7 +68,7 @@ function parse(source: string): MdBlock[] {
         }
         i++;
       }
-      blocks.push({ type: 'list', ordered, items });
+      blocks.push({ type: 'list', ordered, start: ordered ? Number.parseInt(item[1], 10) : 1, items });
       continue;
     }
     const text: string[] = [];
@@ -88,11 +99,12 @@ function inline(text: string): ReactNode[] {
     } else if (m[2]) {
       out.push(`[image: ${m[3] || 'no description'}]`);
     } else if (m[5]) {
-      out.push(m[6] === m[7] ? m[7] : `${m[6]} (${m[7]})`);
+      const url = shownUrl(m[7]);
+      out.push(m[6] === url || m[6] === m[7].trim() ? url : `${m[6]} (${url})`);
     } else if (m[8]) {
       out.push(<strong key={key}>{m[9]}</strong>);
     } else {
-      out.push(m[11]);
+      out.push(shownUrl(m[11]));
     }
     last = at + m[0].length;
   }
@@ -104,9 +116,10 @@ function inline(text: string): ReactNode[] {
 
 /**
  * Model text as markdown, built from React text nodes only: raw HTML stays literal text, images become their alt text,
- * links show their full URL as text, and code blocks carry {@link SUGGESTED_LABEL}.
+ * links show their full URL as text, bidi and zero-width characters become U+FFFD, and code blocks carry
+ * {@link SUGGESTED_LABEL}.
  */
-export function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <div className="space-y-2 break-words">
       {parse(text).map((block, index) => {
@@ -129,7 +142,7 @@ export function Markdown({ text }: { text: string }) {
           case 'list': {
             const List = block.ordered ? 'ol' : 'ul';
             return (
-              <List key={index} className={block.ordered ? 'list-decimal space-y-1 pl-5' : 'list-disc space-y-1 pl-5'}>
+              <List key={index} start={block.ordered && block.start !== 1 ? block.start : undefined} className={block.ordered ? 'list-decimal space-y-1 pl-5' : 'list-disc space-y-1 pl-5'}>
                 {block.items.map((item, i) => (
                   <li key={i}>{inline(item)}</li>
                 ))}
@@ -142,4 +155,4 @@ export function Markdown({ text }: { text: string }) {
       })}
     </div>
   );
-}
+});

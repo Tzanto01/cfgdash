@@ -239,7 +239,7 @@ function WideShell() {
         </header>
         <MainContent className="mx-auto w-full max-w-[1248px] flex-1 p-6" />
       </div>
-      {snapshot && <AssistantSlot />}
+      <AssistantSlot />
     </div>
   );
 }
@@ -318,9 +318,9 @@ function NarrowShell() {
               <RefreshButton withLabel />
             </SheetContent>
           </Sheet>
-          <AssistantSlot />
         </>
       )}
+      <AssistantSlot />
     </div>
   );
 }
