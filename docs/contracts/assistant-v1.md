@@ -8,7 +8,7 @@ Decided by Nico on 2026-11-02:
 - the edits-v1 catalog, narrowed by the assistant policy below, through proposals only;
 - explanations and suggested text for every other file.
 
-Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M1–M7, lows).
+Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M1–M7, lows). Revision 2.1 (2026-11-02): `--verbose`, no built-in agents, and a one-retry plugin disable, as measured against CLI 2.1.316.
 
 ## Runtime
 
@@ -16,7 +16,7 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 
 - One `claude` process per open panel. The cwd is a cfgdash-owned empty dir `<cache>/assistant/work` (0700). The target dir is never the cwd: it is a server-side binding of the session that only the MCP tools use.
 - Flags. Pass every value as `--flag=value`, built by cfgdash and never taken from client text:
-  - `--print`, `--input-format=stream-json`, `--output-format=stream-json`, `--include-partial-messages`
+  - `--print`, `--input-format=stream-json`, `--output-format=stream-json`, `--include-partial-messages`, `--verbose` (required by the CLI for stream-json output)
   - `--no-session-persistence`
   - `--setting-sources=` (empty: no user, project or local settings)
   - `--settings=<generated file>`
@@ -27,6 +27,8 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
   - `--model=<v>`, `--effort=<v>`
   - `--append-system-prompt=<cfgdash prompt>`
 - The generated settings file sets `disableAllHooks: true`, `disableClaudeAiConnectors: true`, `autoMemoryEnabled: false`, `includeGitInstructions: false` and `enableAllProjectMcpServers: false`. It turns off every plugin sync and sets `enabledPlugins` to false for each plugin found in the user's settings.
+- The child process env sets `CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1`, so no built-in agents load.
+- Built-in plugins: when the init check fails only because of entries in `plugins`, cfgdash ends that process, writes those plugin names as `enabledPlugins: false` into a fresh settings file and starts once more. A second failure, or any extra entry in `tools`, `mcp_servers`, agents, skills or slash commands, fails closed with no retry. The disabled names are cached per CLI version.
 - Both generated files live in `<cache>/assistant/` with mode 0600 (a user-only ACL on Windows) and are deleted when the process exits. `--bare` is not used, because it disables OAuth.
 - `model` must match `^[A-Za-z0-9][A-Za-z0-9.\-\[\]]{0,99}$`. `effort` is one of `low`, `medium`, `high`, `xhigh`, `max`.
 
