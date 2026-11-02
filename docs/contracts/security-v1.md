@@ -43,7 +43,7 @@ Owner: department lead. Every team implements its side; `security-reviewer` chec
 
 Read only by exact name from this allowlist (process scope; on Windows also User and Machine scope for the same names). No prefix scans, no enumeration:
 
-Exactly the names in `src/Cfgdash.Core/Environment/HarnessEnvAllowlist.cs`, read only through `AllowlistEnvironmentReader` (unknown names throw): `Harness` names are shown with their value (redactor still applies), `PresenceOnly` credential names are reported as set or unset and their value never leaves the reader, `Runtime` names are internal probes and never displayed. Adding a name is a contract change. Added for v0.4 (`Harness`): `CODEX_HOME`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`. Added for v0.5 (`Runtime`): `XDG_DATA_HOME`.
+Exactly the names in `src/Cfgdash.Core/Environment/HarnessEnvAllowlist.cs`, read only through `AllowlistEnvironmentReader` (unknown names throw): `Harness` names are shown with their value (redactor still applies), `PresenceOnly` credential names are reported as set or unset and their value never leaves the reader, `Runtime` names are internal probes and never displayed. Adding a name is a contract change. Added for v0.4 (`Harness`): `CODEX_HOME`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`. Added for v0.5 (`Runtime`): `XDG_DATA_HOME`, and `CFGDASH_MCP_CAPABILITY` (read only by the `cfgdash mcp` subcommand, process scope only, never logged; see [assistant-v1](assistant-v1.md)).
 
 ## Company data
 
