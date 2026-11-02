@@ -152,7 +152,7 @@ public sealed class AssistantView
         var shortNames = names.Select(n => new string([.. n.Where(char.IsAsciiLetterOrDigit).Take(6)])).Where(s => s.Length > 0).Select(s => Regex.Escape(s) + @"~\d");
         var shortLeaf = "(?:" + string.Join('|', shortNames.DefaultIfEmpty("(?!)")) + ")";
         return new Regex(
-            $$"""(?:[/\\("'`=:,;]{{leaf}}(?![\p{L}\p{N}_-]))|(?:(?<![\p{L}\p{N}_.-]){{leaf}}[/\\])|(?:(?<![\p{L}\p{N}]){{shortLeaf}})""",
+            $$"""(?:[/\\("'`=:,;]{{leaf}}(?![\p{L}\p{N}_-]))|(?:(?:(?<![\p{L}\p{N}_.-])|(?<=\\[nrtbf])){{leaf}}[/\\])|(?:(?<![\p{L}\p{N}]){{shortLeaf}})""",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 

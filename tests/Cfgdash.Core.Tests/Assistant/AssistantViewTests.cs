@@ -118,6 +118,7 @@ public sealed class AssistantViewTests : IDisposable
     [InlineData("Directory not found: /opt/ws/company.")]
     [InlineData("node company/hooks/guard.js")]
     [InlineData("@company/AGENTS.md")]
+    [InlineData("Read:\\ncompany/notes.md")]
     public void Any_spelling_of_a_company_path_is_dropped(string command)
     {
         var companyUnderHome = f.Tree.Dir("home/user/ws/company");
