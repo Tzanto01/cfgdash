@@ -15,6 +15,7 @@ Owner: department lead. Producer: team `platform` (core, host, `web/mock`). Cons
 | `fleet.enabled` | bool | false | This machine answers fleet peers ([fleet-v1](fleet-v1.md)) |
 | `assistant.model` | string | `sonnet` | Default model alias for the assistant ([assistant-v1](assistant-v1.md)) |
 | `assistant.effort` | `low` \| `medium` \| `high` \| `xhigh` \| `max` | `medium` | Default effort |
+| `assistant.maxBudgetUsd` | number 0.1 to 50 | 2.0 | Per-session cost cap (`--max-budget-usd`) |
 
 CLI flags win over the file for one run.
 
