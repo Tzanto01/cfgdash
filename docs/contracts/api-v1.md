@@ -31,6 +31,7 @@ cfgdash export [--dir <path>]
 cfgdash doctor [--dir <path>] [--json]
 cfgdash context [--dir <path>] [--json]
 cfgdash autostart on|off|status
+cfgdash mcp   (internal: started only by cfgdash for the assistant, see assistant-v1)
 cfgdash --version
 ```
 
