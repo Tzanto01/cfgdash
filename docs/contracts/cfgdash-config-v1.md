@@ -23,8 +23,8 @@ CLI flags win over the file for one run.
 
 - `cfgdash autostart on|off|status`. Exit codes follow api-v1; `status` prints `on`, `off` or `mismatch`.
 - Windows: the HKCU `Software\Microsoft\Windows\CurrentVersion\Run` value `cfgdash`, set to `"<exe>" run --autostart`. No admin, no scheduled task.
-- Linux: `~/.config/systemd/user/cfgdash.service` (`ExecStart=<exe> run --autostart`, `Restart=on-failure`, `WantedBy=default.target`), then `systemctl --user enable --now` (or `disable --now` and delete the file). Without a user systemd it fails with exit 2 and the reason.
-- `run --autostart` means `--no-open`, no idle shutdown, the snapshot for the start dir built at start, localhost only unless `tailnet` is true.
+- Linux: `$XDG_CONFIG_HOME/systemd/user/cfgdash.service` (default `~/.config/systemd/user/`, where `systemd --user` looks) (`ExecStart=<exe> run --autostart`, `Restart=on-failure`, `WantedBy=default.target`), then `systemctl --user enable --now` (or `disable --now` and delete the file). Without a user systemd it fails with exit 2 and the reason.
+- `run --autostart` means `--no-open`, no idle shutdown, the snapshot for the start dir built at start, localhost only unless `tailnet` is true. With no `defaultDir`, the start dir is the user's home dir.
 - `cfgdash` or `cfgdash run` while an instance is alive opens the browser on the live URL in a desktop session (the same rule as today), otherwise it prints the URL.
 - These two OS entries are the only files outside the cache and config dirs cfgdash writes for this feature. They need a line in `AGENTS.md`'s write exceptions; the department lead adds it with Nico's authorization.
 
@@ -33,6 +33,6 @@ CLI flags win over the file for one run.
 | Method + path | Answer |
 | --- | --- |
 | `GET /api/v2/cfgdash-settings` | `{ "values": { ...keys above }, "startAtLogin": { "configured": bool, "actual": "on" \| "off" \| "unsupported", "detail"? }, "paths": { "config", "overrides" } }` |
-| `PUT /api/v2/cfgdash-settings` | Body: a partial `values` object. Validates types, writes the config file, and for `startAtLogin` changes the OS entry first (if that fails, `500 {"error":"autostart-failed","reason"}` and the file is unchanged). Answers the GET shape. No diff or confirm step: these are cfgdash's own settings, not harness config. An audit line goes to `<cache>/edits/audit.jsonl` with `kind: "cfgdash-settings"` |
+| `PUT /api/v2/cfgdash-settings` | Body: a partial `values` object (only the keys being changed; nested keys as in GET, for example `{ "assistant": { "effort": "high" } }`). Validates types, writes the config file, and for `startAtLogin` changes the OS entry first (if that fails, `500 {"error":"autostart-failed","reason"}` and the file is unchanged). Answers the GET shape. No diff or confirm step: these are cfgdash's own settings, not harness config. An audit line goes to `<cache>/edits/audit.jsonl` with `kind: "cfgdash-settings"` |
 
 On the tailnet listener both answer 404.
