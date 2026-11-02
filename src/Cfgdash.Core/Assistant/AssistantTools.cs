@@ -106,9 +106,10 @@ public static class AssistantTools
 
     /// <summary>
     /// What the model sees of a proposal: <c>{ proposalId, expiresAt, files: [ { path, scope, diff } ] }</c>, never <c>confirm</c>.
-    /// Any other outcome (<c>denied</c>, <c>invalid-change</c>) is its body unchanged.
+    /// Any other outcome (<c>denied</c>, <c>invalid-change</c>) is its body unchanged. Diff lines naming a company-layer path
+    /// keep only their <c>+</c>/<c>-</c>/space marker followed by <c>[company path hidden]</c>.
     /// </summary>
-    public static JsonObject ProposalForModel(EditResult result)
+    public static JsonObject ProposalForModel(EditResult result, AssistantView view)
     {
         if (result.Status != EditStatus.Ok)
         {
@@ -124,10 +125,13 @@ public static class AssistantTools
             {
                 ["path"] = f["path"]?.DeepClone(),
                 ["scope"] = f["scope"]?.DeepClone(),
-                ["diff"] = f["diff"]?.DeepClone(),
+                ["diff"] = f["diff"] is JsonValue diff && diff.TryGetValue<string>(out var text) ? HideCompanyLines(text, view) : f["diff"]?.DeepClone(),
             })]),
         };
     }
+
+    private static string HideCompanyLines(string diff, AssistantView view) =>
+        string.Join('\n', diff.Split('\n').Select(line => view.MentionsCompanyPath(line) ? line[..1] + "[company path hidden]" : line));
 
     private static long Bytes<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, SnapshotJson.Options).LongLength;
 }

@@ -381,11 +381,11 @@ internal sealed partial class CfgdashServer
                 var hits = await Task.Run(() => AssistantTools.Search(view, core.Search, core.FileReader, q, cancellationToken), cancellationToken);
                 return (hits, !hits.ContainsKey("error"));
             default:
-                return await ProposeForAssistantAsync(session, args, cancellationToken);
+                return await ProposeForAssistantAsync(session, view, args, cancellationToken);
         }
     }
 
-    private async Task<(JsonObject Answer, bool Ok)> ProposeForAssistantAsync(AssistantSession session, JsonObject args, CancellationToken cancellationToken)
+    private async Task<(JsonObject Answer, bool Ok)> ProposeForAssistantAsync(AssistantSession session, AssistantView view, JsonObject args, CancellationToken cancellationToken)
     {
         var result = await editService!.Value.ProposeForAssistantAsync(session.Dir, args["changes"], session.Id, cancellationToken);
         switch (result.Status)
@@ -405,10 +405,10 @@ internal sealed partial class CfgdashServer
                     ["confirm"] = result.Body["confirm"]?.DeepClone(),
                     ["rationale"] = rationale,
                 });
-                return (AssistantTools.ProposalForModel(result), true);
+                return (AssistantTools.ProposalForModel(result, view), true);
             case EditStatus.Denied:
             case EditStatus.InvalidChange:
-                return (AssistantTools.ProposalForModel(result), false);
+                return (AssistantTools.ProposalForModel(result, view), false);
             default:
                 return (new JsonObject { ["error"] = "propose-failed" }, false);
         }

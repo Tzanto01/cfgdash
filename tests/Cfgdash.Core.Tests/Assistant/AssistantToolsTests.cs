@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Cfgdash.Core.Assistant;
 using Cfgdash.Core.Edits;
 using Cfgdash.Core.Files;
+using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Redaction;
 using Cfgdash.Core.Search;
 using Cfgdash.Core.Snapshot;
@@ -158,7 +159,7 @@ public sealed class AssistantToolsTests : IDisposable
         using var edits = new EditFixture();
         var proposal = await edits.Service.ProposeForAssistantAsync(edits.Project, EditFixture.Changes(EditFixture.Set("model", "project", "opus")), "s1", CancellationToken.None);
 
-        var shown = AssistantTools.ProposalForModel(proposal);
+        var shown = AssistantTools.ProposalForModel(proposal, f.View(false));
 
         Assert.DoesNotContain("confirm", shown.ToJsonString(), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(EditFixture.Text(proposal.Body["confirm"]), shown.ToJsonString());
@@ -175,7 +176,27 @@ public sealed class AssistantToolsTests : IDisposable
         var denied = new EditResult(EditStatus.Denied, new JsonObject { ["denied"] = "model", ["reason"] = "assistant-policy" });
         var invalid = new EditResult(EditStatus.InvalidChange, new JsonObject { ["error"] = "invalid-change", ["key"] = "model", ["reason"] = "quota" });
 
-        Assert.Equal(denied.Body.ToJsonString(), AssistantTools.ProposalForModel(denied).ToJsonString());
-        Assert.Equal(invalid.Body.ToJsonString(), AssistantTools.ProposalForModel(invalid).ToJsonString());
+        Assert.Equal(denied.Body.ToJsonString(), AssistantTools.ProposalForModel(denied, f.View(false)).ToJsonString());
+        Assert.Equal(invalid.Body.ToJsonString(), AssistantTools.ProposalForModel(invalid, f.View(false)).ToJsonString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProposalForModel_hides_diff_lines_naming_a_company_path_outside_the_company_layer(bool inCompany)
+    {
+        var companyLine = "     \"Read(" + PathUtil.ToJson(Path.Combine(f.CompanyPrefix, "**")) + ")\",";
+        var diff = $"@@ -1,3 +1,3 @@\n{companyLine}\n-  \"model\": \"sonnet\"\n+  \"model\": \"opus\"";
+        var result = new EditResult(EditStatus.Ok, new JsonObject
+        {
+            ["id"] = "p1",
+            ["expiresAt"] = "2026-01-02T03:14:05Z",
+            ["confirm"] = "c",
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "/home/user/.claude/settings.json", ["scope"] = "user", ["diff"] = diff }),
+        });
+
+        var shown = (string?)AssistantTools.ProposalForModel(result, f.View(inCompany))["files"]![0]!["diff"];
+
+        Assert.Equal(inCompany ? diff : "@@ -1,3 +1,3 @@\n [company path hidden]\n-  \"model\": \"sonnet\"\n+  \"model\": \"opus\"", shown);
     }
 }

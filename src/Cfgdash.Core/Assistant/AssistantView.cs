@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Snapshot;
 
@@ -16,10 +17,13 @@ public sealed class AssistantView
     private const string CompanyCore = "agents.company-core";
     private const string CompanyFlag = "company";
 
-    private AssistantView(HarnessSnapshot snapshot, IFileCatalog files)
+    private readonly Regex? companyPath;
+
+    private AssistantView(HarnessSnapshot snapshot, IFileCatalog files, Regex? companyPath)
     {
         Snapshot = snapshot;
         Files = files;
+        this.companyPath = companyPath;
     }
 
     /// <summary>The filtered snapshot; its <see cref="HarnessSnapshot.Files"/> holds only <see cref="Files"/>.</summary>
@@ -27,6 +31,12 @@ public sealed class AssistantView
 
     /// <summary>Files referenced by the kept sections and registered in the source catalog.</summary>
     public IFileCatalog Files { get; }
+
+    /// <summary>
+    /// True when <paramref name="text"/> names a company-layer path in any spelling that ends in a company prefix's folder name
+    /// (absolute, home- or variable-relative, relative, either separator). Always false under the company layer.
+    /// </summary>
+    public bool MentionsCompanyPath(string text) => companyPath?.IsMatch(text) == true;
 
     public static AssistantView Create(SnapshotResult result, MachineEnvironment env, string dir)
     {
@@ -38,14 +48,19 @@ public sealed class AssistantView
                 .Concat(result.Files.All.Where(f => f.Ref.Company).Select(f => f.Ref.Id))
                 .ToHashSet(StringComparer.Ordinal);
         var unreadable = new HashSet<string>(companyFiles, StringComparer.Ordinal);
-        var markers = inCompany ? [] : CompanyMarkers(env);
+        var companyPath = inCompany ? null : CompanyPathPattern(env);
 
         bool Dropped(string collectorId) => Excluded.Contains(collectorId) || (!inCompany && collectorId == CompanyCore);
         bool CompanyFile(string? fileId) => fileId is not null && companyFiles.Contains(fileId);
         bool Flagged(IReadOnlyList<string>? flags) => !inCompany && flags?.Contains(CompanyFlag, StringComparer.Ordinal) == true;
-        bool Mentions(JsonNode? node) => Strings(node).Any(text => markers.Any(m => text.Contains(m, PathUtil.Comparison)));
+        bool MentionsText(string? text) => text is not null && companyPath?.IsMatch(text) == true;
+        bool Mentions(JsonNode? node) => Strings(node).Any(MentionsText);
+        bool DropNode(TreeNode node) =>
+            Flagged(node.Badges) || CompanyFile(node.FileId) || Mentions(node.Label) || (node.Meta?.Values ?? []).Any(Mentions);
         IEnumerable<TreeNode> FlaggedNodes(IEnumerable<TreeNode> nodes) =>
             nodes.SelectMany(n => Flagged(n.Badges) ? [n] : FlaggedNodes(n.Children));
+        IEnumerable<string?> ReferencingFiles(IEnumerable<TreeNode> nodes) =>
+            nodes.SelectMany(n => ReferencingFiles(n.Children).Prepend(n.Children.Any(DropNode) ? n.FileId : null));
 
         foreach (var block in source.Sections.SelectMany(s => s.Blocks))
         {
@@ -60,12 +75,15 @@ public sealed class AssistantView
             {
                 unreadable.UnionWith(FileIds(flagged));
             }
+
+            if (block is TreeBlock referencing)
+            {
+                unreadable.UnionWith(ReferencingFiles(referencing.Nodes).OfType<string>());
+            }
         }
 
         TreeNode? Node(TreeNode node) =>
-            Flagged(node.Badges) || CompanyFile(node.FileId) || Mentions(node.Label) || (node.Meta?.Values ?? []).Any(Mentions)
-                ? null
-                : node with { Children = [.. node.Children.Select(Node).OfType<TreeNode>()] };
+            DropNode(node) ? null : node with { Children = [.. node.Children.Select(Node).OfType<TreeNode>()] };
 
         Block Filter(Block block) => block switch
         {
@@ -101,35 +119,39 @@ public sealed class AssistantView
         var snapshot = source with
         {
             Context = inCompany ? source.Context : source.Context with { Paths = [.. source.Context.Paths.Where(p => p.Key != PathKeys.CompanyLayer)] },
-            Collectors = [.. source.Collectors.Where(c => !Dropped(c.Id))],
+            Collectors =
+            [
+                .. source.Collectors.Where(c => !Dropped(c.Id))
+                    .Select(c => c with { Reason = MentionsText(c.Reason) ? null : c.Reason, Notes = c.Notes?.Where(n => !MentionsText(n)).ToList() }),
+            ],
             Sections = sections,
             Files = [.. source.Files.Where(f => files.ContainsKey(f.Id))],
         };
-        return new AssistantView(snapshot, new Catalog(files));
+        return new AssistantView(snapshot, new Catalog(files), companyPath);
     }
 
     /// <summary>
-    /// The texts that mark a company-layer path: each prefix with either separator and, below the home dir, also its
-    /// <c>~</c>, <c>$HOME</c>, <c>${HOME}</c> and <c>%USERPROFILE%</c> forms.
+    /// Matches a company prefix's folder name as a path segment: after a separator or an opening quote, bracket or <c>=</c>
+    /// and before a separator, closing quote or bracket, glob, space or the end; or at the start of the text before a separator.
+    /// Case-insensitive, so it over-matches rather than misses another spelling of the same path.
     /// </summary>
-    private static string[] CompanyMarkers(MachineEnvironment env)
+    private static Regex? CompanyPathPattern(MachineEnvironment env)
     {
-        var home = PathUtil.Full(env.HomeDir).TrimEnd('/', '\\');
-        var markers = new List<string>();
-        foreach (var prefix in env.CompanyPrefixes)
+        var leaves = env.CompanyPrefixes
+            .Select(p => PathUtil.Full(p).Split('/', '\\').LastOrDefault(s => s.Length > 0))
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(Regex.Escape)
+            .ToList();
+        if (leaves.Count == 0)
         {
-            var full = PathUtil.Full(prefix).TrimEnd('/', '\\');
-            List<string> forms = [full];
-            if (home.Length > 0 && full.Length > home.Length && PathUtil.IsUnder(full, home))
-            {
-                var rest = full[home.Length..];
-                forms.AddRange(["~" + rest, "$HOME" + rest, "${HOME}" + rest, "%USERPROFILE%" + rest]);
-            }
-
-            markers.AddRange(forms.SelectMany(f => new[] { f.Replace('\\', '/'), f.Replace('/', '\\') }));
+            return null;
         }
 
-        return [.. markers.Where(m => m.Length > 0).Distinct(StringComparer.Ordinal)];
+        var leaf = "(?:" + string.Join('|', leaves) + ")";
+        return new Regex(
+            $$"""(?:[/\\("'`=:,;]{{leaf}}(?:[/\\)"'`,;*\s]|$))|(?:^{{leaf}}[/\\])""",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static IEnumerable<string> Strings(JsonNode? node) => node switch

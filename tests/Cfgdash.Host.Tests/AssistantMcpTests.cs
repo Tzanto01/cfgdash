@@ -2,8 +2,6 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core;
-using Cfgdash.Core.Assistant;
-using Cfgdash.Core.Edits;
 
 namespace Cfgdash.Host.Tests;
 
@@ -68,14 +66,7 @@ public sealed class AssistantMcpTests
     [Fact]
     public async Task Propose_change_forwards_with_the_capability_and_returns_the_tool_body_without_confirm()
     {
-        var proposal = AssistantTools.ProposalForModel(new EditResult(EditStatus.Ok, new JsonObject
-        {
-            ["id"] = "p1",
-            ["expiresAt"] = "2026-01-02T03:14:05Z",
-            ["confirm"] = "secret-confirm-token",
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "/x/.claude/settings.json", ["scope"] = "project", ["diff"] = "+theme", ["sha256Before"] = null }),
-        }));
-        var handler = new StubHandler((_, _) => Json(proposal.ToJsonString()));
+        var handler = new StubHandler((_, _) => Json("""{"proposalId":"p1","expiresAt":"2026-01-02T03:14:05Z","files":[{"path":"/x/.claude/settings.json","scope":"project","diff":"+theme"}]}"""));
         var arguments = """{"changes":[{"key":"theme","scope":"project","value":"dark"}],"rationale":"why"}""";
 
         var (exit, replies, _) = await RunAsync(handler, Call(7, "propose_change", arguments));
@@ -88,7 +79,6 @@ public sealed class AssistantMcpTests
         var text = replies[0]["result"]!["content"]![0]!["text"]!.GetValue<string>();
         Assert.Equal("p1", JsonNode.Parse(text)!["proposalId"]!.GetValue<string>());
         Assert.DoesNotContain("confirm", replies[0].ToJsonString());
-        Assert.DoesNotContain("secret-confirm-token", replies[0].ToJsonString());
         Assert.False(replies[0]["result"]!["isError"]!.GetValue<bool>());
     }
 

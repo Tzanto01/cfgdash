@@ -108,7 +108,12 @@ public sealed class AssistantViewTests : IDisposable
     [InlineData("~/ws/company/hooks/guard.sh")]
     [InlineData("$HOME/ws/company/hooks/guard.sh")]
     [InlineData("%USERPROFILE%\\ws\\company\\hooks\\guard.ps1")]
-    public void A_home_relative_company_path_is_dropped_too(string command)
+    [InlineData("Read(//c/Users/user/ws/company/**)")]
+    [InlineData("pwsh -File $env:USERPROFILE\\ws\\company\\guard.ps1")]
+    [InlineData("bash $WORKSPACE_ROOT/company/hooks/guard.sh")]
+    [InlineData("bash ../company/hooks/guard.sh")]
+    [InlineData("C:\\Users\\USER~1\\ws\\\\company\\guard.ps1")]
+    public void Any_spelling_of_a_company_path_is_dropped(string command)
     {
         var companyUnderHome = f.Tree.Dir("home/user/ws/company");
         var environment = TestEnvironments.Create(f.Tree, companyPrefixes: [companyUnderHome]);
@@ -116,6 +121,33 @@ public sealed class AssistantViewTests : IDisposable
         var view = AssistantView.Create(new SnapshotResult(SettingsWithCompanyHook(command), f.Registry), environment, f.OutsideDir);
 
         Assert.Equal(["model"], KvKeys(view, "settings.effective", "kv"));
+    }
+
+    [Fact]
+    public void Collector_notes_and_reasons_naming_a_company_path_are_dropped()
+    {
+        var companyNote = "parse error in " + Path.Combine(f.CompanyPrefix, "plugins", "hooks.json");
+        var snapshot = Snap([]) with { Collectors = [Status("hooks.registered", "hooks") with { Reason = companyNote, Notes = [companyNote, "plain note"] }] };
+
+        var status = Assert.Single(f.Create(snapshot, f.Registry, f.OutsideDir).Snapshot.Collectors);
+
+        Assert.Null(status.Reason);
+        Assert.Equal(["plain note"], status.Notes);
+    }
+
+    [Fact]
+    public void A_file_whose_node_references_a_company_file_is_unreadable_while_its_node_stays()
+    {
+        var snapshot = Snap(
+        [
+            new Section("instructions.chain", "instructions", "Instructions",
+                [new TreeBlock("tree", "Tree", [new TreeNode("importer", "CLAUDE.md", [new TreeNode("import", "AGENTS.md", [], f.CompanyNodeFile.Id)], f.Plain.Id)])]),
+        ]);
+
+        var view = f.Create(snapshot, f.Registry, f.OutsideDir);
+
+        Assert.Equal(["importer"], NodeIds(view, "instructions.chain", "tree"));
+        Assert.False(view.Files.TryGet(f.Plain.Id, out _));
     }
 
     private HarnessSnapshot SettingsWithCompanyHook(string command) => Snap(
