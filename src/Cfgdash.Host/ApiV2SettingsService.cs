@@ -8,7 +8,7 @@ internal sealed class CfgdashSettingsService(CfgdashConfig config, IAutostart au
 {
     private readonly SemaphoreSlim gate = new(1, 1);
 
-    /// <summary>The GET shape: <c>values</c>, <c>startAtLogin</c> (configured, actual, detail) and <c>paths</c>.</summary>
+    /// <summary>The GET shape: <c>values</c>, <c>startAtLogin</c> (configured, actual, detail), <c>paths</c> and <c>configError</c> when config.json exists but cannot be read or parsed.</summary>
     public async Task<JsonObject> GetAsync(CancellationToken ct)
     {
         var settings = config.Read();
@@ -19,12 +19,23 @@ internal sealed class CfgdashSettingsService(CfgdashConfig config, IAutostart au
             startAtLogin["detail"] = state.Detail;
         }
 
-        return new JsonObject
+        var body = new JsonObject
         {
             ["values"] = settings.ToJson(),
             ["startAtLogin"] = startAtLogin,
             ["paths"] = new JsonObject { ["config"] = Slash(config.FilePath), ["overrides"] = Slash(config.OverridesPath) },
         };
+        switch (config.CheckWritable())
+        {
+            case "parse-error":
+                body["configError"] = "config.json is not valid JSON";
+                break;
+            case "write-failed":
+                body["configError"] = "config.json cannot be read";
+                break;
+        }
+
+        return body;
     }
 
     /// <summary>Validates and applies a partial <c>values</c> object; returns the HTTP status and body.</summary>
@@ -33,16 +44,17 @@ internal sealed class CfgdashSettingsService(CfgdashConfig config, IAutostart au
         await gate.WaitAsync(ct);
         try
         {
+            if (config.CheckWritable() is { } blocked)
+            {
+                return blocked == "unsafe-path" ? Failure(blocked) : Failure("parse-error");
+            }
+
             if (config.Validate(partial) is { } invalid)
             {
                 return (400, InvalidSetting(invalid.Key, invalid.Reason));
             }
 
             var values = (JsonObject)partial!;
-            if (values.ContainsKey("startAtLogin") && config.CheckWritable() is { } blocked)
-            {
-                return Failure(blocked);
-            }
 
             if (values["startAtLogin"] is JsonValue value && value.TryGetValue<bool>(out var on)
                 && await autostart.SetAsync(on, ct) is { } reason)
@@ -59,7 +71,7 @@ internal sealed class CfgdashSettingsService(CfgdashConfig config, IAutostart au
     }
 
     private static (int Status, JsonObject Body) Failure(string reason) =>
-        reason == "parse-error" ? (400, InvalidSetting(null, reason)) : (500, new JsonObject { ["error"] = "write-failed", ["reason"] = reason });
+        reason == "parse-error" ? (409, new JsonObject { ["error"] = "config-unreadable" }) : (500, new JsonObject { ["error"] = "write-failed", ["reason"] = reason });
 
     internal static JsonObject InvalidSetting(string? key, string reason) =>
         new() { ["error"] = "invalid-setting", ["key"] = key, ["reason"] = reason };

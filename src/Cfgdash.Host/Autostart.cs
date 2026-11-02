@@ -88,21 +88,22 @@ internal sealed class RunKeyAutostart(IRunKey key, string exePath) : IAutostart
 }
 
 /// <summary>Linux: the user unit <paramref name="unitPath"/> (<c>cfgdash.service</c>) enabled through <c>systemctl --user</c>.</summary>
-internal sealed class SystemdAutostart(IProcessRunner processes, string? systemctl, string unitPath, string exePath) : IAutostart
+internal sealed class SystemdAutostart(IProcessRunner processes, string? systemctl, string unitPath, string exePath, string? path = null) : IAutostart
 {
     private const string UnitName = "cfgdash.service";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>The unit file text, or null when <paramref name="exe"/> contains a control character.</summary>
-    internal static string? Unit(string exe)
+    /// <summary>The unit file text with <paramref name="path"/> as the service PATH, or null when <paramref name="exe"/> or <paramref name="path"/> contains a control character.</summary>
+    internal static string? Unit(string exe, string? path = null)
     {
-        if (exe.Any(char.IsControl))
+        if (exe.Any(char.IsControl) || path?.Any(char.IsControl) == true)
         {
             return null;
         }
 
         var escaped = exe.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("%", "%%").Replace("$", "$$");
-        return $"[Unit]\nDescription=cfgdash harness dashboard\n\n[Service]\nExecStart=\"{escaped}\" run --autostart\nRestart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n";
+        var environment = string.IsNullOrEmpty(path) ? string.Empty : $"Environment=\"PATH={path.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("%", "%%")}\"\n";
+        return $"[Unit]\nDescription=cfgdash harness dashboard\n\n[Service]\nExecStart=\"{escaped}\" run --autostart\n{environment}Restart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n";
     }
 
     public async Task<AutostartState> GetAsync(CancellationToken ct)
@@ -127,7 +128,7 @@ internal sealed class SystemdAutostart(IProcessRunner processes, string? systemc
             return new AutostartState("on", "the unit file cannot be read");
         }
 
-        if (content != Unit(exePath))
+        if (content != Unit(exePath, path))
         {
             return new AutostartState("on", "the unit file differs from the expected one");
         }
@@ -153,7 +154,7 @@ internal sealed class SystemdAutostart(IProcessRunner processes, string? systemc
 
     private async Task<string?> EnableAsync(CancellationToken ct)
     {
-        if (Unit(exePath) is not { } unit)
+        if (Unit(exePath, path) is not { } unit)
         {
             return "unsupported executable path";
         }
@@ -276,7 +277,7 @@ internal static class AutostartFactory
         {
             var xdg = core.EnvironmentReader.Get("XDG_CONFIG_HOME");
             var configHome = xdg is not null && Path.IsPathFullyQualified(xdg) ? xdg : Path.Combine(core.Environment.HomeDir, ".config");
-            return new SystemdAutostart(core.Processes, core.Environment.Tools.GetValueOrDefault("systemctl"), Path.Combine(configHome, "systemd", "user", "cfgdash.service"), exePath);
+            return new SystemdAutostart(core.Processes, core.Environment.Tools.GetValueOrDefault("systemctl"), Path.Combine(configHome, "systemd", "user", "cfgdash.service"), exePath, core.EnvironmentReader.Get("PATH"));
         }
 
         return new UnsupportedAutostart("start at login is supported on Windows and Linux");

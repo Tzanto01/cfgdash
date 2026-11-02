@@ -147,18 +147,35 @@ public sealed class ApiV2SettingsTests
     }
 
     [Fact]
-    public async Task An_unparseable_config_file_blocks_start_at_login_before_the_os_entry_changes()
+    public async Task An_unparseable_config_file_answers_409_and_leaves_the_file_and_the_os_entry_alone()
     {
         var os = new FakeAutostart();
         await using var host = await StartAsync(os);
         Directory.CreateDirectory(host.ConfigDir);
         await File.WriteAllTextAsync(ConfigFile(host), "{ \"theme\": \"dark\", }");
+        var before = await File.ReadAllBytesAsync(ConfigFile(host));
 
-        var response = await PutAsync(host, "{ \"startAtLogin\": true }");
+        var startAtLogin = await PutAsync(host, "{ \"startAtLogin\": true }");
+        var theme = await PutAsync(host, "{ \"theme\": \"light\" }");
 
-        Assert.Equal(400, response.Status);
-        Assert.Equal("parse-error", response.Reason);
+        Assert.All([startAtLogin, theme], r => Assert.Equal((409, "config-unreadable"), (r.Status, r.Error)));
         Assert.Empty(os.Sets);
+        Assert.Equal(before, await File.ReadAllBytesAsync(ConfigFile(host)));
+    }
+
+    [Fact]
+    public async Task Get_reports_config_error_only_for_an_existing_unparseable_file()
+    {
+        await using var host = await StartAsync(new FakeAutostart());
+        var missing = await host.GetAsync(Route);
+        Directory.CreateDirectory(host.ConfigDir);
+        await File.WriteAllTextAsync(ConfigFile(host), "{ \"theme\": \"dark\", }");
+
+        var broken = await host.GetAsync(Route);
+
+        Assert.False(missing.Json.TryGetProperty("configError", out _));
+        Assert.False(string.IsNullOrEmpty(broken.Json.GetProperty("configError").GetString()));
+        Assert.Equal("system", broken.Json.GetProperty("values").GetProperty("theme").GetString());
     }
 
     [Fact]
