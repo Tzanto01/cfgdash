@@ -9,13 +9,13 @@ namespace Cfgdash.Core.Assistant;
 /// <summary>The MCP tool results of the config assistant (docs/contracts/assistant-v1.md), always computed on an <see cref="AssistantView"/>.</summary>
 public static class AssistantTools
 {
-    public const int MaxSnapshotBytes = 256 * 1024;
+    public const int MaxSnapshotBytes = 48 * 1024;
     public const int MaxFileBytes = 64 * 1024;
     public const int MinQueryLength = 2;
 
     /// <summary>
     /// The filtered snapshot, optionally narrowed to one view and/or collector, with <c>files</c> limited to those the kept sections
-    /// reference. Over 256 KiB whole sections are left out and <c>truncated</c> is true.
+    /// reference. Over 48 KiB (kept under Claude Code's MCP output token limit) whole sections are left out and <c>truncated</c> is true.
     /// </summary>
     public static JsonObject GetSnapshot(AssistantView view, string? viewId, string? collectorId)
     {

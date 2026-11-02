@@ -169,7 +169,7 @@ internal static class McpServer
 
     private static JsonArray Tools() =>
     [
-        Tool("get_snapshot", "The redacted config snapshot of the bound folder, filtered to the assistant allowlist. Optional view and collectorId narrow it.",
+        Tool("get_snapshot", "The redacted config snapshot of the bound folder, filtered to the assistant allowlist, capped at 48 KiB. The collectors list names every collector id and its view; when truncated is true, call again with one view or collectorId from that list.",
             new JsonObject
             {
                 ["type"] = "object",

@@ -64,7 +64,7 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 
 | Tool | Returns |
 | --- | --- |
-| `get_snapshot` (`view?`, `collectorId?`) | The redacted snapshot of the bound dir, filtered to the assistant collector allowlist (below) |
+| `get_snapshot` (`view?`, `collectorId?`) | The redacted snapshot of the bound dir, filtered to the assistant collector allowlist (below), capped at 48 KiB so it stays under Claude Code's MCP output limit. Whole sections over the cap are left out with `truncated: true`; the `collectors` list always names every collector and its view for a narrower call |
 | `get_findings` | health-v1 findings for the bound dir |
 | `get_file` (`fileId`) | The redacted file content, as `/api/v1/files`, capped at 64 KiB for the model. Registered ids only; never-read rules apply |
 | `search` (`q`) | `/api/v1/search` results, filtered by the same allowlist |

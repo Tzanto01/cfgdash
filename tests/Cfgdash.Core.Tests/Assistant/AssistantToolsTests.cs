@@ -92,7 +92,7 @@ public sealed class AssistantToolsTests : IDisposable
     }
 
     [Fact]
-    public void GetSnapshot_over_256_KiB_drops_whole_sections_and_sets_truncated()
+    public void GetSnapshot_over_the_cap_drops_whole_sections_and_sets_truncated()
     {
         var filler = new string('x', 1000);
         var sections = Enumerable.Range(0, 10).Select(i => new Section($"c{i}", "v", $"S{i}",
