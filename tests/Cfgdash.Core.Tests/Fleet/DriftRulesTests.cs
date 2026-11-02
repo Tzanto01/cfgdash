@@ -104,6 +104,15 @@ public sealed class DriftRulesTests
     }
 
     [Fact]
+    public void Instructions_drift_fires_for_a_project_file_claude_loads_and_codex_does_not()
+    {
+        var finding = Assert.Single(Drift(Instructions(Dir + "/CLAUDE.md", claudeLoads: true, codexLoads: false), "instructions-drift"));
+
+        Assert.Equal("instructions-drift:instructions.chain:tree:n1", finding.Id);
+        Assert.Contains("not by Codex", finding.Detail);
+    }
+
+    [Fact]
     public void Instructions_drift_ignores_a_global_file_outside_the_target_dir_ancestry()
     {
         Assert.Empty(Drift(Instructions("/home/user/.codex/AGENTS.md", claudeLoads: false, codexLoads: true), "instructions-drift"));

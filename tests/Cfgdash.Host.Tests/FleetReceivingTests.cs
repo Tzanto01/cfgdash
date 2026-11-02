@@ -27,10 +27,13 @@ public sealed class FleetReceivingTests
             ["UserProfile"] = new Dictionary<string, object> { ["LoginName"] = login },
         });
 
-    private static async Task<(ServerHost Host, FakeOwner Owner)> StartAsync(string? whois, bool enabled = true, bool daemon = true, IReadOnlyList<string>? allowedTags = null)
+    private static int WhoisCalls(ServerHost host) => host.Processes.Calls.Count(c => c.Args is ["whois", ..]);
+
+    private static async Task<(ServerHost Host, FakeOwner Owner)> StartAsync(string? whois, bool enabled = true, bool daemon = true, IReadOnlyList<string>? allowedTags = null, string status = """{"TUN": true}""")
     {
         var host = await ServerHost.StartAsync(ServerHost.TailnetOptions(allowedTags), processes: new FakeProcesses(call =>
-            call.Args is ["whois", "--json", _] && whois is not null ? FakeProcesses.Ok(whois) : FakeProcesses.Fail("no such node")));
+            call.Args is ["status", "--json"] ? FakeProcesses.Ok(status)
+            : call.Args is ["whois", "--json", _] && whois is not null ? FakeProcesses.Ok(whois) : FakeProcesses.Fail("no such node")));
         var owner = new FakeOwner(daemon);
         host.Server.FleetEnabled = () => enabled;
         host.Server.ConnectionOwner = owner;
@@ -49,7 +52,7 @@ public sealed class FleetReceivingTests
         var whois = ownUntaggedDevice
             ? WhoisOf("laptop.example.ts.net.", ServerHost.Login.ToUpperInvariant())
             : WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc");
-        var (host, owner) = await StartAsync(whois);
+        var (host, owner) = await StartAsync(whois, allowedTags: ["tag:pc"]);
         await using var _ = host;
 
         var response = await host.TailAsync(path, bearer: null, headers: [Fleet, Forwarded]);
@@ -75,14 +78,14 @@ public sealed class FleetReceivingTests
     [InlineData("GET", "/api/v1/findings?refresh=true", "1")]
     public async Task Malformed_fleet_requests_are_forbidden_without_asking_tailscale(string method, string path, string headerValues)
     {
-        var (host, owner) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"));
+        var (host, owner) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), allowedTags: ["tag:pc"]);
         await using var _ = host;
         (string, string)[] headers = [.. headerValues.Split('|').Select(v => ("X-Cfgdash-Fleet", v)), Forwarded];
 
         var response = await host.TailAsync(path, bearer: null, method: new HttpMethod(method), headers: headers);
 
         Assert.Equal(403, response.Status);
-        Assert.Empty(host.Processes.Calls);
+        Assert.Equal(0, WhoisCalls(host));
         Assert.Empty(owner.Asked);
     }
 
@@ -102,30 +105,30 @@ public sealed class FleetReceivingTests
     [Fact]
     public async Task Fleet_disabled_refuses_even_an_allowed_peer()
     {
-        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), enabled: false);
+        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), enabled: false, allowedTags: ["tag:pc"]);
         await using var _ = host;
 
         var response = await host.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
 
         Assert.Equal(403, response.Status);
-        Assert.Empty(host.Processes.Calls);
+        Assert.Equal(0, WhoisCalls(host));
     }
 
     [Fact]
     public async Task A_connection_not_owned_by_the_daemon_is_refused_before_whois()
     {
-        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), daemon: false);
+        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), daemon: false, allowedTags: ["tag:pc"]);
         await using var _ = host;
 
         var response = await host.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
 
         Assert.Equal(403, response.Status);
-        Assert.Empty(host.Processes.Calls);
+        Assert.Equal(0, WhoisCalls(host));
     }
 
     [Theory]
     [InlineData("foreign-owner", null)]
-    [InlineData("shared-in", null)]
+    [InlineData("shared-in", "tag:pc")]
     [InlineData("shared-in-own-login", null)]
     [InlineData("tag-mismatch", "tag:server")]
     [InlineData("unknown-node", null)]
@@ -148,6 +151,40 @@ public sealed class FleetReceivingTests
         Assert.Equal("fleet", response.Reason);
     }
 
+    [Fact]
+    public async Task A_tagged_node_is_refused_without_allowed_tags_and_accepted_with_its_tag()
+    {
+        var whois = WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc");
+        var (noTags, _) = await StartAsync(whois);
+        await using var _1 = noTags;
+        var (withTag, _) = await StartAsync(whois, allowedTags: ["tag:pc"]);
+        await using var _2 = withTag;
+
+        var refused = await noTags.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
+        var accepted = await withTag.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
+
+        Assert.Equal(403, refused.Status);
+        Assert.Equal("fleet", refused.Reason);
+        Assert.Equal(200, accepted.Status);
+    }
+
+    [Theory]
+    [InlineData("""{"TUN": false}""")]
+    [InlineData("""{"BackendState": "Running"}""")]
+    [InlineData("not json")]
+    public async Task A_userspace_tailscaled_is_refused_before_the_owner_and_whois_checks(string status)
+    {
+        var (host, owner) = await StartAsync(WhoisOf("laptop.example.ts.net.", ServerHost.Login), status: status);
+        await using var _ = host;
+
+        var response = await host.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
+
+        Assert.Equal(403, response.Status);
+        Assert.Equal("fleet", response.Reason);
+        Assert.Equal(0, WhoisCalls(host));
+        Assert.Empty(owner.Asked);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("192.0.2.10|192.0.2.11")]
@@ -155,20 +192,20 @@ public sealed class FleetReceivingTests
     [InlineData("not-an-ip")]
     public async Task Spoofed_forwarded_addresses_are_refused_without_whois(string? forwardedFor)
     {
-        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"));
+        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), allowedTags: ["tag:pc"]);
         await using var _ = host;
         (string, string)[] headers = [Fleet, .. (forwardedFor?.Split('|') ?? []).Select(v => ("X-Forwarded-For", v))];
 
         var response = await host.TailAsync("/api/v1/health", bearer: null, headers: headers);
 
         Assert.Equal(403, response.Status);
-        Assert.Empty(host.Processes.Calls);
+        Assert.Equal(0, WhoisCalls(host));
     }
 
     [Fact]
     public async Task A_fleet_request_does_not_restart_the_idle_window()
     {
-        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"));
+        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), allowedTags: ["tag:pc"]);
         await using var _ = host;
         var stopped = host.Server.WaitForShutdownAsync();
 

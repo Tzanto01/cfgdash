@@ -48,8 +48,8 @@ public sealed class FleetRoutesTests
         },
     });
 
-    private static FleetPeers NewFleet(FakeProcesses processes, FakeTimeProvider time, HttpMessageHandler handler) =>
-        new(processes, "tailscale-fake", [ServerHost.Login], [], TestCore.Machine(), time, handler);
+    private static FleetPeers NewFleet(FakeProcesses processes, FakeTimeProvider time, HttpMessageHandler handler, IReadOnlyList<string>? allowedTags = null) =>
+        new(processes, "tailscale-fake", [ServerHost.Login], allowedTags ?? [], TestCore.Machine(), time, handler);
 
     private static FakeProcesses StatusProcesses(string status) =>
         new(call => call.Args is ["status", "--json"] ? FakeProcesses.Ok(status) : throw new InvalidOperationException(call.Line));
@@ -69,7 +69,7 @@ public sealed class FleetRoutesTests
     {
         var handler = new FakePeerHandler((_, _) => FakePeerHandler.Json(HttpStatusCode.OK, """{"status":"ok","version":"1.2.3"}"""));
         await using var host = await ServerHost.StartAsync(ServerHost.TailnetOptions(), processes: StatusProcesses(Status));
-        host.Server.Fleet = NewFleet(host.Processes, host.Time, handler);
+        host.Server.Fleet = NewFleet(host.Processes, host.Time, handler, ["tag:pc"]);
 
         var response = await host.GetAsync("/api/v1/fleet");
 
@@ -89,6 +89,52 @@ public sealed class FleetRoutesTests
             Assert.False(r.Headers.Contains("Authorization"));
             Assert.False(r.Headers.Contains("Cookie"));
         });
+    }
+
+    [Fact]
+    public async Task Discovery_omits_a_tagged_peer_without_allowed_tags_and_lists_it_with_a_matching_tag()
+    {
+        var handler = new FakePeerHandler((_, _) => FakePeerHandler.Json(HttpStatusCode.OK, """{"status":"ok"}"""));
+        var without = NewFleet(StatusProcesses(Status), Clock(), handler);
+        var mismatched = NewFleet(StatusProcesses(Status), Clock(), handler, ["tag:server"]);
+        var matching = NewFleet(StatusProcesses(Status), Clock(), handler, ["tag:pc"]);
+
+        Assert.Equal(["alpha"], (await without.GetAsync(CancellationToken.None)).Peers.Select(p => p.Name));
+        Assert.Equal(["alpha"], (await mismatched.GetAsync(CancellationToken.None)).Peers.Select(p => p.Name));
+        Assert.Equal(["alpha", "bravo"], (await matching.GetAsync(CancellationToken.None)).Peers.Select(p => p.Name));
+    }
+
+    [Theory]
+    [InlineData("""{"TUN": true}""", true)]
+    [InlineData("""{"TUN": false}""", false)]
+    [InlineData("""{"Self": {}}""", false)]
+    public async Task Kernel_tun_requires_the_root_tun_flag(string status, bool expected)
+    {
+        var fleet = NewFleet(new FakeProcesses(call => call.Args is ["status", "--json"] ? FakeProcesses.Ok(status) : throw new InvalidOperationException(call.Line)), Clock(), new FakePeerHandler((_, _) => throw new InvalidOperationException()));
+
+        Assert.Equal(expected, await fleet.KernelTunAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Kernel_tun_keeps_true_but_retries_false_after_60_seconds()
+    {
+        var time = Clock();
+        var tun = false;
+        var processes = new FakeProcesses(call => FakeProcesses.Ok(tun ? """{"TUN": true}""" : """{"TUN": false}"""));
+        var fleet = NewFleet(processes, time, new FakePeerHandler((_, _) => throw new InvalidOperationException()));
+
+        var first = await fleet.KernelTunAsync(CancellationToken.None);
+        tun = true;
+        time.Advance(TimeSpan.FromSeconds(30));
+        var cached = await fleet.KernelTunAsync(CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(31));
+        var retried = await fleet.KernelTunAsync(CancellationToken.None);
+        tun = false;
+        time.Advance(TimeSpan.FromMinutes(10));
+        var kept = await fleet.KernelTunAsync(CancellationToken.None);
+
+        Assert.Equal([false, false, true, true], [first, cached, retried, kept]);
+        Assert.Equal(2, processes.Calls.Count);
     }
 
     [Theory]
@@ -250,7 +296,7 @@ public sealed class FleetRoutesTests
             _ => FakePeerHandler.Json(HttpStatusCode.OK, """{"status":"ok"}"""),
         });
         await using var host = await ServerHost.StartAsync(ServerHost.TailnetOptions(), processes: StatusProcesses(Status));
-        host.Server.Fleet = NewFleet(host.Processes, host.Time, handler);
+        host.Server.Fleet = NewFleet(host.Processes, host.Time, handler, ["tag:pc"]);
 
         var response = await host.GetAsync("/api/v1/compare?against=" + against);
 
@@ -263,6 +309,21 @@ public sealed class FleetRoutesTests
         {
             Assert.Equal("peer-unavailable", response.Error);
         }
+    }
+
+    [Fact]
+    public async Task Compare_against_an_ok_peer_that_returns_invalid_json_is_502()
+    {
+        var handler = new FakePeerHandler((request, _) => request.RequestUri!.AbsolutePath == "/api/v1/snapshot"
+            ? FakePeerHandler.Json(HttpStatusCode.OK, "not json")
+            : FakePeerHandler.Json(HttpStatusCode.OK, """{"status":"ok"}"""));
+        await using var host = await ServerHost.StartAsync(ServerHost.TailnetOptions(), processes: StatusProcesses(Status));
+        host.Server.Fleet = NewFleet(host.Processes, host.Time, handler);
+
+        var response = await host.GetAsync("/api/v1/compare?against=peer:alpha.example.ts.net");
+
+        Assert.Equal(502, response.Status);
+        Assert.Equal("peer-unavailable", response.Error);
     }
 }
 
@@ -283,6 +344,24 @@ public sealed class ConnectionOwnerTests
     [InlineData("0100007F:1F90", "0100007F:C350", 0, false)]
     public void Only_a_uid_0_socket_with_the_client_as_local_address_counts(string local, string remote, int uid, bool expected) =>
         Assert.Equal(expected, TailscaleConnectionOwner.IsRootOwned(Header + Line(local, remote, uid), Client, Server));
+
+    [Theory]
+    [InlineData("06")]
+    [InlineData("04")]
+    [InlineData("0A")]
+    public void A_uid_0_socket_that_is_not_established_does_not_count(string state) =>
+        Assert.False(TailscaleConnectionOwner.IsRootOwned(Header + Line("0100007F:C350", "0100007F:1F90", 0).Replace(" 01 ", $" {state} "), Client, Server));
+
+    [Theory]
+    [InlineData("00000000000000000000000001000000", "::1")]
+    [InlineData("0000000000000000FFFF00000100007F", "::ffff:127.0.0.1")]
+    public void Ipv6_table_rows_match_loopback_and_mapped_ipv4(string address, string ip)
+    {
+        var client = new IPEndPoint(IPAddress.Parse(ip), 50000);
+        var server = new IPEndPoint(IPAddress.Parse(ip), 8080);
+
+        Assert.True(TailscaleConnectionOwner.IsRootOwned(Header + Line($"{address}:C350", $"{address}:1F90", 0), client, server));
+    }
 
     [Fact]
     public void Ambiguous_matches_fail_closed()

@@ -134,4 +134,31 @@ public sealed class SnapshotDiffTests
 
         Assert.Empty(SnapshotDiff.Compare(left, right).Collectors);
     }
+
+    [Fact]
+    public void A_kv_value_under_a_secret_named_key_is_redacted_even_when_it_looks_harmless()
+    {
+        var right = Snap(
+            collectors: $"[{Active("c")}]",
+            sections: $"[{Section("c", $"[{KvBlock("kv", ("env.MY_TOKEN", "abc123plain"), ("env.MODE", "fast"))}]")}]");
+
+        var report = SnapshotDiff.Compare(Snap(), right);
+
+        var rows = Assert.Single(report.Collectors).Rows.ToDictionary(r => r.ItemId);
+        Assert.Equal("[redacted]", (string?)rows["env.MY_TOKEN"].Right);
+        Assert.Equal("fast", (string?)rows["env.MODE"].Right);
+        Assert.DoesNotContain("abc123plain", System.Text.Json.JsonSerializer.Serialize(report));
+    }
+
+    [Fact]
+    public void A_secret_in_the_right_hostname_or_dir_is_redacted()
+    {
+        var secret = "sk-" + "ant-" + new string('a', 24);
+
+        var report = SnapshotDiff.Compare(Snap(), Snap(host: "h-" + secret, dir: "/home/user/" + secret));
+
+        Assert.DoesNotContain(secret, System.Text.Json.JsonSerializer.Serialize(report));
+        Assert.Contains("[redacted]", report.Right.Machine);
+        Assert.Contains("[redacted]", report.Right.Dir);
+    }
 }
