@@ -139,6 +139,21 @@ public sealed class AssistantToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFile_and_search_hide_lines_naming_a_company_path_and_keep_the_rest()
+    {
+        var view = f.View(false);
+        var companyLine = "args = [\"" + PathUtil.ToJson(Path.Combine(f.CompanyPrefix, "mcp", "guard.js")) + "\"]";
+        var reader = new StubReader($"model = \"sonnet-guard\"\n{companyLine}");
+
+        var file = await AssistantTools.GetFileAsync(view, reader, f.Plain.Id, Nonce, CancellationToken.None);
+        var hits = AssistantTools.Search(view, new SnapshotSearch(), reader, "guard", CancellationToken.None).ToJsonString();
+
+        Assert.Equal($"<context-{Nonce}>\nmodel = \"sonnet-guard\"\n[company path hidden]\n</context-{Nonce}>", (string?)file!["content"]);
+        Assert.Contains("sonnet-guard", hits);
+        Assert.DoesNotContain("guard.js", hits);
+    }
+
+    [Fact]
     public void Search_never_returns_hits_from_dropped_sections_or_company_rows()
     {
         var view = f.View(false);

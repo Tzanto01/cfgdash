@@ -113,6 +113,11 @@ public sealed class AssistantViewTests : IDisposable
     [InlineData("bash $WORKSPACE_ROOT/company/hooks/guard.sh")]
     [InlineData("bash ../company/hooks/guard.sh")]
     [InlineData("C:\\Users\\USER~1\\ws\\\\company\\guard.ps1")]
+    [InlineData("C:\\Users\\user\\ws\\COMPAN~1\\guard.ps1")]
+    [InlineData("/opt/ws/company:/opt/lib")]
+    [InlineData("Directory not found: /opt/ws/company.")]
+    [InlineData("node company/hooks/guard.js")]
+    [InlineData("@company/AGENTS.md")]
     public void Any_spelling_of_a_company_path_is_dropped(string command)
     {
         var companyUnderHome = f.Tree.Dir("home/user/ws/company");

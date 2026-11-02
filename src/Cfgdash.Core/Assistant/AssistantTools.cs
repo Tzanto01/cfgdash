@@ -66,7 +66,7 @@ public static class AssistantTools
             return null;
         }
 
-        var content = await reader.ReadAsync(file, cancellationToken);
+        var content = await new CompanyLineHidingReader(reader, view).ReadAsync(file, cancellationToken);
         var text = content.Content;
         var truncated = content.Truncated;
         var bytes = Encoding.UTF8.GetBytes(text);
@@ -101,7 +101,7 @@ public static class AssistantTools
             return new JsonObject { ["error"] = "query-too-short" };
         }
 
-        return (JsonObject)JsonSerializer.SerializeToNode(search.Search(view.Snapshot, view.Files, reader, q, cancellationToken), SnapshotJson.Options)!;
+        return (JsonObject)JsonSerializer.SerializeToNode(search.Search(view.Snapshot, view.Files, new CompanyLineHidingReader(reader, view), q, cancellationToken), SnapshotJson.Options)!;
     }
 
     /// <summary>
@@ -125,13 +125,22 @@ public static class AssistantTools
             {
                 ["path"] = f["path"]?.DeepClone(),
                 ["scope"] = f["scope"]?.DeepClone(),
-                ["diff"] = f["diff"] is JsonValue diff && diff.TryGetValue<string>(out var text) ? HideCompanyLines(text, view) : f["diff"]?.DeepClone(),
+                ["diff"] = f["diff"] is JsonValue diff && diff.TryGetValue<string>(out var text) ? HideCompanyLines(text, view, keepMarker: true) : f["diff"]?.DeepClone(),
             })]),
         };
     }
 
-    private static string HideCompanyLines(string diff, AssistantView view) =>
-        string.Join('\n', diff.Split('\n').Select(line => view.MentionsCompanyPath(line) ? line[..1] + "[company path hidden]" : line));
+    private static string HideCompanyLines(string text, AssistantView view, bool keepMarker) =>
+        string.Join('\n', text.Split('\n').Select(line => view.MentionsCompanyPath(line) ? (keepMarker ? line[..1] : string.Empty) + "[company path hidden]" : line));
+
+    private sealed class CompanyLineHidingReader(IFileContentReader inner, AssistantView view) : IFileContentReader
+    {
+        public async Task<FileContent> ReadAsync(RegisteredFile file, CancellationToken cancellationToken)
+        {
+            var content = await inner.ReadAsync(file, cancellationToken);
+            return content with { Content = HideCompanyLines(content.Content, view, keepMarker: false) };
+        }
+    }
 
     private static long Bytes<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, SnapshotJson.Options).LongLength;
 }

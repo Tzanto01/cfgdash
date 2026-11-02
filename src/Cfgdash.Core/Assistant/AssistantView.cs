@@ -131,26 +131,28 @@ public sealed class AssistantView
     }
 
     /// <summary>
-    /// Matches a company prefix's folder name as a path segment: after a separator or an opening quote, bracket or <c>=</c>
-    /// and before a separator, closing quote or bracket, glob, space or the end; or at the start of the text before a separator.
-    /// Case-insensitive, so it over-matches rather than misses another spelling of the same path.
+    /// Matches a company prefix's folder name as a path segment: after a separator, quote, bracket, <c>=</c>, <c>:</c>,
+    /// <c>,</c> or <c>;</c> and not followed by a name character; or not preceded by a name character and followed by a
+    /// separator; or as its 8.3 short name (<c>COMPAN~1</c>). Case-insensitive, so it over-matches rather than misses another
+    /// spelling of the same path.
     /// </summary>
     private static Regex? CompanyPathPattern(MachineEnvironment env)
     {
-        var leaves = env.CompanyPrefixes
+        var names = env.CompanyPrefixes
             .Select(p => PathUtil.Full(p).Split('/', '\\').LastOrDefault(s => s.Length > 0))
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(Regex.Escape)
             .ToList();
-        if (leaves.Count == 0)
+        if (names.Count == 0)
         {
             return null;
         }
 
-        var leaf = "(?:" + string.Join('|', leaves) + ")";
+        var leaf = "(?:" + string.Join('|', names.Select(Regex.Escape)) + ")";
+        var shortNames = names.Select(n => new string([.. n.Where(char.IsAsciiLetterOrDigit).Take(6)])).Where(s => s.Length > 0).Select(s => Regex.Escape(s) + @"~\d");
+        var shortLeaf = "(?:" + string.Join('|', shortNames.DefaultIfEmpty("(?!)")) + ")";
         return new Regex(
-            $$"""(?:[/\\("'`=:,;]{{leaf}}(?:[/\\)"'`,;*\s]|$))|(?:^{{leaf}}[/\\])""",
+            $$"""(?:[/\\("'`=:,;]{{leaf}}(?![\p{L}\p{N}_-]))|(?:(?<![\p{L}\p{N}_.-]){{leaf}}[/\\])|(?:(?<![\p{L}\p{N}]){{shortLeaf}})""",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
