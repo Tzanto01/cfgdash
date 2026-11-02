@@ -330,7 +330,8 @@ internal sealed class AssistantProcess
         }
     }
 
-    private static void WriteFile(string path, string content)
+    /// <summary>Creates a generated file: 0600 on Linux/macOS, a protected current-user-only ACL on Windows. Fails if it exists.</summary>
+    internal static void WriteFile(string path, string content)
     {
         using var stream = OperatingSystem.IsWindows() ? UserOnlyWindowsFile(path) : PrivateFiles.Open(path, FileMode.CreateNew);
         stream.Write(new UTF8Encoding(false).GetBytes(content));
