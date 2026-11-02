@@ -87,13 +87,13 @@ internal sealed class FleetPeers
         return task.WaitAsync(cancellationToken);
     }
 
-    /// <summary>True when <c>tailscale status --json</c> reports a kernel TUN device (root <c>TUN</c> is <c>true</c>); false without tailscale, on any failure, or in userspace-networking mode. A true result is kept for the life of this instance, anything else for 60 s, one run at a time.</summary>
+    /// <summary>True when <c>tailscale status --json</c> reports a kernel TUN device (root <c>TUN</c> is <c>true</c>); false without tailscale, on any failure, or in userspace-networking mode. Any result is kept for 60 s, one run at a time.</summary>
     public Task<bool> KernelTunAsync(CancellationToken cancellationToken)
     {
         Task<bool> task;
         lock (gate)
         {
-            if (kernelTun is null || kernelTun.IsFaulted || (kernelTun.IsCompletedSuccessfully && !kernelTun.Result && time.GetUtcNow() >= kernelTunExpires))
+            if (kernelTun is null || kernelTun.IsFaulted || (kernelTun.IsCompletedSuccessfully && time.GetUtcNow() >= kernelTunExpires))
             {
                 kernelTun = ProbeKernelTunAsync();
             }
@@ -210,12 +210,9 @@ internal sealed class FleetPeers
             }
         }
 
-        if (!tun)
+        lock (gate)
         {
-            lock (gate)
-            {
-                kernelTunExpires = time.GetUtcNow() + CacheFor;
-            }
+            kernelTunExpires = time.GetUtcNow() + CacheFor;
         }
 
         return tun;

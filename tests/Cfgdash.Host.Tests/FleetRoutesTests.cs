@@ -116,7 +116,7 @@ public sealed class FleetRoutesTests
     }
 
     [Fact]
-    public async Task Kernel_tun_keeps_true_but_retries_false_after_60_seconds()
+    public async Task Kernel_tun_is_cached_for_60_seconds_either_way()
     {
         var time = Clock();
         var tun = false;
@@ -130,11 +130,13 @@ public sealed class FleetRoutesTests
         time.Advance(TimeSpan.FromSeconds(31));
         var retried = await fleet.KernelTunAsync(CancellationToken.None);
         tun = false;
-        time.Advance(TimeSpan.FromMinutes(10));
-        var kept = await fleet.KernelTunAsync(CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(30));
+        var cachedTrue = await fleet.KernelTunAsync(CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(31));
+        var switched = await fleet.KernelTunAsync(CancellationToken.None);
 
-        Assert.Equal([false, false, true, true], [first, cached, retried, kept]);
-        Assert.Equal(2, processes.Calls.Count);
+        Assert.Equal([false, false, true, true, false], [first, cached, retried, cachedTrue, switched]);
+        Assert.Equal(3, processes.Calls.Count);
     }
 
     [Theory]
