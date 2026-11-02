@@ -128,9 +128,10 @@ internal sealed class SystemdAutostart(IProcessRunner processes, string? systemc
             return new AutostartState("on", "the unit file cannot be read");
         }
 
-        if (content != Unit(exePath, path))
+        var execStart = Unit(exePath)?.Split('\n').First(l => l.StartsWith("ExecStart=", StringComparison.Ordinal));
+        if (execStart is null || !content.Split('\n').Any(l => l.TrimEnd('\r') == execStart))
         {
-            return new AutostartState("on", "the unit file differs from the expected one");
+            return new AutostartState("on", "the unit's ExecStart does not point at this executable");
         }
 
         var enabled = await processes.RunAsync(systemctl!, ["--user", "is-enabled", UnitName], Timeout, ct);
