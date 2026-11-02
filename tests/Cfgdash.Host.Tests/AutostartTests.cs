@@ -185,7 +185,7 @@ public sealed class SystemdAutostartTests : IDisposable
     }
 
     [Fact]
-    public async Task Get_reports_a_detail_when_the_unit_differs_from_the_expected_one()
+    public async Task Get_reports_a_detail_when_exec_start_points_at_another_executable()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(UnitPath)!);
         File.WriteAllText(UnitPath, "[Service]\nExecStart=/tmp/other run\n");
@@ -194,6 +194,16 @@ public sealed class SystemdAutostartTests : IDisposable
 
         Assert.Equal("on", state.Actual);
         Assert.False(string.IsNullOrEmpty(state.Detail));
+    }
+
+    [Fact]
+    public async Task Status_is_on_when_only_the_path_line_differs_from_the_callers_path()
+    {
+        Assert.Null(await new SystemdAutostart(Systemd(), Systemctl, UnitPath, Exe, "/home/user/.local/bin:/usr/bin").SetAsync(true, default));
+
+        var state = await new SystemdAutostart(Systemd(), Systemctl, UnitPath, Exe, "/usr/bin").GetAsync(default);
+
+        Assert.Equal(new AutostartState("on"), state);
     }
 
     [Fact]
