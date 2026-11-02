@@ -80,7 +80,10 @@ async function main() {
   const child = spawn(exe, ['run', '--port', '0', '--no-open', '--dir', harness.project], { env: harness.env, stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (chunk) => (stderr += chunk));
-  const exited = new Promise((resolve) => child.once('exit', resolve));
+  const exited = new Promise((resolve) => {
+    child.once('exit', resolve);
+    child.once('error', resolve);
+  });
   let browser;
   let page;
   try {
@@ -90,7 +93,8 @@ async function main() {
     step(`cfgdash is running on port ${run.port}`);
 
     browser = await chromium.launch();
-    const context = await browser.newContext({ extraHTTPHeaders: { Authorization: `Bearer ${token}` } });
+    const context = await browser.newContext();
+    await context.route(`${origin}/**`, (route) => route.continue({ headers: { ...route.request().headers(), authorization: `Bearer ${token}` } }));
     page = await context.newPage();
     const foreign = [];
     const errors = [];
@@ -178,8 +182,9 @@ async function main() {
     await browser?.close();
     if (child.exitCode === null) {
       child.kill();
+      await Promise.race([exited, sleep(10_000)]);
     }
-    await rm(harness.root, { recursive: true, force: true });
+    await rm(harness.root, { recursive: true, force: true, maxRetries: 3 });
   }
 }
 

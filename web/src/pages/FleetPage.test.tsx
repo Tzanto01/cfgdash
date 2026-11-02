@@ -76,6 +76,19 @@ describe('Fleet view', () => {
     expect(h.text()).toContain('devbox: active · laptop: notPresent');
   });
 
+  it('hides a compare result made for another folder after the folder changes', async () => {
+    const h = await openFleet();
+    await h.click(h.button('Compare'));
+    await h.answer('/api/v1/compare', diff());
+    expect(h.text()).toContain('1 changed');
+
+    await h.navigate('/fleet?dir=%2Fhome%2Fuser%2Fws%2Fother');
+    await h.answer('/api/v1/snapshot', makeSnapshot({ targetDir: '/home/user/ws/other' }));
+
+    expect(h.text()).not.toContain('1 changed');
+    expect(document.querySelectorAll('main section[aria-label]')).toHaveLength(0);
+  });
+
   it('compares with a peer from its row and shows a peer that cannot be reached inline', async () => {
     const h = await openFleet();
 

@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { isFiltering, kvRowMatches, NO_FILTER, tableRowMatches, type FlagChip, type RowFilter } from '../blocks/filter';
 import { Button } from '../components/ui/button';
@@ -9,7 +9,7 @@ import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
-import { LoadingPanel } from '../shell/Shell';
+import { focusMainHeading, LoadingPanel } from '../shell/Shell';
 import { useUi } from '../state/ui';
 import { EditToggle } from './EditToggle';
 import { SectionCard } from './SectionCard';
@@ -80,6 +80,13 @@ export function ViewPage() {
     [view, sections]
   );
   const reveal = useReveal(view, sections, onTarget);
+  const lastEdit = useRef(url.edit);
+  useEffect(() => {
+    if (lastEdit.current !== url.edit) {
+      lastEdit.current = url.edit;
+      focusMainHeading();
+    }
+  }, [url.edit]);
 
   const filtering = isFiltering(filter);
   const counts = sections ? rowCounts(sections, filter) : { shown: 0, total: 0 };

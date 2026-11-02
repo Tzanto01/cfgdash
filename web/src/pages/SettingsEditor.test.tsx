@@ -175,11 +175,13 @@ describe('Settings edit mode', () => {
     expect(h.url()).toBe('/settings?dir=D%3A%2Fws%2Fapp&edit=1');
     await answerWhenSent(h, '/api/v2/settings', makeSettings());
     expect(h.el.querySelector('main h1')?.textContent).toBe('Edit settings');
+    expect(document.activeElement?.textContent).toBe('Edit settings');
     expect(editToggles()[0].getAttribute('aria-pressed')).toBe('true');
 
     await h.click(editToggles()[0]);
     expect(h.url()).toBe('/settings?dir=D%3A%2Fws%2Fapp');
     expect(h.el.querySelector('main h1')?.textContent).toBe('Settings');
+    expect(document.activeElement?.textContent).toBe('Settings');
   });
 
   it.each([

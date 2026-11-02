@@ -15,13 +15,14 @@ export function ThemeToggle() {
   const ui = useUi();
   const next = nextTheme(mode);
   const Icon = ICONS[mode];
+  const toggle = () => {
+    setTheme(next);
+    if (ui.edits) {
+      api.putCfgdashSettings({ theme: next }).catch(() => undefined);
+    }
+  };
   return (
-    <Button variant="ghost" size="icon" aria-label={`Theme: ${mode}. Switch to ${next}`} onClick={() => {
-        setTheme(next);
-        if (ui.edits) {
-          api.putCfgdashSettings({ theme: next }).catch(() => undefined);
-        }
-      }}>
+    <Button variant="ghost" size="icon" aria-label={`Theme: ${mode}. Switch to ${next}`} onClick={toggle}>
       <Icon strokeWidth={1.75} aria-hidden="true" />
     </Button>
   );

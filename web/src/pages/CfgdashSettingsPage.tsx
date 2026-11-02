@@ -7,7 +7,7 @@ import { cn } from '../lib/utils';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
-import { setTheme } from '../state/theme';
+import { setTheme, useTheme } from '../state/theme';
 
 const LOCAL_ONLY = "cfgdash settings are only available from this machine's browser (localhost).";
 const FIELD = 'touch-target h-8 w-full rounded-md border border-border-strong bg-raised px-2 text-sm placeholder:text-muted';
@@ -142,6 +142,7 @@ function TextSetting({ ids, value, type = 'text', placeholder, busy, onSave }: T
 export default function CfgdashSettingsPage() {
   const store = useSnapshotStore();
   const announce = useAnnounce();
+  const theme = useTheme();
   const [loaded, setLoaded] = useState<{ data?: CfgdashSettings; error?: unknown } | null>(null);
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState<Field | null>(null);
@@ -304,7 +305,7 @@ export default function CfgdashSettingsPage() {
                 aria-labelledby={ids.labelId}
                 aria-describedby={ids.descId}
                 disabled={busy !== null}
-                value={values.theme}
+                value={theme}
                 onChange={(event) => void save('theme', { theme: event.target.value as CfgdashSettings['values']['theme'] })}
                 className={FIELD}
               >

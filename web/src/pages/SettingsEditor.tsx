@@ -304,13 +304,14 @@ export default function SettingsEditor() {
     pending.current = true;
     setBusy('apply');
     const undoing = undoOf;
+    const askedDir = latest.current.dir;
     try {
       const result = await api.apply(proposal.id, proposal.confirm);
       const text = `${undoing ? 'Undone' : 'Applied'}. Audit entry ${result.auditId}.`;
       flushSync(() => {
         setProposal(null);
         setUndoOf(null);
-        if (!undoing) {
+        if (!undoing && latest.current.dir === askedDir) {
           setStaged({});
           setFieldErrors({});
         }
@@ -403,7 +404,7 @@ export default function SettingsEditor() {
                 key={`${file.scope}\n${file.path}`}
                 file={file}
                 scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope}
-                gitTracked={data.files.some((f) => f.scope === file.scope && f.gitTracked)}
+                gitTracked={data.files.some((f) => f.path === file.path && f.gitTracked)}
               />
             ))}
           </div>

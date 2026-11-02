@@ -144,7 +144,7 @@ export default function FleetPage() {
   const fleet = useLoad<FleetResponse>(loadFleet, reloads);
   const exports = useLoad<ExportsResponse>(loadExports, reloads);
   const [against, setAgainst] = useState('');
-  const [result, setResult] = useState<{ against: string; diff?: CompareResponse; error?: string } | null>(null);
+  const [result, setResult] = useState<{ dir?: string; diff?: CompareResponse; error?: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -153,7 +153,9 @@ export default function FleetPage() {
 
   const okPeers = fleet?.data?.peers.filter((p) => p.cfgdash === 'ok') ?? [];
   const exportList = exports?.data?.exports ?? [];
-  const selected = against || (exportList[0] ? `export:${exportList[0].id}` : okPeers[0] ? `peer:${okPeers[0].dnsName}` : '');
+  const options = [...exportList.map((e) => `export:${e.id}`), ...okPeers.map((p) => `peer:${p.dnsName}`)];
+  const selected = options.includes(against) ? against : (options[0] ?? '');
+  const shown = result && result.dir === dir ? result : null;
 
   const compare = async (target: string) => {
     if (busy || !target) {
@@ -163,10 +165,10 @@ export default function FleetPage() {
     setBusy(true);
     try {
       const diff = await api.compare(dir, target);
-      setResult({ against: target, diff });
+      setResult({ dir, diff });
       announce(`${diff.counts.changed + diff.counts.onlyLeft + diff.counts.onlyRight} differences`);
     } catch (error) {
-      setResult({ against: target, error: compareFailure(error) });
+      setResult({ dir, error: compareFailure(error) });
     } finally {
       setBusy(false);
     }
@@ -307,12 +309,12 @@ export default function FleetPage() {
             </p>
           )}
           {exports?.error !== undefined && <p className="text-sm text-muted">Couldn't list the exports.</p>}
-          {result?.error && (
+          {shown?.error && (
             <p role="alert" className="tint-danger rounded-lg border border-danger px-4 py-3">
-              {result.error}
+              {shown.error}
             </p>
           )}
-          {result?.diff && <Diff diff={result.diff} />}
+          {shown?.diff && <Diff diff={shown.diff} />}
         </section>
       </div>
     </>
