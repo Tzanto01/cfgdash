@@ -62,6 +62,8 @@ internal sealed class ServerHost : IAsyncDisposable
 
     public string LogDir { get; }
 
+    public string ExportsDir => owned.Combine("cache/exports");
+
     public string CacheDir => owned.Combine("cache");
 
     public string ConfigDir => owned.Combine("config");
