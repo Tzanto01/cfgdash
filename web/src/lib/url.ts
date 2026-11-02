@@ -7,6 +7,8 @@ export interface UrlParams {
   detail?: string;
   line?: number;
   q?: string;
+  /** `edit=1`: the Settings view in edit mode (edits-v1). */
+  edit: boolean;
 }
 
 function param(params: URLSearchParams, key: string): string | undefined {
@@ -21,7 +23,8 @@ export function readParams(search: string): UrlParams {
     file: param(params, 'file'),
     detail: param(params, 'detail'),
     line: Number.isInteger(line) && line > 0 ? line : undefined,
-    q: param(params, 'q')
+    q: param(params, 'q'),
+    edit: params.get('edit') === '1'
   };
 }
 

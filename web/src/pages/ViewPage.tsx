@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { isFiltering, kvRowMatches, NO_FILTER, tableRowMatches, type FlagChip, type RowFilter } from '../blocks/filter';
 import { Button } from '../components/ui/button';
@@ -9,9 +9,13 @@ import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
+import { LoadingPanel } from '../shell/Shell';
 import { useUi } from '../state/ui';
+import { EditToggle } from './EditToggle';
 import { SectionCard } from './SectionCard';
 import { useReveal, type RevealTarget } from './useReveal';
+
+const SettingsEditor = lazy(() => import('./SettingsEditor'));
 
 const CHIPS: readonly { id: FlagChip; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -85,6 +89,14 @@ export function ViewPage() {
     }
   }, [announce, filtering, counts.shown, counts.total]);
 
+  if (view === 'settings' && url.edit) {
+    return (
+      <Suspense fallback={<LoadingPanel text="Loading settings..." />}>
+        <SettingsEditor />
+      </Suspense>
+    );
+  }
+
   if (!model || !sections) {
     return (
       <>
@@ -132,6 +144,11 @@ export function ViewPage() {
           <span className="text-xs font-medium text-muted tabular">
             {formatCount(model.itemCount)} {model.itemCount === 1 ? 'item' : 'items'}
           </span>
+          {model.id === 'settings' && (
+            <span className="ml-auto self-center">
+              <EditToggle />
+            </span>
+          )}
         </div>
         <p className="mt-1 text-muted">{model.description}</p>
         {needsFolder && (

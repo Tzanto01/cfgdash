@@ -29,7 +29,7 @@ describe('navigation', () => {
   it('lists nav views in contract order, adds Other for unknown ids and hides notPresent-only views', async () => {
     await startApp('/overview');
 
-    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Fleet', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
   });
 
   it('lists Health under Machine', async () => {
@@ -59,7 +59,7 @@ describe('navigation', () => {
     withView(snapshot, 'codex', 'active', 'Codex');
     await startApp('/overview', snapshot);
 
-    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'T3 Code', 'Codex', 'OpenCode', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Fleet', 'Settings', 'Instructions', 'Agents', 'Hooks', 'T3 Code', 'Codex', 'OpenCode', 'Other']);
   });
 
   it('hides T3 Code, Codex and OpenCode whose collectors are not on this machine', async () => {
@@ -69,7 +69,7 @@ describe('navigation', () => {
     withView(snapshot, 'opencode', 'notPresent', 'OpenCode');
     await startApp('/overview', snapshot);
 
-    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Fleet', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
   });
 
   it('lists Usage under Activity between Sessions and Memory when its collector is active', async () => {
@@ -79,7 +79,7 @@ describe('navigation', () => {
     withView(snapshot, 'sessions', 'active', 'Sessions');
     await startApp('/overview', snapshot);
 
-    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Sessions', 'Usage', 'Memory', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Fleet', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Sessions', 'Usage', 'Memory', 'Other']);
     expect(groupOf('Usage')).toBe('Activity');
   });
 
@@ -128,7 +128,7 @@ describe('navigation', () => {
   it('puts a view id this UI does not know under Other and never in the nav as its own entry', async () => {
     const h = await startApp('/overview', withView(makeSnapshot(), 'omega', 'active', 'Omega'));
 
-    expect(navLabels()).toEqual(['Overview', 'Health', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
+    expect(navLabels()).toEqual(['Overview', 'Health', 'Fleet', 'Settings', 'Instructions', 'Agents', 'Hooks', 'Other']);
     await h.navigate('/other');
     expect(h.el.querySelector('main h1')?.textContent).toBe('Other');
     expect([...h.el.querySelectorAll('main h2')].map((e) => e.textContent)).toEqual(['zeta', 'omega']);

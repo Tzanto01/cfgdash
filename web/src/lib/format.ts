@@ -2,6 +2,7 @@ import type { JsonValue } from './models';
 
 const numberFormat = new Intl.NumberFormat('en-US');
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+const dateTimeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 export function formatCount(value: number): string {
   return numberFormat.format(value);
@@ -29,6 +30,12 @@ export function formatTokens(tokens: number): string {
 export function formatTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : timeFormat.format(date);
+}
+
+/** Date and time, for entries that can be days old (audit log, exports). */
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : dateTimeFormat.format(date);
 }
 
 export function formatRelative(iso: string, now: number): string {

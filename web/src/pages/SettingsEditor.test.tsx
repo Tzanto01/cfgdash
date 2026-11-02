@@ -158,30 +158,56 @@ async function toReview(h: AppHarness, files: ProposalFile[] = [userFile()]): Pr
   await h.answer('/api/v2/proposals', makeProposal(files));
 }
 
-describe('Settings header link', () => {
-  const links = () => [...document.querySelectorAll<HTMLAnchorElement>('a[href^="/edit"]')];
+const HEALTH_EDITS = { status: 'ok', version: '1.0.0', schemaVersion: 1, edits: true };
 
-  it('links to /edit with the folder once health says edits are on', async () => {
-    const h = await startApp('/overview?dir=D%3A%2Fws%2Fapp');
-    expect(links()).toHaveLength(0);
+describe('Settings edit mode', () => {
+  const editToggles = () => [...document.querySelectorAll<HTMLButtonElement>('main button[aria-pressed]')].filter((b) => b.textContent === 'Edit');
 
-    await h.answer('/api/v1/health', { status: 'ok', version: '1.0.0', schemaVersion: 1, edits: true });
+  it('shows an unpressed Edit toggle on the Settings view once health says edits are on, and it opens the editor', async () => {
+    const h = await startApp('/settings?dir=D%3A%2Fws%2Fapp');
+    expect(editToggles()).toHaveLength(0);
 
-    expect(links().length).toBeGreaterThan(0);
-    expect(links().map((a) => a.getAttribute('href'))).toEqual(links().map(() => EDIT_URL));
-    expect(links().some((a) => a.textContent === 'Settings' && a.getAttribute('aria-label') === 'Edit settings')).toBe(true);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    expect(editToggles()).toHaveLength(1);
+    expect(editToggles()[0].getAttribute('aria-pressed')).toBe('false');
+
+    await h.click(editToggles()[0]);
+    expect(h.url()).toBe('/settings?dir=D%3A%2Fws%2Fapp&edit=1');
+    await answerWhenSent(h, '/api/v2/settings', makeSettings());
+    expect(h.el.querySelector('main h1')?.textContent).toBe('Edit settings');
+    expect(editToggles()[0].getAttribute('aria-pressed')).toBe('true');
+
+    await h.click(editToggles()[0]);
+    expect(h.url()).toBe('/settings?dir=D%3A%2Fws%2Fapp');
+    expect(h.el.querySelector('main h1')?.textContent).toBe('Settings');
   });
 
   it.each([
     ['edits is false', { status: 'ok', version: '1.0.0', schemaVersion: 1, edits: false }, 200],
-    ['edits is missing', { status: 'ok', version: '1.0.0', schemaVersion: 1 }, 200],
     ['health fails', { error: 'internal' }, 500]
-  ])('has no link when %s', async (_name, health, status) => {
-    const h = await startApp('/overview?dir=D%3A%2Fws%2Fapp');
+  ])('has no Edit toggle and no gear when %s', async (_name, health, status) => {
+    const h = await startApp('/settings?dir=D%3A%2Fws%2Fapp');
 
     await h.answer('/api/v1/health', health, status);
 
-    expect(links()).toHaveLength(0);
+    expect(editToggles()).toHaveLength(0);
+    expect(document.querySelector('a[aria-label="cfgdash settings"]')).toBeNull();
+  });
+
+  it('redirects /edit to the Settings view in edit mode, keeping the folder', async () => {
+    const h = await startApp(EDIT_URL);
+
+    expect(h.url()).toBe('/settings?dir=D%3A%2Fws%2Fapp&edit=1');
+  });
+
+  it('has no header Settings link; the header gear links to cfgdash settings with the folder', async () => {
+    const h = await startApp('/overview?dir=D%3A%2Fws%2Fapp');
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+
+    const header = document.querySelector('header')!;
+    expect([...header.querySelectorAll('a')].some((a) => /settings/i.test(a.textContent ?? ''))).toBe(false);
+    expect(header.querySelector('a[href^="/edit"]')).toBeNull();
+    expect(header.querySelector('a[aria-label="cfgdash settings"]')?.getAttribute('href')).toBe('/cfgdash?dir=D%3A%2Fws%2Fapp');
   });
 });
 
@@ -468,6 +494,68 @@ describe('Settings editor', () => {
       expect(h.text()).not.toContain('Applied.');
       expect(h.el.querySelector('main h1')?.textContent).toBe('Edit settings');
       expect(h.text()).not.toContain("This device or account isn't allowed");
+    });
+  });
+
+  describe('change log and undo', () => {
+    const file = { path: 'C:/Users/user/.claude/settings.json', scope: 'user', sha256Before: 'a'.repeat(64), sha256After: 'b'.repeat(64) };
+    const entries = () => [
+      { auditId: 'a3', at: '2026-10-30T10:00:00Z', listener: 'ui', origin: 'assistant', sessionId: 's1', files: [file], changes: [{ key: 'model', scope: 'user', action: 'set' }] },
+      { auditId: 'a2', at: '2026-10-29T10:00:00Z', listener: 'ui', revertOf: 'a1', files: [file], changes: [{ key: 'model', scope: 'user', action: 'revert' }] },
+      { auditId: 'a0', at: '2026-10-28T10:00:00Z', listener: 'ui', kind: 'cfgdash-settings', files: [], changes: [{ key: 'theme', scope: 'cfgdash', action: 'set' }] }
+    ];
+    const entryText = (auditId: string) =>
+      ([...document.querySelectorAll('section[aria-labelledby="change-log-title"] > ul > li')].find((li) => li.textContent?.includes(auditId))?.textContent ?? '').replace(/\s+/g, ' ');
+
+    async function openWithLog(): Promise<AppHarness> {
+      const h = await openEditor();
+      await h.answer('/api/v2/audit', { entries: entries() });
+      return h;
+    }
+
+    it('labels undos and assistant proposals and offers Undo only on harness edits', async () => {
+      const h = await openWithLog();
+
+      expect(entryText('a3')).toContain('Assistant proposal');
+      expect(entryText('a3')).toContain('set model (user)');
+      expect(entryText('a2')).toContain('Undo of a1');
+      expect(entryText('a2')).not.toContain('Assistant proposal');
+      expect(entryText('a0')).toContain('cfgdash settings');
+      expect(h.buttons(/^Undo change a\d$/).map((b) => b.textContent)).toEqual(['Undo change a3', 'Undo change a2']);
+    });
+
+    it('turns Undo into a guarded revert dry run, shows its diff and applies it with the confirm, keeping staged edits', async () => {
+      const h = await openWithLog();
+      await type(h, field('Model'), 'opus');
+
+      await h.click(h.button('Undo change a3'));
+      const revert = await h.answer('/api/v2/audit/a3/revert', makeProposal([userFile()]));
+
+      expect(revert.method).toBe('POST');
+      expect(revert.headers['x-cfgdash-request']).toBe('1');
+      expect(body(revert)).toEqual({});
+      expect(document.activeElement?.textContent).toBe('Review undo of a3');
+      expect(h.text()).toContain('"model": "opus"');
+
+      await h.click(h.button('Apply undo'));
+      const apply = await h.answer('/api/v2/proposals/p1/apply', { applied: true, auditId: 'a4' });
+
+      expect(apply.headers['x-cfgdash-request']).toBe('1');
+      expect(body(apply)).toEqual({ confirm: 'confirm-token-1' });
+      expect(h.text()).toContain('Undone. Audit entry a4.');
+      expect(staged(h)).toBe('1 change staged');
+      expect(h.pending((r) => r.url.pathname === '/api/v2/audit')).toBeDefined();
+    });
+
+    it('shows a 409 stale undo inline under its entry and opens no review', async () => {
+      const h = await openWithLog();
+
+      await h.click(h.button('Undo change a3'));
+      await h.answer('/api/v2/audit/a3/revert', { error: 'stale' }, 409);
+
+      expect(entryText('a3')).toContain('These files changed since that change; undo is no longer safe.');
+      expect(h.buttons('Apply undo')).toHaveLength(0);
+      expect(posts(h).filter((r) => r.url.pathname.endsWith('/apply'))).toHaveLength(0);
     });
   });
 

@@ -340,3 +340,84 @@ export interface ApiError {
   error: string;
   reason?: string;
 }
+
+/** One entry of `GET /api/v2/audit` (edits-v1), newest first. */
+export interface AuditEntry {
+  auditId: string;
+  at: string;
+  listener: string;
+  /** `cfgdash-settings` on cfgdash settings lines. */
+  kind?: string;
+  /** `assistant` on applied assistant proposals (assistant-v1). */
+  origin?: string;
+  sessionId?: string;
+  /** The reverted `auditId` when this entry is an undo. */
+  revertOf?: string;
+  files: { path: string; scope: string; sha256Before: string | null; sha256After: string | null }[];
+  changes: { key: string; scope: string; action: string }[];
+}
+
+/** `GET /api/v2/audit`. */
+export interface AuditResponse {
+  entries: AuditEntry[];
+}
+
+export type AssistantEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** The `values` of cfgdash-config-v1. */
+export interface CfgdashValues {
+  startAtLogin: boolean;
+  theme: 'system' | 'light' | 'dark';
+  defaultDir: string | null;
+  tailnet: boolean;
+  fleet: { enabled: boolean };
+  assistant: { model: string; effort: AssistantEffort; maxBudgetUsd: number };
+}
+
+/** A partial `values` object for `PUT /api/v2/cfgdash-settings`. */
+export type CfgdashPatch = Partial<Omit<CfgdashValues, 'fleet' | 'assistant'>> & {
+  fleet?: Partial<CfgdashValues['fleet']>;
+  assistant?: Partial<CfgdashValues['assistant']>;
+};
+
+/** `GET` and `PUT /api/v2/cfgdash-settings`. */
+export interface CfgdashSettings {
+  values: CfgdashValues;
+  startAtLogin: { configured: boolean; actual: 'on' | 'off' | 'unsupported'; detail?: string };
+  paths: { config: string; overrides: string };
+  /** Set when `config.json` exists but cannot be parsed; `values` are then the defaults. */
+  configError?: string;
+}
+
+export type PeerState = 'ok' | 'absent' | 'refused' | 'error';
+
+/** `GET /api/v1/fleet` (fleet-v1). */
+export interface FleetResponse {
+  self: { name: string; dnsName?: string | null; os: string };
+  peers: { name: string; dnsName: string; os: string; online: boolean; cfgdash: PeerState; version?: string | null; reason?: string | null }[];
+}
+
+/** `GET /api/v1/exports`. */
+export interface ExportsResponse {
+  exports: { id: string; machine: string; collectedAt: string; dir: string }[];
+}
+
+export type CompareChange = 'changed' | 'onlyLeft' | 'onlyRight';
+
+export interface CompareSide {
+  machine: string;
+  collectedAt: string;
+  dir: string;
+}
+
+/** `GET /api/v1/compare`: redacted rows that differ, keyed by collector, block and item. */
+export interface CompareResponse {
+  left: CompareSide;
+  right: CompareSide;
+  counts: Record<CompareChange, number>;
+  collectors: {
+    id: string;
+    state: { left: string; right: string };
+    rows: { blockId: string; itemId: string; change: CompareChange; left?: JsonValue; right?: JsonValue }[];
+  }[];
+}

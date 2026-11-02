@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { JsonValue } from '../blocks/JsonValue';
 import { Button } from '../components/ui/button';
+import { Switch } from '../components/ui/switch';
 import type { EditScope, JsonValue as Value, SettingChange, SettingRow as Row } from '../lib/models';
 import { cn } from '../lib/utils';
 
@@ -108,25 +109,7 @@ export function SettingRow({ row, scope, staged, error, onStage, onUnstage }: Se
         const on = current === true;
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={on}
-              {...field}
-              onClick={() => set(!on)}
-              className={cn(
-                'touch-target relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-100',
-                on ? 'border-accent bg-accent' : 'border-border-strong bg-raised'
-              )}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'size-3.5 rounded-full transition-transform duration-100',
-                  on ? 'translate-x-[18px] bg-accent-fg' : 'translate-x-[2px] bg-border-strong'
-                )}
-              />
-            </button>
+            <Switch on={on} {...field} onClick={() => set(!on)} />
             <span className="text-sm text-muted">{current === null ? `Not set in ${scopeLabel}` : on ? 'On' : 'Off'}</span>
           </div>
         );

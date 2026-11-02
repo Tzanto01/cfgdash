@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
+import { setTheme } from './theme';
 
 /** Open flags of the app-level surfaces (folder picker, command palette) and whether this listener allows edits. */
 export interface UiState {
@@ -19,10 +20,20 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const [edits, setEdits] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    api.health(controller.signal).then(
-      (health) => setEdits(health.edits === true),
-      () => undefined
-    );
+    api
+      .health(controller.signal)
+      .then((health) => {
+        setEdits(health.edits === true);
+        return health.edits === true ? api.cfgdashSettings(controller.signal) : null;
+      })
+      .then(
+        (settings) => {
+          if (settings && !settings.configError) {
+            setTheme(settings.values.theme);
+          }
+        },
+        () => undefined
+      );
     return () => controller.abort();
   }, []);
   const value = useMemo(() => ({ edits, pickerOpen, setPickerOpen, paletteOpen, setPaletteOpen }), [edits, pickerOpen, paletteOpen]);
