@@ -1,3 +1,5 @@
+using Cfgdash.Core.Assistant;
+using Cfgdash.Core.Tests.Support;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Snapshot;
 using static Cfgdash.Core.Tests.Assistant.AssistantViewFixture;
@@ -86,17 +88,41 @@ public sealed class AssistantViewTests : IDisposable
     [InlineData(true)]
     public void A_plain_file_that_a_company_flagged_row_points_at_is_treated_as_company_outside_the_layer(bool inCompany)
     {
-        var snapshot = Snap(
-        [
-            new Section("hooks.registered", "hooks", "Hooks",
-                [new TableBlock("hooks", "Hooks", [new TableColumn("name", "Name")], [Row("company-hook", f.Plain.Id, ["company"])])]),
-            new Section("settings.effective", "settings", "Settings", [new KvBlock("kv", "KV", [Kv("hooks", f.Plain.Id), Kv("model", f.Plain2.Id)])]),
-        ]);
-
-        var view = f.Create(snapshot, f.Registry, inCompany ? f.InsideDir : f.OutsideDir);
+        var view = f.Create(SettingsWithCompanyHook(Path.Combine(f.CompanyPrefix, "hooks", "guard.sh")), f.Registry, inCompany ? f.InsideDir : f.OutsideDir);
 
         Assert.Equal(inCompany ? ["hooks", "model"] : ["model"], KvKeys(view, "settings.effective", "kv"));
         Assert.Equal(inCompany, view.Files.TryGet(f.Plain.Id, out _));
-        Assert.True(view.Files.TryGet(f.Plain2.Id, out _));
     }
+
+    [Fact]
+    public void A_row_without_a_company_path_stays_visible_although_its_file_is_unreadable_for_the_assistant()
+    {
+        var view = f.Create(SettingsWithCompanyHook(Path.Combine(f.CompanyPrefix, "hooks", "guard.sh")), f.Registry, f.OutsideDir);
+
+        var model = Assert.Single(view.Snapshot.Sections.Single(s => s.CollectorId == "settings.effective").Blocks.OfType<KvBlock>().Single().Rows, r => r.Key == "model");
+        Assert.Equal(f.Plain.Id, model.Source?.FileId);
+        Assert.False(view.Files.TryGet(f.Plain.Id, out _));
+    }
+
+    [Theory]
+    [InlineData("~/ws/company/hooks/guard.sh")]
+    [InlineData("$HOME/ws/company/hooks/guard.sh")]
+    [InlineData("%USERPROFILE%\\ws\\company\\hooks\\guard.ps1")]
+    public void A_home_relative_company_path_is_dropped_too(string command)
+    {
+        var companyUnderHome = f.Tree.Dir("home/user/ws/company");
+        var environment = TestEnvironments.Create(f.Tree, companyPrefixes: [companyUnderHome]);
+
+        var view = AssistantView.Create(new SnapshotResult(SettingsWithCompanyHook(command), f.Registry), environment, f.OutsideDir);
+
+        Assert.Equal(["model"], KvKeys(view, "settings.effective", "kv"));
+    }
+
+    private HarnessSnapshot SettingsWithCompanyHook(string command) => Snap(
+    [
+        new Section("hooks.registered", "hooks", "Hooks",
+            [new TableBlock("hooks", "Hooks", [new TableColumn("name", "Name")], [Row("company-hook", f.Plain.Id, ["company"])])]),
+        new Section("settings.effective", "settings", "Settings",
+            [new KvBlock("kv", "KV", [Kv("hooks", f.Plain.Id, value: command), Kv("model", f.Plain.Id, value: "sonnet")])]),
+    ]);
 }

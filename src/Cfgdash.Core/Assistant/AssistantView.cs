@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Snapshot;
@@ -36,10 +37,13 @@ public sealed class AssistantView
             : source.Files.Where(f => f.Company).Select(f => f.Id)
                 .Concat(result.Files.All.Where(f => f.Ref.Company).Select(f => f.Ref.Id))
                 .ToHashSet(StringComparer.Ordinal);
+        var unreadable = new HashSet<string>(companyFiles, StringComparer.Ordinal);
+        var markers = inCompany ? [] : CompanyMarkers(env);
 
         bool Dropped(string collectorId) => Excluded.Contains(collectorId) || (!inCompany && collectorId == CompanyCore);
         bool CompanyFile(string? fileId) => fileId is not null && companyFiles.Contains(fileId);
         bool Flagged(IReadOnlyList<string>? flags) => !inCompany && flags?.Contains(CompanyFlag, StringComparer.Ordinal) == true;
+        bool Mentions(JsonNode? node) => Strings(node).Any(text => markers.Any(m => text.Contains(m, PathUtil.Comparison)));
         IEnumerable<TreeNode> FlaggedNodes(IEnumerable<TreeNode> nodes) =>
             nodes.SelectMany(n => Flagged(n.Badges) ? [n] : FlaggedNodes(n.Children));
 
@@ -54,22 +58,30 @@ public sealed class AssistantView
             };
             if (flagged is not null)
             {
-                companyFiles.UnionWith(FileIds(flagged));
+                unreadable.UnionWith(FileIds(flagged));
             }
         }
 
         TreeNode? Node(TreeNode node) =>
-            Flagged(node.Badges) || CompanyFile(node.FileId) ? null : node with { Children = [.. node.Children.Select(Node).OfType<TreeNode>()] };
+            Flagged(node.Badges) || CompanyFile(node.FileId) || Mentions(node.Label) || (node.Meta?.Values ?? []).Any(Mentions)
+                ? null
+                : node with { Children = [.. node.Children.Select(Node).OfType<TreeNode>()] };
 
         Block Filter(Block block) => block switch
         {
             KvBlock kv => kv with
             {
-                Rows = [.. kv.Rows.Where(r => !Flagged(r.Flags) && !CompanyFile(r.Source?.FileId) && !(r.Contributions ?? []).Any(c => CompanyFile(c.Source.FileId)))],
+                Rows =
+                [
+                    .. kv.Rows
+                        .Where(r => !Flagged(r.Flags) && !CompanyFile(r.Source?.FileId) && !(r.Contributions ?? []).Any(c => CompanyFile(c.Source.FileId))
+                            && !Mentions(r.Key) && !Mentions(r.Value))
+                        .Select(r => r.Contributions is null ? r : r with { Contributions = [.. r.Contributions.Where(c => !Mentions(c.Value))] }),
+                ],
             },
             TableBlock table => table with
             {
-                Rows = [.. table.Rows.Where(r => !Flagged(r.Flags) && !CompanyFile(r.FileId) && !r.Cells.Values.Any(c => CompanyFile(CellFileId(c))))],
+                Rows = [.. table.Rows.Where(r => !Flagged(r.Flags) && !CompanyFile(r.FileId) && !r.Cells.Values.Any(c => CompanyFile(CellFileId(c)) || Mentions(c)))],
             },
             TreeBlock tree => tree with { Nodes = [.. tree.Nodes.Select(Node).OfType<TreeNode>()] },
             _ => block,
@@ -80,7 +92,7 @@ public sealed class AssistantView
         var files = new Dictionary<string, RegisteredFile>(StringComparer.Ordinal);
         foreach (var id in referenced)
         {
-            if (!CompanyFile(id) && result.Files.TryGet(id, out var file) && (inCompany || !file.Ref.Company))
+            if (!unreadable.Contains(id) && result.Files.TryGet(id, out var file) && (inCompany || !file.Ref.Company))
             {
                 files[id] = file;
             }
@@ -95,6 +107,38 @@ public sealed class AssistantView
         };
         return new AssistantView(snapshot, new Catalog(files));
     }
+
+    /// <summary>
+    /// The texts that mark a company-layer path: each prefix with either separator and, below the home dir, also its
+    /// <c>~</c>, <c>$HOME</c>, <c>${HOME}</c> and <c>%USERPROFILE%</c> forms.
+    /// </summary>
+    private static string[] CompanyMarkers(MachineEnvironment env)
+    {
+        var home = PathUtil.Full(env.HomeDir).TrimEnd('/', '\\');
+        var markers = new List<string>();
+        foreach (var prefix in env.CompanyPrefixes)
+        {
+            var full = PathUtil.Full(prefix).TrimEnd('/', '\\');
+            List<string> forms = [full];
+            if (home.Length > 0 && full.Length > home.Length && PathUtil.IsUnder(full, home))
+            {
+                var rest = full[home.Length..];
+                forms.AddRange(["~" + rest, "$HOME" + rest, "${HOME}" + rest, "%USERPROFILE%" + rest]);
+            }
+
+            markers.AddRange(forms.SelectMany(f => new[] { f.Replace('\\', '/'), f.Replace('/', '\\') }));
+        }
+
+        return [.. markers.Where(m => m.Length > 0).Distinct(StringComparer.Ordinal)];
+    }
+
+    private static IEnumerable<string> Strings(JsonNode? node) => node switch
+    {
+        JsonValue value when value.GetValueKind() == JsonValueKind.String => [value.GetValue<string>()],
+        JsonObject obj => obj.SelectMany(p => Strings(p.Value)),
+        JsonArray array => array.SelectMany(Strings),
+        _ => [],
+    };
 
     private static string? CellFileId(JsonNode? cell) =>
         cell is JsonObject obj && obj["fileId"] is JsonValue id && id.TryGetValue<string>(out var fileId) ? fileId : null;
