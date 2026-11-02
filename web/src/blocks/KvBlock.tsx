@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { inlineValue, itemDomId } from '../lib/format';
+import type { ContextItem } from '../state/assistant';
 import type { ContributionStatus, KvBlock as KvBlockModel, KvRow } from '../lib/models';
 import { cn } from '../lib/utils';
+import { AddToContext } from '../shell/AddToContext';
 import { Badges, SourceChip } from './Badges';
 import { kvRowMatches, NO_FILTER, type RowFilter } from './filter';
 import { JsonValue } from './JsonValue';
@@ -49,6 +51,7 @@ export function KvBlock({
           key={row.key}
           row={row}
           id={itemDomId(collectorId, block.id, row.key)}
+          context={{ ref: { kind: 'row', collectorId, blockId: block.id, itemId: row.key }, label: `${block.title || block.id} / ${row.key}` }}
           open={open.has(row.key)}
           onToggle={() => toggle(row.key)}
         />
@@ -57,7 +60,7 @@ export function KvBlock({
   );
 }
 
-function KvRowView({ row, id, open, onToggle }: { row: KvRow; id: string; open: boolean; onToggle(): void }) {
+function KvRowView({ row, id, context, open, onToggle }: { row: KvRow; id: string; context: ContextItem; open: boolean; onToggle(): void }) {
   const contributions = row.contributions ?? [];
   const redacted = !!row.redacted;
   return (
@@ -102,6 +105,7 @@ function KvRowView({ row, id, open, onToggle }: { row: KvRow; id: string; open: 
         <div className="flex min-w-0 flex-wrap items-center gap-1 [grid-area:meta]">
           <SourceChip source={row.source} />
           <Badges items={row.flags} />
+          <AddToContext row item={context} />
         </div>
       </div>
       {open && (

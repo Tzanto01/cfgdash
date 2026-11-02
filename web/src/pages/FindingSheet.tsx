@@ -6,6 +6,7 @@ import { findingHref, findingLocation } from '../lib/findings';
 import type { Finding } from '../lib/models';
 import { useUrl } from '../lib/url';
 import { navViewId, VIEW_DEFINITIONS } from '../lib/views';
+import { AddToContext } from '../shell/AddToContext';
 import { useReturnFocus } from '../shell/surface';
 import { useSnapshotStore } from '../state/snapshot';
 import { SeverityLabel } from './SeverityBar';
@@ -80,6 +81,7 @@ export function FindingSheet({ finding, onClose }: { finding: Finding; onClose()
                 Open file
               </Button>
             )}
+            <AddToContext item={{ ref: { kind: 'finding', findingId: finding.id }, label: finding.title }} />
             <SheetClose asChild>
               <Button variant="ghost">Close</Button>
             </SheetClose>

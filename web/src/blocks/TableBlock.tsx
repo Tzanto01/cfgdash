@@ -4,6 +4,8 @@ import { itemDomId, normalizeItemId } from '../lib/format';
 import type { Cell, LinkCell, TableBlock as TableBlockModel, TableColumn, TableRow } from '../lib/models';
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
+import { AddToContext } from '../shell/AddToContext';
+import { useUi } from '../state/ui';
 import { Badges } from './Badges';
 import { cellText, NO_FILTER, tableRowMatches, type RowFilter } from './filter';
 
@@ -51,6 +53,7 @@ export function TableBlock({
   filter?: RowFilter;
 }) {
   const url = useUrl();
+  const contextColumn = useUi().edits;
   const [sortState, setSortState] = useState<{ block: TableBlockModel; sort: Sort | null }>({ block, sort: null });
   const [shownAllFor, setShownAllFor] = useState<TableBlockModel | null>(null);
   const sort = sortState.block === block ? sortState.sort : null;
@@ -107,6 +110,11 @@ export function TableBlock({
                   Flags
                 </th>
               )}
+              {contextColumn && (
+                <th scope="col">
+                  <span className="sr-only">Assistant</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -151,6 +159,17 @@ export function TableBlock({
                   {hasFlags && (
                     <td data-label="Flags">
                       <Badges items={row.flags} />
+                    </td>
+                  )}
+                  {contextColumn && (
+                    <td data-label="Assistant">
+                      <AddToContext
+                        row
+                        item={{
+                          ref: { kind: 'row', collectorId, blockId: block.id, itemId: row.id },
+                          label: `${block.title || block.id} / ${cellText(row.cells[block.columns[0]?.key ?? '']) || row.id}`
+                        }}
+                      />
                     </td>
                   )}
                 </tr>

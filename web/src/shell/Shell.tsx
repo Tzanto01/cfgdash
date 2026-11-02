@@ -1,5 +1,5 @@
-import { Ellipsis, LayoutGrid, LoaderCircle, Monitor, PanelLeftClose, PanelLeftOpen, Search, Settings, SlidersHorizontal } from 'lucide-react';
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import { BotMessageSquare, Ellipsis, LayoutGrid, LoaderCircle, Monitor, PanelLeftClose, PanelLeftOpen, Search, Settings, SlidersHorizontal } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '../components/ui/sheet';
@@ -7,11 +7,15 @@ import { formatTime } from '../lib/format';
 import { mergeSearch, useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { VIEW_DEFINITIONS } from '../lib/views';
+import { useAssistant } from '../state/assistant';
 import { useMediaQuery, useNarrow } from '../state/hooks';
 import { useSnapshotStore } from '../state/snapshot';
 import { useUi } from '../state/ui';
 import { CollectedLine, FolderPill, NavList, RefreshButton } from './Nav';
 import { ThemeToggle } from './ThemeToggle';
+
+const loadAssistant = () => import('./AssistantPanel');
+const AssistantPanel = lazy(loadAssistant);
 
 let headingPending = false;
 
@@ -154,6 +158,38 @@ function GearLink() {
   );
 }
 
+/** Opens and closes the assistant panel; only where edits are available. Preloads the panel so it opens without delay. */
+function AssistantButton() {
+  const ui = useUi();
+  const assistant = useAssistant();
+  useEffect(() => {
+    if (ui.edits) {
+      loadAssistant().catch(() => undefined);
+    }
+  }, [ui.edits]);
+  if (!ui.edits) {
+    return null;
+  }
+  return (
+    <Button id="assistant-toggle" variant="ghost" size="icon" aria-label="Assistant" aria-expanded={assistant.open} onClick={() => assistant.setOpen(!assistant.open)}>
+      <BotMessageSquare strokeWidth={1.75} aria-hidden="true" />
+    </Button>
+  );
+}
+
+function AssistantSlot() {
+  const ui = useUi();
+  const assistant = useAssistant();
+  if (!ui.edits || !assistant.open) {
+    return null;
+  }
+  return (
+    <Suspense fallback={null}>
+      <AssistantPanel />
+    </Suspense>
+  );
+}
+
 function WideShell() {
   const store = useSnapshotStore();
   const tablet = useMediaQuery('(max-width: 1023px)');
@@ -196,12 +232,14 @@ function WideShell() {
           )}
           <span className="flex-1" />
           <SearchButton />
+          {snapshot && <AssistantButton />}
           {snapshot && <RefreshButton />}
           <ThemeToggle />
           {snapshot && <GearLink />}
         </header>
         <MainContent className="mx-auto w-full max-w-[1248px] flex-1 p-6" />
       </div>
+      <AssistantSlot />
     </div>
   );
 }
@@ -252,6 +290,7 @@ function NarrowShell() {
         <Button variant="ghost" size="icon" aria-label="Search" aria-haspopup="dialog" onClick={() => ui.setPaletteOpen(true)}>
           <Search strokeWidth={1.75} aria-hidden="true" />
         </Button>
+        {snapshot && <AssistantButton />}
         <ThemeToggle />
         {snapshot && <GearLink />}
       </header>
@@ -281,6 +320,7 @@ function NarrowShell() {
           </Sheet>
         </>
       )}
+      <AssistantSlot />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { useSnapshotStore, type RequestState } from '../state/snapshot';
 import { LoadingPanel } from './Shell';
+import { AddToContext } from './AddToContext';
 import { useReturnFocus } from './surface';
 
 type Content = FileContent | DetailContent;
@@ -132,6 +133,7 @@ export default function FileSheet() {
                 <Copy strokeWidth={1.75} aria-hidden="true" />
                 {copied || 'Copy path'}
               </Button>
+              {fileId && <AddToContext item={{ ref: { kind: 'file', fileId }, label: path.split('/').pop() || fileId }} />}
               <span className="sr-only" aria-live="polite">
                 {copied}
               </span>
