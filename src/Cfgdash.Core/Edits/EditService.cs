@@ -30,6 +30,7 @@ internal sealed partial class EditService(
     private const UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private static readonly SemaphoreSlim ApplyGate = new(1, 1);
+    private static readonly Lock AuditGate = new();
 
     private readonly EditTargets targets = new(environment, locations);
     private readonly ConcurrentDictionary<string, Proposal> proposals = new(StringComparer.Ordinal);
@@ -42,9 +43,9 @@ internal sealed partial class EditService(
         public SettingDefinition? Definition { get; init; }
     }
 
-    private sealed record PlannedFile(EditTarget Target, string Path, byte[]? Before, string? Sha256Before, byte[] After, string Sha256After);
+    private sealed record PlannedFile(EditTarget Target, string Path, byte[]? Before, string? Sha256Before, byte[] After, string Sha256After, bool Delete = false, string? Dir = null);
 
-    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? AssistantSession = null);
+    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? RevertOf = null, string? AssistantSession = null);
 
     public Task<EditResult> ProposeAsync(string dir, JsonNode? changes, CancellationToken cancellationToken)
     {
@@ -258,7 +259,7 @@ internal sealed partial class EditService(
         }
 
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)], assistantSession);
+        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)], AssistantSession: assistantSession);
         if (!Store(id, proposal))
         {
             return Invalid(null, "quota");
@@ -327,7 +328,7 @@ internal sealed partial class EditService(
                     backup.Flush(true);
                 }
 
-                temps[i] = WriteTemp(file);
+                temps[i] = file.Delete ? null : WriteTemp(file);
             }
 
             for (var i = 0; i < proposal.Files.Count; i++)
@@ -338,12 +339,20 @@ internal sealed partial class EditService(
                     return written.Count == 0 ? Error(EditStatus.Stale, "stale") : Failed(auditId, now, proposal, written);
                 }
 
-                File.Move(temps[i]!, file.Target.Real, overwrite: true);
-                temps[i] = null;
+                if (file.Delete)
+                {
+                    File.Delete(file.Target.Real);
+                }
+                else
+                {
+                    File.Move(temps[i]!, file.Target.Real, overwrite: true);
+                    temps[i] = null;
+                }
+
                 written.Add(file);
             }
 
-            AppendAudit(AuditLine(auditId, now, proposal, written, failed: false));
+            AppendAudit(cacheDir, AuditLine(auditId, now, proposal, written, failed: false));
             return new EditResult(EditStatus.Ok, new JsonObject { ["applied"] = true, ["auditId"] = auditId }, Wrote: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -366,7 +375,7 @@ internal sealed partial class EditService(
     {
         try
         {
-            AppendAudit(AuditLine(auditId, at, proposal, written, failed: true));
+            AppendAudit(cacheDir, AuditLine(auditId, at, proposal, written, failed: true));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -385,9 +394,14 @@ internal sealed partial class EditService(
             ["auditId"] = auditId,
             ["at"] = IsoTime.Format(at),
             ["listener"] = "ui",
-            ["files"] = Nodes(written.Select(f => new JsonObject { ["path"] = f.Path, ["sha256Before"] = f.Sha256Before, ["sha256After"] = f.Sha256After })),
-            ["changes"] = Nodes(proposal.Changes.Select(c => new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = c.Unset ? "unset" : "set" })),
+            ["files"] = Nodes(written.Select(f => new JsonObject { ["path"] = f.Path, ["scope"] = f.Target.Scope, ["sha256Before"] = f.Sha256Before, ["sha256After"] = f.Delete ? null : f.Sha256After })),
+            ["changes"] = Nodes(proposal.Changes.Select(c => new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = proposal.RevertOf is not null ? "revert" : c.Unset ? "unset" : "set" })),
         };
+        if (proposal.RevertOf is not null)
+        {
+            line["revertOf"] = proposal.RevertOf;
+        }
+
         if (failed)
         {
             line["failed"] = true;
@@ -403,7 +417,7 @@ internal sealed partial class EditService(
     }
 
     private bool IsCurrent(string dir, PlannedFile file) =>
-        targets.Resolve(file.Target.Scope, dir, out _) is { } target
+        targets.Resolve(file.Target.Scope, file.Dir ?? dir, out _) is { } target
         && PathUtil.PathEquals(target.Real, file.Target.Real)
         && TryReadRaw(target.Real, out var bytes)
         && (bytes is null ? file.Before is null : file.Sha256Before is not null && Hash(bytes) == file.Sha256Before);
@@ -437,24 +451,27 @@ internal sealed partial class EditService(
         }
     }
 
-    private void AppendAudit(JsonObject entry)
+    internal static void AppendAudit(string cacheDir, JsonObject entry)
     {
-        var path = Path.Combine(PrivateDirectory(Path.Combine(cacheDir, "edits")), "audit.jsonl");
-        var needsNewline = false;
-        if (File.Exists(path))
+        lock (AuditGate)
         {
-            using var existing = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            if (existing.Length > 0)
+            var path = Path.Combine(PrivateDirectory(Path.Combine(cacheDir, "edits")), "audit.jsonl");
+            var needsNewline = false;
+            if (File.Exists(path))
             {
-                existing.Seek(-1, SeekOrigin.End);
-                needsNewline = existing.ReadByte() != '\n';
+                using var existing = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                if (existing.Length > 0)
+                {
+                    existing.Seek(-1, SeekOrigin.End);
+                    needsNewline = existing.ReadByte() != '\n';
+                }
             }
-        }
 
-        var bytes = Encoding.UTF8.GetBytes((needsNewline ? "\n" : string.Empty) + entry.ToJsonString() + "\n");
-        using var stream = new FileStream(path, PrivateOptions(FileMode.Append));
-        stream.Write(bytes);
-        stream.Flush(true);
+            var bytes = Encoding.UTF8.GetBytes((needsNewline ? "\n" : string.Empty) + entry.ToJsonString() + "\n");
+            using var stream = new FileStream(path, PrivateOptions(FileMode.Append));
+            stream.Write(bytes);
+            stream.Flush(true);
+        }
     }
 
     private static JsonObject? AuditEntry(string line)

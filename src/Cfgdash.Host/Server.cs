@@ -11,7 +11,7 @@ using Microsoft.Extensions.Primitives;
 namespace Cfgdash.Host;
 
 /// <summary><paramref name="Port"/> 0 picks a free port; <paramref name="Tailnet"/> adds the loopback backend listener that only <c>tailscale serve</c> targets.</summary>
-internal sealed record ServerOptions(int Port, string StartDir, string Token, TailnetListenerOptions? Tailnet = null);
+internal sealed record ServerOptions(int Port, string StartDir, string Token, TailnetListenerOptions? Tailnet = null, bool Autostart = false);
 
 /// <summary>Tailnet listener settings. <paramref name="HttpsPort"/> null means the bound UI port. Constructing the server with these never publishes anything to tailscale.</summary>
 internal sealed record TailnetListenerOptions(string DnsName, IReadOnlyList<string> AllowedLogins, string MagicDnsSuffix, IReadOnlyList<string> AllowedTags, int? HttpsPort = null);
@@ -104,6 +104,8 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         app.MapGet("/api/v1/dirs", ctx => DirsAsync(ctx));
         app.MapPost("/api/v1/shutdown", ctx => ShutdownAsync(ctx));
         MapApiV2(dependencies);
+        MapFleet(dependencies);
+        MapCfgdashSettings(dependencies);
         MapAssistant(dependencies);
         app.MapFallback("{**path}", ctx => FallbackAsync(ctx));
     }
@@ -192,7 +194,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
             [$"127.0.0.1:{uiPort}", $"localhost:{uiPort}"],
             dnsName is null ? [] : [$"{dnsName}:{httpsPort}", dnsName]));
         Interlocked.Exchange(ref lastActivityTicks, time.GetUtcNow().UtcTicks);
-        idleLoop = IdleLoopAsync();
+        idleLoop = options.Autostart ? Task.CompletedTask : IdleLoopAsync();
     }
 
     private async Task GuardAsync(HttpContext ctx, RequestDelegate next)
@@ -248,6 +250,12 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         if (!tailnet && IsAssistantInternalTarget(ctx))
         {
             await next(ctx);
+            return;
+        }
+
+        if (tailnet && request.Headers.ContainsKey(FleetHeader))
+        {
+            await FleetRequestAsync(ctx, next);
             return;
         }
 

@@ -71,8 +71,8 @@ internal sealed class TokenVerifier(string token)
     }
 }
 
-/// <summary>Node facts from <c>tailscale whois --json</c>. <c>Name</c> keeps tailscale's trailing dot.</summary>
-internal sealed record WhoisNode(string Name, IReadOnlyList<string> Tags);
+/// <summary>Node facts from <c>tailscale whois --json</c>. <c>Name</c> keeps tailscale's trailing dot; <c>Login</c> is <c>UserProfile.LoginName</c>, null when absent.</summary>
+internal sealed record WhoisNode(string Name, IReadOnlyList<string> Tags, string? Login);
 
 /// <summary>The tailscale CLI calls cfgdash makes, through <see cref="IProcessRunner"/>.</summary>
 internal sealed class TailscaleCli(IProcessRunner processes, string? executable)
@@ -110,7 +110,11 @@ internal sealed class TailscaleCli(IProcessRunner processes, string? executable)
             List<string> tags = node.TryGetProperty("Tags", out var tagArray) && tagArray.ValueKind == JsonValueKind.Array
                 ? [.. tagArray.EnumerateArray().Where(t => t.ValueKind == JsonValueKind.String).Select(t => t.GetString()!)]
                 : [];
-            return new WhoisNode(name.GetString()!, tags);
+            var login = root.TryGetProperty("UserProfile", out var profile) && profile.ValueKind == JsonValueKind.Object
+                && profile.TryGetProperty("LoginName", out var loginName) && loginName.ValueKind == JsonValueKind.String
+                ? loginName.GetString()
+                : null;
+            return new WhoisNode(name.GetString()!, tags, login);
         }
         catch (JsonException)
         {
@@ -242,13 +246,16 @@ internal static class TailnetRules
     public static string TrimDot(string name) => name.TrimEnd('.');
 
     /// <summary>Own tagged device: tagged, inside this tailnet's MagicDNS suffix, and matching <paramref name="allowedTags"/> when set.</summary>
-    public static bool IsAllowedTaggedNode(WhoisNode node, string magicDnsSuffix, IReadOnlyList<string> allowedTags)
+    public static bool IsAllowedTaggedNode(WhoisNode node, string magicDnsSuffix, IReadOnlyList<string> allowedTags) =>
+        node.Tags.Count > 0
+        && IsInTailnet(node.Name, magicDnsSuffix)
+        && (allowedTags.Count == 0 || node.Tags.Any(tag => allowedTags.Contains(tag, StringComparer.Ordinal)));
+
+    /// <summary>The node name ends with this tailnet's MagicDNS suffix (excludes shared-in nodes); false for an empty suffix.</summary>
+    public static bool IsInTailnet(string nodeName, string magicDnsSuffix)
     {
         var suffix = TrimDot(magicDnsSuffix).TrimStart('.');
-        return suffix.Length > 0
-            && node.Tags.Count > 0
-            && TrimDot(node.Name).EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase)
-            && (allowedTags.Count == 0 || node.Tags.Any(tag => allowedTags.Contains(tag, StringComparer.Ordinal)));
+        return suffix.Length > 0 && TrimDot(nodeName).EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -266,16 +273,31 @@ internal sealed class TailnetIdentity(TailnetListenerOptions options, TailscaleC
             return login.Count == 1 && login[0] is { } value && options.AllowedLogins.Contains(value, StringComparer.OrdinalIgnoreCase);
         }
 
+        return await WhoisForwardedAsync(request, cancellationToken) is { } node
+            && TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags);
+    }
+
+    /// <summary>Fleet peer identity (fleet-v1): ignores <c>Tailscale-User-Login</c>; the whois node of the single <c>X-Forwarded-For</c> IP must be a tagged node whose tag is in a non-empty allowed-tags list, or an untagged node of this tailnet owned by an allowed login.</summary>
+    public async Task<bool> IsAllowedPeerAsync(HttpRequest request, CancellationToken cancellationToken) =>
+        await WhoisForwardedAsync(request, cancellationToken) is { } node
+        && ((options.AllowedTags.Count > 0 && TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags))
+            || (node.Tags.Count == 0
+                && TailnetRules.IsInTailnet(node.Name, options.MagicDnsSuffix)
+                && node.Login is { } login
+                && options.AllowedLogins.Contains(login, StringComparer.OrdinalIgnoreCase)));
+
+    private async Task<WhoisNode?> WhoisForwardedAsync(HttpRequest request, CancellationToken cancellationToken)
+    {
         var forwarded = request.Headers["X-Forwarded-For"];
         if (forwarded.Count != 1 || forwarded[0] is not { } candidate || candidate.Contains(',') || !IPAddress.TryParse(candidate, out var ip))
         {
-            return false;
+            return null;
         }
 
         return await LookupAsync(ip.ToString()).WaitAsync(cancellationToken);
     }
 
-    private Task<bool> LookupAsync(string ip)
+    private Task<WhoisNode?> LookupAsync(string ip)
     {
         lock (gate)
         {
@@ -291,17 +313,16 @@ internal sealed class TailnetIdentity(TailnetListenerOptions options, TailscaleC
         }
     }
 
-    private async Task<bool> ResolveAsync(string ip, WhoisEntry entry)
+    private async Task<WhoisNode?> ResolveAsync(string ip, WhoisEntry entry)
     {
         try
         {
             await Task.Yield();
-            var node = await tailscale.WhoisAsync(ip, CancellationToken.None);
-            return node is not null && TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags);
+            return await tailscale.WhoisAsync(ip, CancellationToken.None);
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
         finally
         {
@@ -314,7 +335,7 @@ internal sealed class TailnetIdentity(TailnetListenerOptions options, TailscaleC
 
     private sealed class WhoisEntry
     {
-        public Task<bool> Task = System.Threading.Tasks.Task.FromResult(false);
+        public Task<WhoisNode?> Task = System.Threading.Tasks.Task.FromResult<WhoisNode?>(null);
         public DateTimeOffset? Expires;
     }
 }

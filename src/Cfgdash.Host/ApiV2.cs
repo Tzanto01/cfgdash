@@ -19,6 +19,7 @@ internal sealed partial class CfgdashServer
         app.MapPost("/api/v2/proposals", ctx => ProposeAsync(ctx, edits));
         app.MapPost("/api/v2/proposals/{id}/apply", ctx => ApplyAsync(ctx, edits));
         app.MapGet("/api/v2/audit", ctx => AuditAsync(ctx, edits));
+        app.MapPost("/api/v2/audit/{auditId}/revert", ctx => RevertAsync(ctx, edits));
         app.Map("/api/v2/{**rest}", (RequestDelegate)WriteNotFoundAsync);
     }
 

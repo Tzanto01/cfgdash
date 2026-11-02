@@ -36,7 +36,7 @@ public static class HarnessEnvAllowlist
     /// <summary>Runtime probes for paths and headless detection; never displayed.</summary>
     public static readonly IReadOnlyList<string> Runtime =
     [
-        "DISPLAY", "WAYLAND_DISPLAY", "SSH_CONNECTION", "SSH_TTY", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
+        "DISPLAY", "WAYLAND_DISPLAY", "SSH_CONNECTION", "SSH_TTY", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
         "LOCALAPPDATA", "APPDATA", "HOME", "USERPROFILE", "PATH", "PATHEXT", "CFGDASH_MCP_CAPABILITY",
     ];
 

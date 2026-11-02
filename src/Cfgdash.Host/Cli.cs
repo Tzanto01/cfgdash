@@ -7,13 +7,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Cfgdash.Core;
+using Cfgdash.Core.Config;
 using Cfgdash.Core.Context;
 using Cfgdash.Core.Environment;
 
 namespace Cfgdash.Host;
 
 /// <summary>Parsed command line. <paramref name="Dir"/> is an existing, normalized absolute directory.</summary>
-internal sealed record CliOptions(string Command, string Dir, int Port = CfgdashCli.DefaultPort, bool Tailnet = false, bool NoOpen = false, bool Check = false, bool Json = false);
+internal sealed record CliOptions(string Command, string Dir, int Port = CfgdashCli.DefaultPort, bool Tailnet = false, bool NoOpen = false, bool Check = false, bool Json = false, string? Action = null, bool Autostart = false, bool DirGiven = false);
 
 /// <summary>The <c>cfgdash</c> command line (api-v1: CLI). Exit codes: 0 ok, 1 error, 2 prerequisite missing, 3 doctor found a critical finding.</summary>
 internal static partial class CfgdashCli
@@ -26,11 +27,12 @@ internal static partial class CfgdashCli
 
     private const string Usage = """
         Usage:
-          cfgdash [run] [--port <n>] [--dir <path>] [--tailnet] [--no-open]
+          cfgdash [run] [--port <n>] [--dir <path>] [--tailnet] [--no-open] [--autostart]
           cfgdash stop
           cfgdash update [--check]
           cfgdash export [--dir <path>]
           cfgdash doctor [--dir <path>] [--json]
+          cfgdash autostart on|off|status
           cfgdash context [--dir <path>] [--json]
           cfgdash mcp --port <n>   (internal: started by cfgdash for the assistant)
           cfgdash --version
@@ -68,6 +70,7 @@ internal static partial class CfgdashCli
                 "update" => await UpdateAsync(options, dependencies),
                 "export" => await ExportAsync(options, dependencies),
                 "doctor" => await DoctorAsync(options, dependencies),
+                "autostart" => await AutostartAsync(options, dependencies),
                 "context" => await ContextAsync(options, dependencies),
                 "mcp" => await McpAsync(options, dependencies),
                 _ => await RunServerAsync(options, dependencies),
@@ -92,15 +95,28 @@ internal static partial class CfgdashCli
             index = 1;
         }
 
-        if (command is not ("run" or "stop" or "update" or "export" or "doctor" or "context" or "mcp"))
+        if (command is not ("run" or "stop" or "update" or "export" or "doctor" or "autostart" or "context" or "mcp"))
         {
             error = $"unknown command '{command}'";
             return null;
         }
 
+        string? action = null;
+        if (command == "autostart")
+        {
+            if (args is not [_, "on" or "off" or "status"])
+            {
+                error = "autostart needs on, off or status";
+                return null;
+            }
+
+            action = args[1];
+            index = 2;
+        }
+
         int port = DefaultPort;
         string? dir = null;
-        bool tailnet = false, noOpen = false, check = false, json = false, portSet = false;
+        bool tailnet = false, noOpen = false, check = false, json = false, autostart = false, dirGiven = false, portSet = false;
         for (; index < args.Length; index++)
         {
             var name = args[index];
@@ -155,11 +171,16 @@ internal static partial class CfgdashCli
                         return null;
                     }
 
+                    dirGiven = true;
                     break;
                 case ("run", "--tailnet"):
                     tailnet = true;
                     break;
                 case ("run", "--no-open"):
+                    noOpen = true;
+                    break;
+                case ("run", "--autostart"):
+                    autostart = true;
                     noOpen = true;
                     break;
                 case ("update", "--check"):
@@ -187,7 +208,7 @@ internal static partial class CfgdashCli
             return null;
         }
 
-        return new CliOptions(command, dir, port, tailnet, noOpen, check, json);
+        return new CliOptions(command, dir, port, tailnet, noOpen, check, json, action, autostart, dirGiven);
     }
 
     private static string? ResolveDir(string value)
@@ -212,15 +233,26 @@ internal static partial class CfgdashCli
             if (RunStateStore.IsLive(existing))
             {
                 dependencies.Out.WriteLine("cfgdash is already running.");
-                PrintUrls(dependencies.Out, existing.Port, existing.Token, existing.Tailnet);
+                var liveUrl = PrintUrls(dependencies.Out, existing.Port, existing.Token, existing.Tailnet);
+                if (!options.NoOpen && HasDesktop(core.EnvironmentReader))
+                {
+                    dependencies.OpenBrowser(liveUrl, core.EnvironmentReader);
+                }
+
                 return ExitOk;
             }
 
             await CleanupStaleAsync(store, existing, core);
         }
 
+        var settings = new CfgdashConfig(dependencies.ConfigDir(core.EnvironmentReader), cacheDir, dependencies.TimeProvider).Read();
+        var startDir = options.DirGiven ? options.Dir
+            : (settings.DefaultDir is { } defaultDir ? ResolveDir(defaultDir) : null)
+                ?? (options.Autostart && Directory.Exists(core.Environment.HomeDir) ? ResolveDir(core.Environment.HomeDir) : null)
+                ?? options.Dir;
+        var useTailnet = options.Tailnet || settings.Tailnet;
         TailnetListenerOptions? tailnetOptions = null;
-        if (options.Tailnet && (tailnetOptions = CheckTailnet(core, dependencies.Error)) is null)
+        if (useTailnet && (tailnetOptions = CheckTailnet(core, dependencies.Error)) is null)
         {
             return ExitPrerequisite;
         }
@@ -231,12 +263,17 @@ internal static partial class CfgdashCli
         CfgdashServer server;
         try
         {
-            server = await CfgdashServer.StartAsync(new ServerOptions(options.Port, options.Dir, token, tailnetOptions), core, dependencies, log, CancellationToken.None);
+            server = await CfgdashServer.StartAsync(new ServerOptions(options.Port, startDir, token, tailnetOptions, options.Autostart), core, dependencies, log, CancellationToken.None);
         }
         catch (IOException)
         {
             dependencies.Error.WriteLine($"cfgdash: port {options.Port} is in use; try `cfgdash --port 0` or `cfgdash stop`");
             return ExitError;
+        }
+
+        if (options.Autostart)
+        {
+            server.WarmStartSnapshot();
         }
 
         using var cleanedUp = new ManualResetEventSlim();
@@ -275,7 +312,7 @@ internal static partial class CfgdashCli
         var published = false;
         try
         {
-            store.Write(new RunState(Environment.ProcessId, RunStateStore.CurrentProcessStart(), dependencies.ExePath ?? string.Empty, server.Port, token, options.Dir, tailnet, dependencies.TimeProvider.GetUtcNow()));
+            store.Write(new RunState(Environment.ProcessId, RunStateStore.CurrentProcessStart(), dependencies.ExePath ?? string.Empty, server.Port, token, startDir, tailnet, dependencies.TimeProvider.GetUtcNow()));
             if (tailnet is not null)
             {
                 var result = await tailscale.ServeAsync(tailnet.HttpsPort, tailnet.BackendPort, CancellationToken.None);
@@ -302,7 +339,7 @@ internal static partial class CfgdashCli
 
             if (!HasDesktop(core.EnvironmentReader))
             {
-                if (!options.Tailnet)
+                if (!useTailnet)
                 {
                     dependencies.Out.WriteLine("No desktop session: open the URL above on this machine, or use `cfgdash --tailnet` to reach it from your tailnet.");
                 }

@@ -53,6 +53,7 @@ const state = {
 };
 const proposals = new Map();
 const audit = [];
+const backups = new Map();
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 const text = (obj) => (obj === null ? null : JSON.stringify(obj, null, 2) + '\n');
@@ -289,10 +290,12 @@ function apply(id, body) {
   for (const f of proposal.files) state[f.scope] = f.obj;
   const at = new Date().toISOString();
   const auditId = `${at.slice(0, 19).replace(/[-:]/g, '')}Z-${randomBytes(4).toString('hex')}`;
+  backups.set(auditId, proposal.files.map((f) => ({ scope: f.scope, path: f.path, before: f.before })));
   audit.unshift({
     auditId, at, listener: 'ui',
-    files: proposal.files.map((f) => ({ path: f.path, sha256Before: f.sha256Before, sha256After: sha256(f.after) })),
+    files: proposal.files.map((f) => ({ path: f.path, sha256Before: f.sha256Before, sha256After: f.after === null ? null : sha256(f.after) })),
     changes: proposal.changes,
+    ...(proposal.revertOf ? { revertOf: proposal.revertOf } : {}),
   });
   return [200, { applied: true, auditId }];
 }
@@ -312,6 +315,8 @@ async function readBody(req) {
     return { json: undefined };
   }
 }
+
+export { state, proposals, audit, backups, sha256, text, redact, unifiedDiff, confirmFor, readBody, TTL_MS };
 
 /** Answers `/api/v2/*` as `[status, body]`; null for any other path. */
 export async function editsApi(req, url) {

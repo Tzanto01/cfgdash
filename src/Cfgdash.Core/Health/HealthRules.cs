@@ -107,6 +107,11 @@ internal static class HealthRules
             }
         }
 
+        foreach (var f in McpDriftRule.Evaluate(snapshot, redactor).Concat(InstructionsDriftRule.Evaluate(snapshot, redactor)))
+        {
+            Add(f.Id, f.Rule, f.Severity, f.Title, f.Detail, f.Evidence, f.View);
+        }
+
         var sorted = findings.OrderBy(f => f.Severity).ThenBy(f => f.Id, StringComparer.Ordinal).ToList();
         var counts = new FindingCounts(
             sorted.Count(f => f.Severity == FindingSeverity.Critical),
