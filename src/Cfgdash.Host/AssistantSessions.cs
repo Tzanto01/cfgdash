@@ -31,6 +31,7 @@ internal sealed class AssistantSession(string id, string dir, string model, stri
     private readonly List<Channel<string>> listeners = [];
     private double costUsd;
     private long lastActivity = created;
+    private bool closed;
 
     public string Id { get; } = id;
 
@@ -102,6 +103,12 @@ internal sealed class AssistantSession(string id, string dir, string model, stri
         var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(MaxQueuedEvents) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
         lock (events)
         {
+            if (closed)
+            {
+                channel.Writer.TryComplete();
+                return channel;
+            }
+
             while (backlog.TryDequeue(out var frame))
             {
                 channel.Writer.TryWrite(frame);
@@ -125,6 +132,7 @@ internal sealed class AssistantSession(string id, string dir, string model, stri
     {
         lock (events)
         {
+            closed = true;
             foreach (var listener in listeners)
             {
                 listener.Writer.TryComplete();
@@ -156,6 +164,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
     private const int MaxReasonChars = 300;
     private const int MaxLoggedArgsChars = 2048;
+    private const string StartFailed = "the claude process could not start";
 
     private static readonly IReadOnlyList<string> RequiredFlags =
         [.. AssistantLaunch.Arguments("s", "m", DefaultModel, DefaultEffort, DefaultMaxBudgetUsd, "p").Select(a => a.Split('=')[0])];
@@ -191,6 +200,8 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
     private long Now => time.GetUtcNow().UtcTicks;
 
+    private string WorkDir() => PrivateFiles.EnsureDirectory(Path.Combine(PrivateFiles.EnsureDirectory(AssistantDir), "work"));
+
     /// <summary>Resolves <c>claude</c> (absolute PATH entries only; never a <c>.cmd</c>/<c>.bat</c>), needs <c>setsid</c> on Linux/macOS, then checks <c>--version</c>, every rev 2.1 flag in <c>--help</c> and <c>auth status</c> <c>loggedIn: true</c>. A containment failure is sticky per CLI path and version.</summary>
     public async Task<AssistantProbe> ProbeAsync(CancellationToken cancellationToken)
     {
@@ -217,7 +228,17 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             return new AssistantProbe(false, "the cfgdash executable path is unknown", claude);
         }
 
-        var version = await core.Processes.RunAsync(claude, ["--version"], ProbeTimeout, cancellationToken);
+        string workDir;
+        try
+        {
+            workDir = WorkDir();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new AssistantProbe(false, "the cfgdash cache dir is not writable", claude);
+        }
+
+        var version = await core.Processes.RunAsync(claude, ["--version"], ProbeTimeout, cancellationToken, workDir);
         if (version.TimedOut || version.ExitCode != 0)
         {
             return new AssistantProbe(false, "claude --version failed", claude);
@@ -232,7 +253,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             }
         }
 
-        var help = await core.Processes.RunAsync(claude, ["--help"], ProbeTimeout, cancellationToken);
+        var help = await core.Processes.RunAsync(claude, ["--help"], ProbeTimeout, cancellationToken, workDir);
         if (help.TimedOut || help.ExitCode != 0)
         {
             return new AssistantProbe(false, "claude --help failed", claude, versionText);
@@ -243,7 +264,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             return new AssistantProbe(false, $"the installed claude lacks {missing}", claude, versionText);
         }
 
-        var auth = await core.Processes.RunAsync(claude, ["auth", "status"], ProbeTimeout, cancellationToken);
+        var auth = await core.Processes.RunAsync(claude, ["auth", "status"], ProbeTimeout, cancellationToken, workDir);
         if (auth.TimedOut || auth.ExitCode != 0 || !LoggedIn(auth.StandardOutput))
         {
             return new AssistantProbe(false, "claude is not logged in", claude, versionText);
@@ -279,6 +300,14 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     /// <summary>Reserves a slot, then starts the process. 200 <c>{ id }</c>, 429 at 2 live processes, 503 when unavailable or stopping.</summary>
     public async Task<(int Status, JsonObject Body)> CreateAsync(string dir, string model, string effort, CancellationToken cancellationToken)
     {
+        lock (gate)
+        {
+            if (LiveCount() >= MaxLive)
+            {
+                return TooMany();
+            }
+        }
+
         var probe = await ProbeAsync(cancellationToken);
         if (!probe.Available)
         {
@@ -305,7 +334,13 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
         if (!Spawn(session, probe))
         {
-            return Unavailable(lastFailure);
+            lock (gate)
+            {
+                sessions.Remove(session.Id);
+            }
+
+            session.Close();
+            return Unavailable(StartFailed);
         }
 
         lock (gate)
@@ -397,7 +432,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
         if (probe is not null && !Spawn(session, probe))
         {
-            return Unavailable(lastFailure);
+            return Unavailable(StartFailed);
         }
 
         var line = new JsonObject
@@ -450,7 +485,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             AssistantSession? match = null;
             foreach (var session in sessions.Values)
             {
-                if (session.Process is { InitPassed: true } process
+                if (session.Process is { InitPassed: true, Ended: false } process
                     && CryptographicOperations.FixedTimeEquals(presented, SHA256.HashData(Encoding.UTF8.GetBytes(process.Capability))))
                 {
                     match = session;
@@ -549,41 +584,41 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
     private bool Spawn(AssistantSession session, AssistantProbe probe)
     {
-        var disabled = new HashSet<string>(AssistantLaunch.UserPluginIds(core.Environment), StringComparer.Ordinal);
-        var workDir = PrivateFiles.EnsureDirectory(Path.Combine(PrivateFiles.EnsureDirectory(AssistantDir), "work"));
-        AssistantStart start;
-        lock (gate)
-        {
-            session.Probe = probe;
-            if (disabledPlugins.TryGetValue(probe.Version!, out var known))
-            {
-                disabled.UnionWith(known);
-            }
-
-            start = new AssistantStart(
-                probe.ClaudePath!,
-                probe.Setsid,
-                workDir,
-                AssistantDir,
-                $"{session.Id}-{++session.Sequence}",
-                session.Model,
-                session.Effort,
-                RemainingBudget(session),
-                AssistantLaunch.SystemPrompt(session.Nonce),
-                disabled,
-                exePath!,
-                port());
-        }
-
         AssistantProcess process;
         try
         {
+            var disabled = new HashSet<string>(AssistantLaunch.UserPluginIds(core.Environment), StringComparer.Ordinal);
+            var workDir = WorkDir();
+            AssistantStart start;
+            lock (gate)
+            {
+                session.Probe = probe;
+                if (disabledPlugins.TryGetValue(probe.Version!, out var known))
+                {
+                    disabled.UnionWith(known);
+                }
+
+                start = new AssistantStart(
+                    probe.ClaudePath!,
+                    probe.Setsid,
+                    workDir,
+                    AssistantDir,
+                    $"{session.Id}-{++session.Sequence}",
+                    session.Model,
+                    session.Effort,
+                    RemainingBudget(session),
+                    AssistantLaunch.SystemPrompt(session.Nonce),
+                    disabled,
+                    exePath!,
+                    port());
+            }
+
             process = AssistantProcess.Start(start);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             log.Error(e);
-            Fail(session, "the claude process could not start");
+            Fail(session, StartFailed);
             return false;
         }
 
@@ -827,6 +862,9 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
             switch (parsed)
             {
+                case StreamEvent.Init(var reinit) when !InitCheck.Evaluate(reinit).Ok:
+                    Contain(session, process, "containment check failed on a later init");
+                    return null;
                 case StreamEvent.TextDelta(var text):
                     Delta(session, redactor.Push(text), ref sawText);
                     break;
@@ -837,8 +875,10 @@ internal sealed class AssistantRegistry : IAsyncDisposable
                         Delta(session, AssistantRedaction.Text(resultText), ref sawText);
                     }
 
-                    if (cost is { } spent)
+                    if (cost is { } total)
                     {
+                        var spent = Math.Max(0, total - process.ReportedCostUsd);
+                        process.ReportedCostUsd = Math.Max(total, process.ReportedCostUsd);
                         session.Emit("cost", new JsonObject { ["costUsd"] = session.AddCost(spent) });
                     }
 
@@ -850,6 +890,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
                     }
                     else
                     {
+                        SetFailure(null);
                         session.Emit("done", new JsonObject());
                     }
 
@@ -884,9 +925,9 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         session.Error("containment", "containment check failed");
     }
 
-    private void SetFailure(string reason)
+    private void SetFailure(string? reason)
     {
-        var redacted = Cap(AssistantRedaction.Text(reason));
+        var redacted = reason is null ? null : Cap(AssistantRedaction.Text(reason));
         lock (gate)
         {
             lastFailure = redacted;

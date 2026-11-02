@@ -183,7 +183,7 @@ export async function assistantApi(req, res, url) {
     sessions.delete(id);
     return [204, null];
   }
-  if (req.method !== 'POST' || action === 'events') return [404, { error: 'not-found' }];
+  if (req.method !== 'POST' || action === 'events' || (id && !action)) return [404, { error: 'not-found' }];
   const body = await readJson(req);
   if (!body) return [403, { error: 'forbidden' }];
   if (!id) return create(body.json);

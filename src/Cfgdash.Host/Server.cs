@@ -127,6 +127,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         }
         catch
         {
+            await server.assistants.DisposeAsync();
             await server.app.DisposeAsync();
             throw;
         }

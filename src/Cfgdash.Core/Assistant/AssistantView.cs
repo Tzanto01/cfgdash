@@ -40,6 +40,23 @@ public sealed class AssistantView
         bool Dropped(string collectorId) => Excluded.Contains(collectorId) || (!inCompany && collectorId == CompanyCore);
         bool CompanyFile(string? fileId) => fileId is not null && companyFiles.Contains(fileId);
         bool Flagged(IReadOnlyList<string>? flags) => !inCompany && flags?.Contains(CompanyFlag, StringComparer.Ordinal) == true;
+        IEnumerable<TreeNode> FlaggedNodes(IEnumerable<TreeNode> nodes) =>
+            nodes.SelectMany(n => Flagged(n.Badges) ? [n] : FlaggedNodes(n.Children));
+
+        foreach (var block in source.Sections.SelectMany(s => s.Blocks))
+        {
+            Block? flagged = block switch
+            {
+                KvBlock kv => kv with { Rows = [.. kv.Rows.Where(r => Flagged(r.Flags))] },
+                TableBlock table => table with { Rows = [.. table.Rows.Where(r => Flagged(r.Flags))] },
+                TreeBlock tree => tree with { Nodes = [.. FlaggedNodes(tree.Nodes)] },
+                _ => null,
+            };
+            if (flagged is not null)
+            {
+                companyFiles.UnionWith(FileIds(flagged));
+            }
+        }
 
         TreeNode? Node(TreeNode node) =>
             Flagged(node.Badges) || CompanyFile(node.FileId) ? null : node with { Children = [.. node.Children.Select(Node).OfType<TreeNode>()] };

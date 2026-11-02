@@ -69,6 +69,9 @@ internal sealed class AssistantProcess
         set => initPassed = value;
     }
 
+    /// <summary>The last <c>total_cost_usd</c> this process reported; the CLI reports a running total per process.</summary>
+    public double ReportedCostUsd { get; set; }
+
     /// <summary>True once killed or exited.</summary>
     public bool Ended => Volatile.Read(ref killed) == 1 || exited.Task.IsCompleted;
 
@@ -188,34 +191,32 @@ internal sealed class AssistantProcess
             return;
         }
 
-        stopReading.Cancel();
-        KillTree(process, ownGroup);
-        job?.Dispose();
-        DeleteFiles(files);
+        try
+        {
+            stopReading.Cancel();
+            KillTree(process, ownGroup);
+        }
+        finally
+        {
+            job?.Dispose();
+            DeleteFiles(files);
+        }
     }
 
+    /// <summary>Signals the process group first, so members orphaned by an exited leader die too (a pgid is not reused while any member lives), then kills the tree.</summary>
     private static void KillTree(Process process, bool ownGroup)
     {
+        if (ownGroup && !OperatingSystem.IsWindows())
+        {
+            _ = SignalGroup(-process.Id, SigKill);
+        }
+
         try
         {
             process.Kill(entireProcessTree: true);
         }
-        catch (Exception e) when (e is InvalidOperationException or Win32Exception or NotSupportedException)
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception or NotSupportedException or AggregateException)
         {
-        }
-
-        if (ownGroup && !OperatingSystem.IsWindows())
-        {
-            try
-            {
-                if (!process.HasExited)
-                {
-                    _ = SignalGroup(-process.Id, SigKill);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-            }
         }
     }
 

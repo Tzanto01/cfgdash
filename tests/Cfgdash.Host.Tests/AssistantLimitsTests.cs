@@ -70,6 +70,7 @@ public sealed class AssistantLimitsTests
         using var _1 = events;
 
         host.Time.Advance(11 * Minute);
+        Assert.True(await Poll.UntilAsync(() => run.StdinKinds.Contains("control_request")));
         Assert.True(await host.AdvanceUntilAsync(() => events.Names.Contains("error"), TimeSpan.FromSeconds(6)));
 
         Assert.Equal("turn-timeout", events.First("error").GetProperty("error").GetString());
@@ -176,5 +177,21 @@ public sealed class AssistantLimitsTests
         {
             host.Claude.Dispose();
         }
+    }
+
+    [LinuxFact]
+    public async Task Cost_counts_the_running_total_of_one_process_once()
+    {
+        await using var host = await AssistantHost.StartAsync();
+        host.Claude.Configure();
+        var (id, events, _) = await StartTurnAsync(host, "done");
+        using var _1 = events;
+
+        Assert.Equal(202, (await host.MessageAsync(id)).Status);
+        Assert.True(await Poll.UntilAsync(() => events.Names.Count(n => n == "done") == 2));
+
+        var costs = events.Frames.Where(f => f.Name == "cost").Select(f => JsonDocument.Parse(f.Data).RootElement.GetProperty("costUsd").GetDouble()).ToArray();
+        Assert.Equal([0.25, 0.5], costs);
+        Assert.Single(host.Claude.Runs);
     }
 }

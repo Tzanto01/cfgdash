@@ -1,4 +1,5 @@
 using Cfgdash.Core.Infrastructure;
+using Cfgdash.Core.Snapshot;
 using static Cfgdash.Core.Tests.Assistant.AssistantViewFixture;
 
 namespace Cfgdash.Core.Tests.Assistant;
@@ -78,5 +79,24 @@ public sealed class AssistantViewTests : IDisposable
         var expected = new[] { f.Plain.Id, f.Plain2.Id, f.CoreOnly.Id, f.BadgedChildFile.Id }.Concat(f.CompanyFiles.Select(c => c.Id)).Order().ToArray();
         Assert.Equal(expected, view.Files.All.Select(x => x.Ref.Id).Order().ToArray());
         Assert.Equal(expected, view.Snapshot.Files.Select(x => x.Id).Order().ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_plain_file_that_a_company_flagged_row_points_at_is_treated_as_company_outside_the_layer(bool inCompany)
+    {
+        var snapshot = Snap(
+        [
+            new Section("hooks.registered", "hooks", "Hooks",
+                [new TableBlock("hooks", "Hooks", [new TableColumn("name", "Name")], [Row("company-hook", f.Plain.Id, ["company"])])]),
+            new Section("settings.effective", "settings", "Settings", [new KvBlock("kv", "KV", [Kv("hooks", f.Plain.Id), Kv("model", f.Plain2.Id)])]),
+        ]);
+
+        var view = f.Create(snapshot, f.Registry, inCompany ? f.InsideDir : f.OutsideDir);
+
+        Assert.Equal(inCompany ? ["hooks", "model"] : ["model"], KvKeys(view, "settings.effective", "kv"));
+        Assert.Equal(inCompany, view.Files.TryGet(f.Plain.Id, out _));
+        Assert.True(view.Files.TryGet(f.Plain2.Id, out _));
     }
 }

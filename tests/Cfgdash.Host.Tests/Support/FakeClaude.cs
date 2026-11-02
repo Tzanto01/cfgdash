@@ -228,7 +228,8 @@ internal sealed class FakeClaude : IDisposable
           printf '{"type":"system","subtype":"init","tools":%s,"mcp_servers":%s,"agents":[],"skills":[],"slash_commands":[],"plugins":%s}\n' "$tools" "$SERVERS" "$plugins"
         }
         delta() { printf '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"%s"}}}\n' "$1"; }
-        result() { printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.25,"result":""}\n'; }
+        spent=0
+        result() { spent=$((spent+25)); printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":%d.%02d,"result":""}\n' $((spent/100)) $((spent%100)); }
         first=1
         while IFS= read -r line; do
           echo "$line" >> "$d/stdin"

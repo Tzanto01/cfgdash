@@ -19,7 +19,7 @@ internal static class McpCapability
 /// <summary>
 /// <c>cfgdash mcp</c>: an MCP server over stdio (newline-delimited JSON-RPC 2.0) that forwards the five assistant tools to
 /// <c>POST http://127.0.0.1:&lt;port&gt;/api/v2/assistant/internal/&lt;tool&gt;</c> with the capability as bearer. It never listens and
-/// never reads <c>run.json</c>. Exit 0 on stdin EOF, 1 when the link fails (connection error, 401 or 404).
+/// never reads <c>run.json</c>. Exit 0 on stdin EOF, 1 when the link fails (connection error, 401 or 404); a slow call answers a <c>timeout</c> tool error.
 /// </summary>
 internal static class McpServer
 {
@@ -144,6 +144,10 @@ internal static class McpServer
         catch (HttpRequestException e) when (e.HttpRequestError == HttpRequestError.ConfigurationLimitExceeded)
         {
             return (false, "{\"error\":\"response-too-large\"}");
+        }
+        catch (TaskCanceledException e) when (e.InnerException is TimeoutException)
+        {
+            return (false, "{\"error\":\"timeout\"}");
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
