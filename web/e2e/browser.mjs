@@ -3,7 +3,8 @@
  *
  * Builds a synthetic harness in a temp dir, starts `cfgdash run` with HOME and the XDG dirs pointed at it, and drives
  * the UI with Chromium: walks every view in the nav, does one edit in the project scope (propose, apply, undo) and checks
- * the file after each step, asserts the CSP header and that no request leaves the cfgdash origin, then runs `cfgdash stop`.
+ * the file after each step, checks the assistant panel shows why it is unavailable (no `claude` on PATH), asserts the CSP
+ * header and that no request leaves the cfgdash origin, then runs `cfgdash stop`.
  *
  * The token is read from run.json in this process, sent only as a request header and never printed.
  *
@@ -11,6 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -42,7 +44,8 @@ async function makeHarness() {
     XDG_CONFIG_HOME: path.join(home, '.config'),
     XDG_CACHE_HOME: path.join(home, '.cache'),
     XDG_DATA_HOME: path.join(home, '.local', 'share'),
-    XDG_STATE_HOME: path.join(home, '.local', 'state')
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    PATH: (process.env.PATH ?? '').split(path.delimiter).filter((dir) => dir && !existsSync(path.join(dir, 'claude'))).join(path.delimiter)
   };
   for (const name of ['CLAUDE_CONFIG_DIR', 'DISPLAY', 'WAYLAND_DISPLAY']) {
     delete env[name];
@@ -136,6 +139,14 @@ async function main() {
     await page.locator('main h1', { hasText: 'cfgdash settings' }).waitFor();
     await page.getByRole('switch', { name: 'Start at login' }).waitFor();
     step('/cfgdash: the gear opens cfgdash settings');
+
+    await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+    const assistantPanel = page.locator('aside[aria-labelledby="assistant-title"]');
+    await assistantPanel.getByText("The assistant isn't available on this machine.").waitFor();
+    assert.ok((await assistantPanel.innerText()).includes('claude not found on PATH'), 'the panel shows the available: false reason');
+    assert.equal(await assistantPanel.locator('textarea').count(), 0, 'no message box while unavailable');
+    await page.getByRole('button', { name: 'Close assistant' }).click();
+    step('assistant panel: shows "claude not found on PATH" instead of the input');
 
     await page.goto(`${origin}/settings`);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();

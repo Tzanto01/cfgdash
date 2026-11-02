@@ -206,4 +206,16 @@ describe('assistant panel', () => {
     expect(end.headers['x-cfgdash-request']).toBe('1');
     expect(FakeEventSource.all[0].closed).toBe(true);
   });
+
+  it('ends the live session when the page unloads, so it does not hold one of the two process slots', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    const end = h.pending((r) => r.method === 'DELETE' && r.url.pathname === '/api/v2/assistant/sessions/s1');
+    expect(end?.headers['x-cfgdash-request']).toBe('1');
+  });
 });

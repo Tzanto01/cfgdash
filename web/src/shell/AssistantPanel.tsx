@@ -121,7 +121,14 @@ export default function AssistantPanel() {
       },
       () => undefined
     );
+    const leave = () => {
+      if (live.current) {
+        api.assistantEnd(live.current.id, true).catch(() => undefined);
+      }
+    };
+    window.addEventListener('pagehide', leave);
     return () => {
+      window.removeEventListener('pagehide', leave);
       controller.abort();
       events.current?.close();
       if (live.current) {

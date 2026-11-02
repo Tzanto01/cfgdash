@@ -79,11 +79,12 @@ async function get<T>(path: string, params: URLSearchParams, signal?: AbortSigna
  * A guarded `/api/v2` POST, PUT or DELETE (edits-v1): JSON body and `X-Cfgdash-Request: 1`. Only 401 goes to the access panel; every
  * other failure (including 403 from the origin and header checks) is thrown for the caller to show inline.
  */
-async function post<T>(path: string, body: unknown, method: 'POST' | 'PUT' | 'DELETE' = 'POST'): Promise<T> {
+async function post<T>(path: string, body: unknown, method: 'POST' | 'PUT' | 'DELETE' = 'POST', keepalive = false): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       method,
+      keepalive,
       credentials: 'same-origin',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Cfgdash-Request': '1' },
       body: JSON.stringify(body)
@@ -186,8 +187,9 @@ export const api = {
   assistantCheck(id: string): Promise<unknown> {
     return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/check`, {});
   },
-  assistantEnd(id: string): Promise<unknown> {
-    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}`, {}, 'DELETE');
+  /** Ends a session; `keepalive` lets the request finish while the page unloads. */
+  assistantEnd(id: string, keepalive = false): Promise<unknown> {
+    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}`, {}, 'DELETE', keepalive);
   },
   /** The URL of a session's server-sent events. */
   assistantEventsUrl(id: string): string {
