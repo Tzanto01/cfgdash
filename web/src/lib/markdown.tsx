@@ -9,11 +9,11 @@ type MdBlock =
   | { type: 'list'; ordered: boolean; start: number; items: string[] }
   | { type: 'p'; text: string };
 
-const FENCE = /^\s*(`{3,}|~{3,})/;
+const FENCE = /^\s*(`{3,}(?=[^`]*$)|~{3,})/;
 const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/;
 const ITEM = /^\s*([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const INLINE = /(`[^`\n]{1,2000}`)|(!\[([^\]\n]{0,500})\]\(([^)\n]{0,2048})\))|(\[([^\]\n]{1,500})\]\(([^)\n]{0,2048})\))|(\*\*([^*\n]{1,500})\*\*)|(<(https?:\/\/[^>\s]{1,2048})>)/g;
-const HIDDEN = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g;
+const HIDDEN = /[\u00AD\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
 /** A URL for display: normalized (punycode host) when it parses, else as written. */
 function shownUrl(raw: string): string {

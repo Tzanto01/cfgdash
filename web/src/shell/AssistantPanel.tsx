@@ -114,22 +114,16 @@ export default function AssistantPanel() {
   const pending = useRef(false);
   const mounted = useRef(true);
   const effortTouched = useRef(false);
+  const working = useRef(false);
   live.current = session;
+  working.current = running;
 
   useEffect(() => {
     mounted.current = true;
     headingRef.current?.focus();
     const controller = new AbortController();
     api.assistantStatus(controller.signal).then(
-      (data) => {
-        setStatus({ data });
-        if (data.available) {
-          api.settings(dir, controller.signal).then(
-            (settings) => setTracked(settings.files.filter((f) => f.gitTracked).map((f) => f.path)),
-            () => undefined
-          );
-        }
-      },
+      (data) => setStatus({ data }),
       (error: unknown) => !isAbort(error) && setStatus({ failed: true })
     );
     api.cfgdashSettings(controller.signal).then(
@@ -159,6 +153,19 @@ export default function AssistantPanel() {
       }
     };
   }, []);
+
+  const available = status?.data?.available === true;
+  useEffect(() => {
+    if (!available || !dir) {
+      return;
+    }
+    const controller = new AbortController();
+    api.settings(dir, controller.signal).then(
+      (settings) => setTracked(settings.files.filter((f) => f.gitTracked).map((f) => f.path)),
+      () => undefined
+    );
+    return () => controller.abort();
+  }, [available, dir]);
 
   const push = (entry: Entry) => setEntries((prev) => [...prev, entry]);
 
@@ -207,9 +214,12 @@ export default function AssistantPanel() {
         push({ kind: 'error', text: str(data['message']) || str(data['error']) || 'The assistant stopped.' });
         setRunning(false);
       } else if (source.readyState === EventSource.CLOSED) {
-        push({ kind: 'error', text: 'Lost the connection to the assistant. Send again to start a new session.' });
+        if (working.current) {
+          push({ kind: 'error', text: 'Lost the connection to the assistant. Send again to start a new session.' });
+        }
         setRunning(false);
         setSession(null);
+        setCost(null);
       }
     });
   };

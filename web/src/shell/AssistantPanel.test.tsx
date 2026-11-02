@@ -176,6 +176,17 @@ describe('assistant panel', () => {
     expect(panel()?.querySelector('section[aria-label="Assistant proposal"]')?.textContent).toContain('tracked by git');
   });
 
+  it('reads the tracked files again for a new folder while the panel stays open', async () => {
+    const h = await openPanel();
+    await h.answer('/api/v2/settings', { categories: [], files: [] });
+
+    await h.navigate('/settings?dir=D%3A%2Fws%2Fother');
+    await h.answer('/api/v1/snapshot', makeSnapshot({ targetDir: 'D:/ws/other' }));
+
+    expect(panel()).not.toBeNull();
+    expect(h.pending((r) => r.url.pathname === '/api/v2/settings')?.url.searchParams.get('dir')).toBe('D:/ws/other');
+  });
+
   it('stops the working state and says so when the event stream is lost', async () => {
     const h = await openPanel();
     await startTurn(h);
