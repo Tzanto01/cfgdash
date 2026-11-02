@@ -106,6 +106,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         MapApiV2(dependencies);
         MapFleet(dependencies);
         MapCfgdashSettings(dependencies);
+        MapAssistant(dependencies);
         app.MapFallback("{**path}", ctx => FallbackAsync(ctx));
     }
 
@@ -128,6 +129,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         }
         catch
         {
+            await server.assistants.DisposeAsync();
             await server.app.DisposeAsync();
             throw;
         }
@@ -159,6 +161,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         app.Lifetime.StopApplication();
         await app.StopAsync();
         await idleLoop;
+        await assistants.DisposeAsync();
         await app.DisposeAsync();
     }
 
@@ -241,6 +244,12 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         if (IsCrossSite(request.Headers["Sec-Fetch-Site"], request.Headers.Origin, (tailnet ? "https://" : "http://") + hostValue))
         {
             await WriteJsonAsync(ctx, StatusCodes.Status403Forbidden, new { error = "forbidden", reason = "cross-site" });
+            return;
+        }
+
+        if (!tailnet && IsAssistantInternalTarget(ctx))
+        {
+            await next(ctx);
             return;
         }
 

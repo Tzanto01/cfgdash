@@ -3,10 +3,13 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Cfgdash.Core;
 using Cfgdash.Core.Config;
+using Cfgdash.Core.Context;
+using Cfgdash.Core.Environment;
 
 namespace Cfgdash.Host;
 
@@ -30,6 +33,8 @@ internal static partial class CfgdashCli
           cfgdash export [--dir <path>]
           cfgdash doctor [--dir <path>] [--json]
           cfgdash autostart on|off|status
+          cfgdash context [--dir <path>] [--json]
+          cfgdash mcp --port <n>   (internal: started by cfgdash for the assistant)
           cfgdash --version
           cfgdash --help
 
@@ -66,6 +71,8 @@ internal static partial class CfgdashCli
                 "export" => await ExportAsync(options, dependencies),
                 "doctor" => await DoctorAsync(options, dependencies),
                 "autostart" => await AutostartAsync(options, dependencies),
+                "context" => await ContextAsync(options, dependencies),
+                "mcp" => await McpAsync(options, dependencies),
                 _ => await RunServerAsync(options, dependencies),
             };
         }
@@ -88,7 +95,7 @@ internal static partial class CfgdashCli
             index = 1;
         }
 
-        if (command is not ("run" or "stop" or "update" or "export" or "doctor" or "autostart"))
+        if (command is not ("run" or "stop" or "update" or "export" or "doctor" or "autostart" or "context" or "mcp"))
         {
             error = $"unknown command '{command}'";
             return null;
@@ -109,7 +116,7 @@ internal static partial class CfgdashCli
 
         int port = DefaultPort;
         string? dir = null;
-        bool tailnet = false, noOpen = false, check = false, json = false, autostart = false, dirGiven = false;
+        bool tailnet = false, noOpen = false, check = false, json = false, autostart = false, dirGiven = false, portSet = false;
         for (; index < args.Length; index++)
         {
             var name = args[index];
@@ -147,7 +154,16 @@ internal static partial class CfgdashCli
                     }
 
                     break;
-                case ("run" or "export" or "doctor", "--dir"):
+                case ("mcp", "--port"):
+                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out port) || port is < 1 or > 65535)
+                    {
+                        error = $"invalid port '{value}' (1-65535)";
+                        return null;
+                    }
+
+                    portSet = true;
+                    break;
+                case ("run" or "export" or "doctor" or "context", "--dir"):
                     dir = ResolveDir(value!);
                     if (dir is null)
                     {
@@ -170,13 +186,19 @@ internal static partial class CfgdashCli
                 case ("update", "--check"):
                     check = true;
                     break;
-                case ("doctor", "--json"):
+                case ("doctor" or "context", "--json"):
                     json = true;
                     break;
                 default:
                     error = $"unknown option '{name}' for '{command}'";
                     return null;
             }
+        }
+
+        if (command == "mcp" && !portSet)
+        {
+            error = "mcp needs --port";
+            return null;
         }
 
         dir ??= ResolveDir(Directory.GetCurrentDirectory());
@@ -472,6 +494,40 @@ internal static partial class CfgdashCli
         }
 
         return report.Counts.Critical > 0 ? ExitCritical : ExitOk;
+    }
+
+    private static async Task<int> ContextAsync(CliOptions options, HostDependencies dependencies)
+    {
+        var core = await dependencies.CreateCore(CancellationToken.None);
+        SnapshotResult result;
+        try
+        {
+            result = await core.Snapshots.BuildAsync(options.Dir, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            dependencies.Error.WriteLine($"cfgdash: snapshot failed ({e.GetType().Name}).");
+            return ExitError;
+        }
+
+        var report = ContextReport.Build(result.Snapshot);
+        dependencies.Out.WriteLine(options.Json ? report.ToJson() : report.ToText());
+        return ExitOk;
+    }
+
+    /// <summary>Reads only <c>CFGDASH_MCP_CAPABILITY</c> (process scope) and serves MCP over this process's stdio; builds no core and reads no run state.</summary>
+    private static async Task<int> McpAsync(CliOptions options, HostDependencies dependencies)
+    {
+        if (McpCapability.Read(new AllowlistEnvironmentReader()) is not { } capability)
+        {
+            dependencies.Error.WriteLine("cfgdash mcp: no capability; this command is started only by cfgdash.");
+            return ExitError;
+        }
+
+        var utf8 = new UTF8Encoding(false);
+        using var input = new StreamReader(Console.OpenStandardInput(), utf8);
+        await using var output = new StreamWriter(Console.OpenStandardOutput(), utf8);
+        return await McpServer.RunAsync(input, output, dependencies.Error, options.Port, capability);
     }
 
     private static string PrintUrls(TextWriter output, int port, string token, RunTailnet? tailnet)

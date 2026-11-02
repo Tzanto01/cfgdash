@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core.Infrastructure;
+using Cfgdash.Core.Redaction;
 
 namespace Cfgdash.Core.Edits;
 
@@ -23,6 +24,7 @@ internal sealed partial class EditService(
 {
     private const int MaxChanges = 100;
     private const int MaxProposals = 32;
+    private const int MaxAssistantProposals = 8;
     private const int MaxFileBytes = 4 * 1024 * 1024;
     private const UnixFileMode PrivateDirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
     private const UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
@@ -37,16 +39,24 @@ internal sealed partial class EditService(
     private sealed record Change(string Key, string Scope, JsonNode? Value, bool Unset)
     {
         public IReadOnlyList<string> Segments { get; init; } = [];
+
+        public SettingDefinition? Definition { get; init; }
     }
 
     private sealed record PlannedFile(EditTarget Target, string Path, byte[]? Before, string? Sha256Before, byte[] After, string Sha256After, bool Delete = false, string? Dir = null);
 
-    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? RevertOf = null);
+    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? RevertOf = null, string? AssistantSession = null);
 
     public Task<EditResult> ProposeAsync(string dir, JsonNode? changes, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Propose(PathUtil.Full(dir), changes));
+        return Task.FromResult(Propose(PathUtil.Full(dir), changes, null));
+    }
+
+    public Task<EditResult> ProposeForAssistantAsync(string dir, JsonNode? changes, string sessionId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Propose(PathUtil.Full(dir), changes, sessionId));
     }
 
     public async Task<EditResult> ApplyAsync(string id, string? confirm, CancellationToken cancellationToken)
@@ -113,7 +123,7 @@ internal sealed partial class EditService(
         return new JsonObject { ["entries"] = Nodes(entries.Reverse()) };
     }
 
-    private EditResult Propose(string dir, JsonNode? body)
+    private EditResult Propose(string dir, JsonNode? body, string? assistantSession)
     {
         if (body is not JsonArray { Count: > 0 and <= MaxChanges } list)
         {
@@ -161,6 +171,16 @@ internal sealed partial class EditService(
                 return Invalid(change.Key, valueError);
             }
 
+            if (Strings(change.Value).Any(t => t.Contains(Redactor.Marker, StringComparison.Ordinal)))
+            {
+                return Invalid(change.Key, "redacted-value");
+            }
+
+            if (assistantSession is not null && Strings(change.Value).Any(t => redactor.RedactText(t) != t))
+            {
+                return Invalid(change.Key, "would-hide");
+            }
+
             if (!seen.Add(change.Key + "\0" + change.Scope))
             {
                 return Invalid(change.Key, "duplicate");
@@ -171,7 +191,7 @@ internal sealed partial class EditService(
                 return Invalid(change.Key, targetError!);
             }
 
-            change = change with { Segments = segments };
+            change = change with { Segments = segments, Definition = definition };
             if (!files.TryGetValue(target.Real, out var file))
             {
                 file = (target, []);
@@ -191,17 +211,23 @@ internal sealed partial class EditService(
                 return Invalid(fileChanges[0].Key, "parse-error");
             }
 
-            if (raw is null && fileChanges.All(c => c.Unset))
-            {
-                continue;
-            }
-
             var newLine = raw is not null && raw.AsSpan().IndexOf("\r\n"u8) >= 0 ? "\r\n" : "\n";
             string canonical = string.Empty;
             var root = raw is null ? new JsonObject() : JsonEdit.Parse(raw, newLine, out canonical);
             if (root is null)
             {
                 return Invalid(fileChanges[0].Key, "parse-error");
+            }
+
+            if (assistantSession is not null
+                && fileChanges.FirstOrDefault(c => EditCatalog.AssistantDenied(c.Definition!, c.Scope, ValueAt(root, c.Segments), c.Value, c.Unset)) is { } denied)
+            {
+                return new EditResult(EditStatus.Denied, new JsonObject { ["denied"] = denied.Key, ["reason"] = "assistant-policy" });
+            }
+
+            if (raw is null && fileChanges.All(c => c.Unset))
+            {
+                continue;
             }
 
             var redactedBefore = raw is null ? null : JsonEdit.Serialize(redactor.RedactJson(root)!, "\n");
@@ -233,8 +259,12 @@ internal sealed partial class EditService(
         }
 
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)]);
-        Store(id, proposal);
+        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)], AssistantSession: assistantSession);
+        if (!Store(id, proposal))
+        {
+            return Invalid(null, "quota");
+        }
+
         return new EditResult(EditStatus.Ok, new JsonObject
         {
             ["id"] = id,
@@ -244,7 +274,8 @@ internal sealed partial class EditService(
         });
     }
 
-    private void Store(string id, Proposal proposal)
+    /// <summary>False, storing nothing, when <paramref name="proposal"/> is an assistant proposal and 8 assistant proposals are open.</summary>
+    private bool Store(string id, Proposal proposal)
     {
         lock (proposalGate)
         {
@@ -257,12 +288,18 @@ internal sealed partial class EditService(
                 }
             }
 
+            if (proposal.AssistantSession is not null && proposals.Values.Count(p => p.AssistantSession is not null) >= MaxAssistantProposals)
+            {
+                return false;
+            }
+
             while (proposals.Count >= MaxProposals)
             {
                 proposals.TryRemove(proposals.MinBy(p => p.Value.ExpiresAt).Key, out _);
             }
 
             proposals[id] = proposal;
+            return true;
         }
     }
 
@@ -370,6 +407,12 @@ internal sealed partial class EditService(
             line["failed"] = true;
         }
 
+        if (proposal.AssistantSession is { } sessionId)
+        {
+            line["origin"] = "assistant";
+            line["sessionId"] = sessionId;
+        }
+
         return line;
     }
 
@@ -456,6 +499,26 @@ internal sealed partial class EditService(
         var hasValue = change.TryGetPropertyValue("value", out var value);
         var hasUnset = change.TryGetPropertyValue("unset", out var unset);
         return hasValue == hasUnset || (hasUnset && unset?.GetValueKind() != JsonValueKind.True) ? null : new Change(key, scope, value, hasUnset);
+    }
+
+    private static IEnumerable<string> Strings(JsonNode? value) => value switch
+    {
+        JsonArray list => list.Select(Text).OfType<string>(),
+        _ => Text(value) is { } text ? [text] : [],
+    };
+
+    private static JsonNode? ValueAt(JsonObject root, IReadOnlyList<string> segments)
+    {
+        JsonNode? node = root;
+        foreach (var segment in segments)
+        {
+            if (node is not JsonObject obj || !obj.TryGetPropertyValue(segment, out node))
+            {
+                return null;
+            }
+        }
+
+        return node;
     }
 
     private static string? KeyOf(JsonNode? item)

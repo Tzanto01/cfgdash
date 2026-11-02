@@ -37,7 +37,7 @@ public static class HarnessEnvAllowlist
     public static readonly IReadOnlyList<string> Runtime =
     [
         "DISPLAY", "WAYLAND_DISPLAY", "SSH_CONNECTION", "SSH_TTY", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
-        "LOCALAPPDATA", "APPDATA", "HOME", "USERPROFILE", "PATH", "PATHEXT",
+        "LOCALAPPDATA", "APPDATA", "HOME", "USERPROFILE", "PATH", "PATHEXT", "CFGDASH_MCP_CAPABILITY",
     ];
 
     public const string PresenceMarker = "[set]";

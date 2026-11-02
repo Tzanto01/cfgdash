@@ -13,6 +13,7 @@ import { listDirs, resolveDir } from './dirs.mjs';
 import { editsApi } from './edits.mjs';
 import { fleetApi, withDriftFindings } from './fleet.mjs';
 import { platformApi } from './platform.mjs';
+import { assistantApi } from './assistant.mjs';
 import { search } from './search.mjs';
 import { findings } from './health.mjs';
 
@@ -95,6 +96,8 @@ async function api(req, res, url) {
   if (latency) await new Promise((r) => setTimeout(r, latency));
   if (opts.auth && !hasCookie(req) && !isBearer(req)) return send(res, 401, { error: 'unauthenticated' });
   if (opts.forbid) return send(res, 403, { error: 'forbidden', reason: 'tailnet-identity' });
+  const assistant = await assistantApi(req, res, url);
+  if (assistant) return assistant === true ? undefined : send(res, assistant[0], assistant[1]);
   const platform = await platformApi(req, url);
   if (platform) return send(res, platform[0], platform[1]);
   const v2 = await editsApi(req, url);

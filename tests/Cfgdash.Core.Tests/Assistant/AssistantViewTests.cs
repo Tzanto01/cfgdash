@@ -1,0 +1,166 @@
+using Cfgdash.Core.Assistant;
+using Cfgdash.Core.Tests.Support;
+using Cfgdash.Core.Infrastructure;
+using Cfgdash.Core.Snapshot;
+using static Cfgdash.Core.Tests.Assistant.AssistantViewFixture;
+
+namespace Cfgdash.Core.Tests.Assistant;
+
+public sealed class AssistantViewTests : IDisposable
+{
+    private readonly AssistantViewFixture f = new();
+
+    public void Dispose() => f.Dispose();
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Memory_transcript_and_usage_sections_are_always_dropped(bool inCompany)
+    {
+        var view = f.View(inCompany);
+
+        var ids = view.Snapshot.Sections.Select(s => s.CollectorId).Concat(view.Snapshot.Collectors.Select(c => c.Id)).ToHashSet();
+        Assert.DoesNotContain("engram.memory", ids);
+        Assert.DoesNotContain("sessions.transcripts", ids);
+        Assert.DoesNotContain("usage.metrics", ids);
+        Assert.Contains("settings.effective", ids);
+    }
+
+    [Fact]
+    public void Outside_the_company_layer_company_rows_nodes_cells_and_sources_are_dropped()
+    {
+        var view = f.View(false);
+
+        Assert.Equal(["plain", "other-flag"], KvKeys(view, "settings.effective", "kv"));
+        Assert.Equal(["plain-row"], RowIds(view, "agents.definitions", "table"));
+        Assert.Equal(["plain-node", "plain-child"], NodeIds(view, "instructions.chain", "tree"));
+    }
+
+    [Fact]
+    public void Outside_the_company_layer_the_company_core_collector_and_layer_path_are_dropped()
+    {
+        var view = f.View(false);
+
+        Assert.DoesNotContain(view.Snapshot.Sections, s => s.CollectorId == "agents.company-core");
+        Assert.DoesNotContain(view.Snapshot.Collectors, c => c.Id == "agents.company-core");
+        Assert.DoesNotContain(view.Snapshot.Context.Paths, p => p.Key == PathKeys.CompanyLayer);
+        Assert.Contains(view.Snapshot.Context.Paths, p => p.Key == PathKeys.ClaudeConfigDir);
+    }
+
+    [Fact]
+    public void Inside_the_company_layer_company_items_core_and_layer_path_are_kept()
+    {
+        var view = f.View(true);
+
+        Assert.Equal(["plain", "flagged", "company-source", "company-contribution", "other-flag"], KvKeys(view, "settings.effective", "kv"));
+        Assert.Equal(["plain-row", "badged-row", "company-file-row", "company-cell-row"], RowIds(view, "agents.definitions", "table"));
+        Assert.Equal(["plain-node", "plain-child", "badged-node", "badged-child", "company-file-node"], NodeIds(view, "instructions.chain", "tree"));
+        Assert.Contains(view.Snapshot.Sections, s => s.CollectorId == "agents.company-core");
+        Assert.Contains(view.Snapshot.Context.Paths, p => p.Key == PathKeys.CompanyLayer);
+    }
+
+    [Fact]
+    public void Files_hold_only_files_referenced_by_kept_sections_outside_the_company_layer()
+    {
+        var view = f.View(false);
+
+        var expected = new[] { f.Plain.Id, f.Plain2.Id }.Order().ToArray();
+        Assert.Equal(expected, view.Files.All.Select(x => x.Ref.Id).Order().ToArray());
+        Assert.Equal(expected, view.Snapshot.Files.Select(x => x.Id).Order().ToArray());
+        foreach (var id in new[] { f.Orphan.Id, f.Memory.Id, f.CoreOnly.Id, f.BadgedChildFile.Id, "dangling" }.Concat(f.CompanyFiles.Select(c => c.Id)))
+        {
+            Assert.False(view.Files.TryGet(id, out _), id);
+        }
+    }
+
+    [Fact]
+    public void Inside_the_company_layer_files_include_company_and_core_files_but_still_not_unreferenced_or_excluded_ones()
+    {
+        var view = f.View(true);
+
+        var expected = new[] { f.Plain.Id, f.Plain2.Id, f.CoreOnly.Id, f.BadgedChildFile.Id }.Concat(f.CompanyFiles.Select(c => c.Id)).Order().ToArray();
+        Assert.Equal(expected, view.Files.All.Select(x => x.Ref.Id).Order().ToArray());
+        Assert.Equal(expected, view.Snapshot.Files.Select(x => x.Id).Order().ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_plain_file_that_a_company_flagged_row_points_at_is_treated_as_company_outside_the_layer(bool inCompany)
+    {
+        var view = f.Create(SettingsWithCompanyHook(Path.Combine(f.CompanyPrefix, "hooks", "guard.sh")), f.Registry, inCompany ? f.InsideDir : f.OutsideDir);
+
+        Assert.Equal(inCompany ? ["hooks", "model"] : ["model"], KvKeys(view, "settings.effective", "kv"));
+        Assert.Equal(inCompany, view.Files.TryGet(f.Plain.Id, out _));
+    }
+
+    [Fact]
+    public void A_row_without_a_company_path_stays_visible_although_its_file_is_unreadable_for_the_assistant()
+    {
+        var view = f.Create(SettingsWithCompanyHook(Path.Combine(f.CompanyPrefix, "hooks", "guard.sh")), f.Registry, f.OutsideDir);
+
+        var model = Assert.Single(view.Snapshot.Sections.Single(s => s.CollectorId == "settings.effective").Blocks.OfType<KvBlock>().Single().Rows, r => r.Key == "model");
+        Assert.Equal(f.Plain.Id, model.Source?.FileId);
+        Assert.False(view.Files.TryGet(f.Plain.Id, out _));
+    }
+
+    [Theory]
+    [InlineData("~/ws/company/hooks/guard.sh")]
+    [InlineData("$HOME/ws/company/hooks/guard.sh")]
+    [InlineData("%USERPROFILE%\\ws\\company\\hooks\\guard.ps1")]
+    [InlineData("Read(//c/Users/user/ws/company/**)")]
+    [InlineData("pwsh -File $env:USERPROFILE\\ws\\company\\guard.ps1")]
+    [InlineData("bash $WORKSPACE_ROOT/company/hooks/guard.sh")]
+    [InlineData("bash ../company/hooks/guard.sh")]
+    [InlineData("C:\\Users\\USER~1\\ws\\\\company\\guard.ps1")]
+    [InlineData("C:\\Users\\user\\ws\\COMPAN~1\\guard.ps1")]
+    [InlineData("/opt/ws/company:/opt/lib")]
+    [InlineData("Directory not found: /opt/ws/company.")]
+    [InlineData("node company/hooks/guard.js")]
+    [InlineData("@company/AGENTS.md")]
+    [InlineData("Read:\\ncompany/notes.md")]
+    public void Any_spelling_of_a_company_path_is_dropped(string command)
+    {
+        var companyUnderHome = f.Tree.Dir("home/user/ws/company");
+        var environment = TestEnvironments.Create(f.Tree, companyPrefixes: [companyUnderHome]);
+
+        var view = AssistantView.Create(new SnapshotResult(SettingsWithCompanyHook(command), f.Registry), environment, f.OutsideDir);
+
+        Assert.Equal(["model"], KvKeys(view, "settings.effective", "kv"));
+    }
+
+    [Fact]
+    public void Collector_notes_and_reasons_naming_a_company_path_are_dropped()
+    {
+        var companyNote = "parse error in " + Path.Combine(f.CompanyPrefix, "plugins", "hooks.json");
+        var snapshot = Snap([]) with { Collectors = [Status("hooks.registered", "hooks") with { Reason = companyNote, Notes = [companyNote, "plain note"] }] };
+
+        var status = Assert.Single(f.Create(snapshot, f.Registry, f.OutsideDir).Snapshot.Collectors);
+
+        Assert.Null(status.Reason);
+        Assert.Equal(["plain note"], status.Notes);
+    }
+
+    [Fact]
+    public void A_file_whose_node_references_a_company_file_is_unreadable_while_its_node_stays()
+    {
+        var snapshot = Snap(
+        [
+            new Section("instructions.chain", "instructions", "Instructions",
+                [new TreeBlock("tree", "Tree", [new TreeNode("importer", "CLAUDE.md", [new TreeNode("import", "AGENTS.md", [], f.CompanyNodeFile.Id)], f.Plain.Id)])]),
+        ]);
+
+        var view = f.Create(snapshot, f.Registry, f.OutsideDir);
+
+        Assert.Equal(["importer"], NodeIds(view, "instructions.chain", "tree"));
+        Assert.False(view.Files.TryGet(f.Plain.Id, out _));
+    }
+
+    private HarnessSnapshot SettingsWithCompanyHook(string command) => Snap(
+    [
+        new Section("hooks.registered", "hooks", "Hooks",
+            [new TableBlock("hooks", "Hooks", [new TableColumn("name", "Name")], [Row("company-hook", f.Plain.Id, ["company"])])]),
+        new Section("settings.effective", "settings", "Settings",
+            [new KvBlock("kv", "KV", [Kv("hooks", f.Plain.Id, value: command), Kv("model", f.Plain.Id, value: "sonnet")])]),
+    ]);
+}
