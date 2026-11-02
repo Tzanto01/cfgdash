@@ -4,7 +4,7 @@ internal sealed record SettingCategory(string Id, string Label);
 
 internal sealed record SettingDefinition(string Key, string Category, string Label, string Description, string Type,
     IReadOnlyList<string>? Options, IReadOnlyList<string> Scopes, string Doc, string DocRead, IReadOnlyList<string>? UserOnlyOptions = null,
-    double? Min = null, double? Max = null, bool Integer = false);
+    double? Min = null, double? Max = null, bool Integer = false, AssistantPolicy? Assistant = null);
 
 /// <summary>
 /// Editable Claude Code settings.json keys, transcribed from the settings reference at
@@ -40,7 +40,46 @@ internal static class SettingsCatalogData
         new("config", "Config"),
     ];
 
-    public static IReadOnlyList<SettingDefinition> Settings { get; } =
+    /// <summary>Assistant policy per catalog key (docs/contracts/assistant-v1.md); keys not listed are deny.</summary>
+    public static IReadOnlyDictionary<string, AssistantPolicy> AssistantPolicies { get; } = Policies(
+        (new(AssistantKind.Free, UserScope: true),
+        [
+            "theme", "editorMode", "verbose", "viewMode", "tui", "spinnerTipsEnabled", "showTurnDuration", "prefersReducedMotion",
+            "syntaxHighlightingDisabled", "terminalProgressBarEnabled", "promptSuggestionEnabled", "emojiCompletionEnabled", "autoScrollEnabled",
+            "wheelScrollAccelerationEnabled", "awaySummaryEnabled", "timeFormat", "timeZone", "maxProseWidth", "respectGitignore", "showThinkingSummaries",
+        ]),
+        (new(AssistantKind.Free),
+        [
+            "model", "effortLevel", "alwaysThinkingEnabled", "outputStyle", "autoCompactEnabled", "fileCheckpointingEnabled",
+        ]),
+        (new(AssistantKind.TightenOnly, AssistantDirection.True, UserScope: true),
+        [
+            "sandbox.enabled", "sandbox.failIfUnavailable", "sandbox.network.strictAllowlist", "permissions.blockReadsOutsideWorkingDirectories",
+            "disableSkillShellExecution", "isolatePeerMachines", "disableRemoteControl", "disableClaudeAiConnectors",
+        ]),
+        (new(AssistantKind.TightenOnly, AssistantDirection.False, UserScope: true),
+        [
+            "sandbox.allowUnsandboxedCommands", "sandbox.autoAllowBashIfSandboxed", "sandbox.enableWeakerNestedSandbox", "sandbox.enableWeakerNetworkIsolation",
+            "sandbox.network.allowAllUnixSockets", "sandbox.network.allowLocalBinding", "sandbox.allowAppleEvents", "sandbox.allowNestedUserNamespaces",
+            "sandbox.filesystem.disabled", "skipWebFetchPreflight", "remoteControlAtStartup",
+        ]),
+        (new(AssistantKind.TightenOnly, AssistantDirection.Disable, UserScope: true),
+        [
+            "disableAutoMode", "permissions.disableAutoMode", "permissions.disableBypassPermissionsMode",
+        ]),
+        (new(AssistantKind.TightenOnly, AssistantDirection.Subset, UserScope: true),
+        [
+            "permissions.allow", "permissions.additionalDirectories", "sandbox.excludedCommands", "sandbox.filesystem.allowRead", "sandbox.filesystem.allowWrite",
+            "sandbox.network.allowedDomains", "sandbox.network.allowUnixSockets", "sandbox.network.allowMachLookup", "allowedHttpHookUrls",
+            "httpHookAllowedEnvVars", "enabledMcpjsonServers",
+        ]),
+        (new(AssistantKind.TightenOnly, AssistantDirection.Superset, UserScope: true),
+        [
+            "permissions.deny", "permissions.ask", "sandbox.filesystem.denyRead", "sandbox.filesystem.denyWrite", "sandbox.network.deniedDomains",
+            "disabledMcpjsonServers",
+        ]));
+
+    public static IReadOnlyList<SettingDefinition> Settings { get; } = WithPolicies(
     [
         E("advisorModel", "model", "Advisor model", "string", Any, "advisormodel", "Model that answers advisor tool calls; unset leaves advisor off."),
         E("agent", "agents", "Main thread agent", "string", Any, "agent", "Runs the main thread as a named subagent; --agent overrides per session."),
@@ -206,7 +245,13 @@ internal static class SettingsCatalogData
         new SettingDefinition("configAutoPull", "config", "Config auto-pull",
             "Pulls configuration updates automatically; the CC_CONFIG_AUTOPULL environment variable overrides it.", "bool",
             null, ["machine"], "docs/contracts/edits-v1.md", ReadOn),
-    ];
+    ]);
+
+    private static Dictionary<string, AssistantPolicy> Policies(params (AssistantPolicy Policy, string[] Keys)[] groups) =>
+        groups.SelectMany(g => g.Keys.Select(k => (Key: k, g.Policy))).ToDictionary(p => p.Key, p => p.Policy, StringComparer.Ordinal);
+
+    private static SettingDefinition[] WithPolicies(IReadOnlyList<SettingDefinition> settings) =>
+        [.. settings.Select(s => s with { Assistant = AssistantPolicies.GetValueOrDefault(s.Key) })];
 
     private static SettingDefinition E(string key, string category, string label, string type, IReadOnlyList<string> scopes,
         string anchor, string description, IReadOnlyList<string>? options = null, double? min = null, double? max = null, bool integer = false) =>

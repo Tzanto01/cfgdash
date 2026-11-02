@@ -102,6 +102,44 @@ internal static class EditCatalog
         }
     }
 
+    /// <summary>
+    /// True when the assistant policy of <paramref name="definition"/> forbids the change: no policy, user scope without
+    /// <see cref="AssistantPolicy.UserScope"/>, any tighten-only unset, a value other than the safer one, a <c>Subset</c> list
+    /// adding an item absent from <paramref name="current"/> (the raw value in the target file), or a <c>Superset</c> list dropping one.
+    /// </summary>
+    public static bool AssistantDenied(SettingDefinition definition, string scope, JsonNode? current, JsonNode? value, bool unset)
+    {
+        if (definition.Assistant is not { } policy || (scope == "user" && !policy.UserScope))
+        {
+            return true;
+        }
+
+        if (policy.Kind == AssistantKind.Free)
+        {
+            return false;
+        }
+
+        if (unset)
+        {
+            return true;
+        }
+
+        return policy.Direction switch
+        {
+            AssistantDirection.True => value?.GetValueKind() != JsonValueKind.True,
+            AssistantDirection.False => value?.GetValueKind() != JsonValueKind.False,
+            AssistantDirection.Disable => !IsString(value) || value!.GetValue<string>() != "disable",
+            AssistantDirection.Subset => value is not JsonArray added || !Items(added).IsSubsetOf(Items(current)),
+            AssistantDirection.Superset => value is not JsonArray kept || !Items(kept).IsSupersetOf(Items(current)),
+            _ => true,
+        };
+    }
+
+    private static HashSet<string> Items(JsonNode? list) =>
+        list is JsonArray array
+            ? array.Select(item => item is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : "\0" + (item?.ToJsonString() ?? "null")).ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+
     private static bool IsString(JsonNode? node) =>
         node is JsonValue value && value.GetValueKind() == JsonValueKind.String && value.GetValue<string>().Length <= MaxStringLength;
 }
