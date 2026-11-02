@@ -9,6 +9,7 @@ import { VIEW_DEFINITIONS } from '../lib/views';
 import { OverviewPage } from '../pages/OverviewPage';
 import { ViewPage } from '../pages/ViewPage';
 import { AnnouncerProvider, useAnnounce } from '../state/announcer';
+import { AssistantProvider } from '../state/assistant';
 import { FindingsProvider } from '../state/findings';
 import { SnapshotProvider, useSnapshotStore } from '../state/snapshot';
 import { applyTheme, useTheme } from '../state/theme';
@@ -163,13 +164,15 @@ export function App() {
       <SnapshotProvider>
         <FindingsProvider>
           <UiProvider>
-            <TooltipProvider delayDuration={300}>
-              <LazyMotion features={loadMotionFeatures} strict>
-                <MotionConfig reducedMotion="user">
-                  <Root />
-                </MotionConfig>
-              </LazyMotion>
-            </TooltipProvider>
+            <AssistantProvider>
+              <TooltipProvider delayDuration={300}>
+                <LazyMotion features={loadMotionFeatures} strict>
+                  <MotionConfig reducedMotion="user">
+                    <Root />
+                  </MotionConfig>
+                </LazyMotion>
+              </TooltipProvider>
+            </AssistantProvider>
           </UiProvider>
         </FindingsProvider>
       </SnapshotProvider>

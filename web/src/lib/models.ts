@@ -421,3 +421,28 @@ export interface CompareResponse {
     rows: { blockId: string; itemId: string; change: CompareChange; left?: JsonValue; right?: JsonValue }[];
   }[];
 }
+
+/** `GET /api/v2/assistant/status` (assistant-v1). */
+export interface AssistantStatus {
+  available: boolean;
+  reason?: string;
+  claudePath?: string;
+  claudeVersion?: string;
+  models: string[];
+  sessions: { id: string; dir: string; model: string; effort: string; live: boolean; costUsd: number }[];
+}
+
+/** A context reference sent with an assistant message: ids only, never content. */
+export type ContextRef =
+  | { kind: 'row'; collectorId: string; blockId: string; itemId: string }
+  | { kind: 'file'; fileId: string }
+  | { kind: 'finding'; findingId: string };
+
+/** The `proposal` event of the assistant stream: an edits-v1 proposal plus the model's rationale. */
+export interface AssistantProposal {
+  proposalId: string;
+  expiresAt: string;
+  files: ProposalFile[];
+  confirm: string;
+  rationale?: string;
+}
