@@ -69,7 +69,7 @@ function put(body) {
     } else changes.push([key, value]);
   }
   for (const [key, value] of changes) {
-    if (!RULES[key]) return invalid(key, 'unknown-key');
+    if (!Object.hasOwn(RULES, key)) return invalid(key, 'unknown-key');
     const reason = RULES[key](value);
     if (reason) return invalid(key, reason);
   }

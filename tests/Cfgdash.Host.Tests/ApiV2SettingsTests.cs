@@ -147,6 +147,21 @@ public sealed class ApiV2SettingsTests
     }
 
     [Fact]
+    public async Task An_unparseable_config_file_blocks_start_at_login_before_the_os_entry_changes()
+    {
+        var os = new FakeAutostart();
+        await using var host = await StartAsync(os);
+        Directory.CreateDirectory(host.ConfigDir);
+        await File.WriteAllTextAsync(ConfigFile(host), "{ \"theme\": \"dark\", }");
+
+        var response = await PutAsync(host, "{ \"startAtLogin\": true }");
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("parse-error", response.Reason);
+        Assert.Empty(os.Sets);
+    }
+
+    [Fact]
     public async Task A_put_without_start_at_login_never_touches_the_os_entry()
     {
         var os = new FakeAutostart();

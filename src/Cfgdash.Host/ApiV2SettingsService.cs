@@ -39,24 +39,27 @@ internal sealed class CfgdashSettingsService(CfgdashConfig config, IAutostart au
             }
 
             var values = (JsonObject)partial!;
+            if (values.ContainsKey("startAtLogin") && config.CheckWritable() is { } blocked)
+            {
+                return Failure(blocked);
+            }
+
             if (values["startAtLogin"] is JsonValue value && value.TryGetValue<bool>(out var on)
                 && await autostart.SetAsync(on, ct) is { } reason)
             {
                 return (500, new JsonObject { ["error"] = "autostart-failed", ["reason"] = reason });
             }
 
-            return config.Write(values, listener) switch
-            {
-                null => (200, await GetAsync(ct)),
-                "parse-error" => (400, InvalidSetting(null, "parse-error")),
-                var failure => (500, new JsonObject { ["error"] = "write-failed", ["reason"] = failure }),
-            };
+            return config.Write(values, listener) is { } failure ? Failure(failure) : (200, await GetAsync(ct));
         }
         finally
         {
             gate.Release();
         }
     }
+
+    private static (int Status, JsonObject Body) Failure(string reason) =>
+        reason == "parse-error" ? (400, InvalidSetting(null, reason)) : (500, new JsonObject { ["error"] = "write-failed", ["reason"] = reason });
 
     internal static JsonObject InvalidSetting(string? key, string reason) =>
         new() { ["error"] = "invalid-setting", ["key"] = key, ["reason"] = reason };

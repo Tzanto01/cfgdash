@@ -145,6 +145,24 @@ public sealed partial class CfgdashConfig(string configDir, string cacheDir, Tim
     /// Merges a partial that passed <see cref="Validate"/> into the file and audits the write (no values are logged).
     /// Null on success, else <c>unsafe-path</c>, <c>parse-error</c> (the existing file is kept) or <c>write-failed</c>.
     /// </summary>
+    /// <summary>Null when <see cref="Write"/> can merge into the file, else <c>unsafe-path</c>, <c>parse-error</c> or <c>write-failed</c>. Nothing is written.</summary>
+    public string? CheckWritable()
+    {
+        if (!IsSafePath(configDir))
+        {
+            return "unsafe-path";
+        }
+
+        try
+        {
+            return !File.Exists(FilePath) || JsonEdit.Parse(File.ReadAllBytes(FilePath), "\n", out _) is not null ? null : "parse-error";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return "write-failed";
+        }
+    }
+
     public string? Write(JsonObject partial, string listener)
     {
         if (!IsSafePath(configDir))

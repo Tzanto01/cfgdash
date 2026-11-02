@@ -116,8 +116,8 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
             return true;
         }
 
-        return IsNeverReadName(full) || IsNeverReadName(PathUtil.LongPath(full)) || !PathUtil.TryRealPath(full, out var real) || PathUtil.IsNetworkPath(real)
-            || IsNeverReadName(real) || IsNeverReadName(PathUtil.LongPath(real));
+        return IsNeverReadName(full) || !PathUtil.TryRealPath(full, out var real) || PathUtil.IsNetworkPath(real)
+            || IsNeverReadName(real) || IsNeverReadName(PathUtil.LongPath(full)) || IsNeverReadName(PathUtil.LongPath(real));
     }
 
     private static bool IsNeverReadName(string full)

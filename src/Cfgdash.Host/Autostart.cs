@@ -117,7 +117,17 @@ internal sealed class SystemdAutostart(IProcessRunner processes, string? systemc
             return new AutostartState("off");
         }
 
-        if (await File.ReadAllTextAsync(unitPath, ct) != Unit(exePath))
+        string content;
+        try
+        {
+            content = await File.ReadAllTextAsync(unitPath, ct);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new AutostartState("on", "the unit file cannot be read");
+        }
+
+        if (content != Unit(exePath))
         {
             return new AutostartState("on", "the unit file differs from the expected one");
         }

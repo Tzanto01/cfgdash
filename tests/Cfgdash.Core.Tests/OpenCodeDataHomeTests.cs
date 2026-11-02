@@ -46,8 +46,8 @@ public sealed class OpenCodeDataHomeTests
     }
 
     [Fact]
-    public void The_runtime_allowlist_contains_xdg_data_home()
+    public void The_allowlist_reader_accepts_xdg_data_home()
     {
-        Assert.Contains("XDG_DATA_HOME", HarnessEnvAllowlist.Runtime);
+        Assert.Null(Record.Exception(() => new AllowlistEnvironmentReader().Get("XDG_DATA_HOME")));
     }
 }
