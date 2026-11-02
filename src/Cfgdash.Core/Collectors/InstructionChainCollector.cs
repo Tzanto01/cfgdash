@@ -26,10 +26,13 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
 
     public CollectorManifest Manifest { get; } = new("instructions.chain", "Instruction chain", "1.0.0", "instructions", new Requirements(TargetDir: true));
 
+    /// <summary>The existence probe for referenced files; it only ever sees paths that passed the never-read rules.</summary>
+    internal Func<string, bool> ReferenceExists { get; init; } = File.Exists;
+
     public async Task<CollectorResult> CollectAsync(CollectContext context, CancellationToken cancellationToken)
     {
         var stack = await settings.LoadAsync(context, cancellationToken);
-        var chain = new Chain(context, stack);
+        var chain = new Chain(context, stack, ReferenceExists);
         var target = stack.TargetDir;
 
         if (locations.ManagedDir is { } managedDir)
@@ -95,7 +98,7 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
 
     private sealed record Import(string Raw, string Path);
 
-    private sealed class Chain(CollectContext context, SettingsStack stack)
+    private sealed class Chain(CollectContext context, SettingsStack stack, Func<string, bool> referenceExists)
     {
         private readonly List<Node> top = [];
         private readonly HashSet<string> shown = new(PathUtil.Comparer);
@@ -355,7 +358,7 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
                 var hash = raw.IndexOf('#');
                 var reference = hash < 0 ? raw : raw[..hash];
                 var target = Resolve(reference, dir, null);
-                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || PathUtil.IsNetworkPath(target) || !File.Exists(target) || importTargets.Contains(target) || FileRegistry.IsNeverRead(target) || PathUtil.RealPath(target) is var real && (chain.Contains(real, PathUtil.Comparer) || !seen.Add(real)))
+                if (target is null || !target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || PathUtil.IsNetworkPath(target) || FileRegistry.IsNeverRead(target) || !referenceExists(target) || importTargets.Contains(target) || PathUtil.RealPath(target) is var real && (chain.Contains(real, PathUtil.Comparer) || !seen.Add(real)))
                 {
                     continue;
                 }
