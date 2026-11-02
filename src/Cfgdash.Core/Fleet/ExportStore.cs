@@ -81,6 +81,10 @@ public static class ExportStore
         {
             throw new InvalidDataException($"export {id} is not valid JSON", e);
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidDataException($"export {id} could not be read", e);
+        }
 
         if (node is not JsonObject snapshot || snapshot["machine"] is not JsonObject || snapshot["sections"] is not JsonArray)
         {

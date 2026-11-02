@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -13,13 +12,19 @@ internal interface IConnectionOwner
     bool IsTailscaleDaemon(IPEndPoint remote, IPEndPoint local);
 }
 
-/// <summary>Linux: the client socket in <c>/proc/net/tcp</c> or <c>/proc/net/tcp6</c> is owned by uid 0. Windows: the owning process from <c>GetExtendedTcpTable</c> is <c>tailscaled</c>. Other platforms: never.</summary>
+/// <summary>Linux: the ESTABLISHED client socket in <c>/proc/net/tcp</c> or <c>/proc/net/tcp6</c> is owned by uid 0. Windows: the owning PID of the ESTABLISHED client socket from <c>GetExtendedTcpTable</c> is the PID of the running <c>Tailscale</c> service. Other platforms: never.</summary>
 internal sealed class TailscaleConnectionOwner : IConnectionOwner
 {
     private const int TcpTableOwnerPidAll = 5;
     private const uint ErrorInsufficientBuffer = 122;
     private const int Ipv4RowSize = 24;
     private const int Ipv6RowSize = 56;
+    private const int MibTcpStateEstab = 5;
+    private const uint ScManagerConnect = 0x0001;
+    private const uint ServiceQueryStatus = 0x0004;
+    private const int ScStatusProcessInfo = 0;
+    private const int ServiceStatusProcessSize = 36;
+    private const int ServiceRunning = 4;
 
     /// <inheritdoc/>
     public bool IsTailscaleDaemon(IPEndPoint remote, IPEndPoint local)
@@ -44,7 +49,7 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         }
     }
 
-    /// <summary>True when exactly one line of <paramref name="procNetTcpText"/> (the <c>/proc/net/tcp</c> or <c>tcp6</c> format) has <paramref name="remote"/> as its local address, <paramref name="local"/> as its remote address, and uid 0.</summary>
+    /// <summary>True when exactly one line of <paramref name="procNetTcpText"/> (the <c>/proc/net/tcp</c> or <c>tcp6</c> format) has <paramref name="remote"/> as its local address, <paramref name="local"/> as its remote address, state ESTABLISHED (<c>01</c>), and uid 0.</summary>
     internal static bool IsRootOwned(string procNetTcpText, IPEndPoint remote, IPEndPoint local)
     {
         if (!BitConverter.IsLittleEndian)
@@ -56,6 +61,7 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         var server = Encode(local);
         var matches = 0;
         string? uid = null;
+        string? state = null;
         foreach (var line in procNetTcpText.Split('\n').Skip(1))
         {
             var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -67,10 +73,11 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
             }
 
             matches++;
+            state = fields[3];
             uid = fields[7];
         }
 
-        return matches == 1 && uid == "0";
+        return matches == 1 && state == "01" && uid == "0";
     }
 
     private static string Encode(IPEndPoint endpoint)
@@ -129,12 +136,47 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         {
             if (FindOwnerPid(r, l) is int pid)
             {
-                using var process = Process.GetProcessById(pid);
-                return string.Equals(process.ProcessName, "tailscaled", StringComparison.OrdinalIgnoreCase);
+                return TailscaleServicePid() is int servicePid && pid == servicePid;
             }
         }
 
         return false;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static int? TailscaleServicePid()
+    {
+        var scm = OpenSCManagerW(null, null, ScManagerConnect);
+        if (scm == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        var service = IntPtr.Zero;
+        var buffer = Marshal.AllocHGlobal(ServiceStatusProcessSize);
+        try
+        {
+            service = OpenServiceW(scm, "Tailscale", ServiceQueryStatus);
+            if (service == IntPtr.Zero
+                || !QueryServiceStatusEx(service, ScStatusProcessInfo, buffer, ServiceStatusProcessSize, out _)
+                || Marshal.ReadInt32(buffer, 4) != ServiceRunning)
+            {
+                return null;
+            }
+
+            var pid = Marshal.ReadInt32(buffer, 28);
+            return pid != 0 ? pid : null;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+            if (service != IntPtr.Zero)
+            {
+                CloseServiceHandle(service);
+            }
+
+            CloseServiceHandle(scm);
+        }
     }
 
     [SupportedOSPlatform("windows")]
@@ -182,7 +224,8 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         for (var i = 0; i < count; i++)
         {
             var row = 4 + (i * Ipv4RowSize);
-            if (Marshal.ReadInt32(table, row + 4) == remoteAddr
+            if (Marshal.ReadInt32(table, row) == MibTcpStateEstab
+                && Marshal.ReadInt32(table, row + 4) == remoteAddr
                 && Port(Marshal.ReadInt32(table, row + 8)) == remote.Port
                 && Marshal.ReadInt32(table, row + 12) == localAddr
                 && Port(Marshal.ReadInt32(table, row + 16)) == local.Port)
@@ -208,7 +251,8 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         for (var i = 0; i < count; i++)
         {
             var row = 4 + (i * Ipv6RowSize);
-            if (Port(Marshal.ReadInt32(table, row + 20)) != remote.Port
+            if (Marshal.ReadInt32(table, row + 48) != MibTcpStateEstab
+                || Port(Marshal.ReadInt32(table, row + 20)) != remote.Port
                 || Port(Marshal.ReadInt32(table, row + 44)) != local.Port)
             {
                 continue;
@@ -235,4 +279,26 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
     [DllImport("iphlpapi.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint GetExtendedTcpTable(IntPtr pTcpTable, ref int pdwSize, [MarshalAs(UnmanagedType.Bool)] bool bOrder, int ulAf, int tableClass, uint reserved);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    private static extern IntPtr OpenSCManagerW(string? lpMachineName, string? lpDatabaseName, uint dwDesiredAccess);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    private static extern IntPtr OpenServiceW(IntPtr hSCManager, string lpServiceName, uint dwDesiredAccess);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryServiceStatusEx(IntPtr hService, int infoLevel, IntPtr lpBuffer, int cbBufSize, out int pcbBytesNeeded);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseServiceHandle(IntPtr hSCObject);
 }

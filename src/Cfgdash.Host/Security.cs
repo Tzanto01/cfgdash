@@ -277,10 +277,10 @@ internal sealed class TailnetIdentity(TailnetListenerOptions options, TailscaleC
             && TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags);
     }
 
-    /// <summary>Fleet peer identity (fleet-v1): ignores <c>Tailscale-User-Login</c>; the whois node of the single <c>X-Forwarded-For</c> IP must be an allowed tagged node, or an untagged node of this tailnet owned by an allowed login.</summary>
+    /// <summary>Fleet peer identity (fleet-v1): ignores <c>Tailscale-User-Login</c>; the whois node of the single <c>X-Forwarded-For</c> IP must be a tagged node whose tag is in a non-empty allowed-tags list, or an untagged node of this tailnet owned by an allowed login.</summary>
     public async Task<bool> IsAllowedPeerAsync(HttpRequest request, CancellationToken cancellationToken) =>
         await WhoisForwardedAsync(request, cancellationToken) is { } node
-        && (TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags)
+        && ((options.AllowedTags.Count > 0 && TailnetRules.IsAllowedTaggedNode(node, options.MagicDnsSuffix, options.AllowedTags))
             || (node.Tags.Count == 0
                 && TailnetRules.IsInTailnet(node.Name, options.MagicDnsSuffix)
                 && node.Login is { } login

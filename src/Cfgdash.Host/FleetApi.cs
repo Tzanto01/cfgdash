@@ -54,6 +54,7 @@ internal sealed partial class CfgdashServer
             || !HttpMethods.IsGet(request.Method)
             || request.Path.Value is not ("/api/v1/snapshot" or "/api/v1/findings" or "/api/v1/health")
             || request.QueryString.HasValue
+            || !await Fleet.KernelTunAsync(ctx.RequestAborted)
             || !IsFromTailscaleDaemon(ctx.Connection)
             || !await identity!.IsAllowedPeerAsync(request, ctx.RequestAborted))
         {

@@ -85,7 +85,7 @@ public static class SnapshotDiff
         var context = snapshot["context"] as JsonObject;
         var collectedAt = Str(machine?["collectedAt"]) is { } text
             && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : (DateTimeOffset?)null;
-        var side = new DiffSide(Str(machine?["hostname"]), collectedAt, Str(context?["targetDir"]));
+        var side = new DiffSide(Str(machine?["hostname"]) is { } hostname ? redactor.RedactText(hostname) : null, collectedAt, Str(context?["targetDir"]) is { } targetDir ? redactor.RedactText(targetDir) : null);
 
         var windows = string.Equals(Str((machine?["os"] as JsonObject)?["family"]), "windows", StringComparison.OrdinalIgnoreCase);
         var candidates = new List<(string Key, string Value)>();
@@ -166,7 +166,7 @@ public static class SnapshotDiff
                     case "kv":
                         foreach (var row in Objects(block["rows"]))
                         {
-                            Put(Str(row["key"]), () => row["value"]);
+                            Put(Str(row["key"]), () => Str(row["key"]) is { } key && redactor.IsSecretName(key) ? JsonValue.Create(Redactor.Marker) : redactor.RedactJson(row["value"]));
                         }
 
                         break;

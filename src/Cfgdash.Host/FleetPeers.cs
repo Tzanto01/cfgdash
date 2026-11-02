@@ -45,6 +45,8 @@ internal sealed class FleetPeers
     private readonly Lock gate = new();
     private Task<FleetStatus>? current;
     private DateTimeOffset? expires;
+    private Task<bool>? kernelTun;
+    private DateTimeOffset kernelTunExpires;
 
     public FleetPeers(
         IProcessRunner processes,
@@ -80,6 +82,23 @@ internal sealed class FleetPeers
             }
 
             task = current;
+        }
+
+        return task.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>True when <c>tailscale status --json</c> reports a kernel TUN device (root <c>TUN</c> is <c>true</c>); false without tailscale, on any failure, or in userspace-networking mode. A true result is kept for the life of this instance, anything else for 60 s, one run at a time.</summary>
+    public Task<bool> KernelTunAsync(CancellationToken cancellationToken)
+    {
+        Task<bool> task;
+        lock (gate)
+        {
+            if (kernelTun is null || kernelTun.IsFaulted || (kernelTun.IsCompletedSuccessfully && !kernelTun.Result && time.GetUtcNow() >= kernelTunExpires))
+            {
+                kernelTun = ProbeKernelTunAsync();
+            }
+
+            task = kernelTun;
         }
 
         return task.WaitAsync(cancellationToken);
@@ -168,6 +187,40 @@ internal sealed class FleetPeers
         return Cache(new FleetStatus(self, [.. peers.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.DnsName, StringComparer.OrdinalIgnoreCase)]));
     }
 
+    private async Task<bool> ProbeKernelTunAsync()
+    {
+        await Task.Yield();
+        var tun = false;
+        if (executable is not null)
+        {
+            try
+            {
+                var result = await processes.RunAsync(executable, ["status", "--json"], StatusTimeout, CancellationToken.None);
+                if (!result.TimedOut && result.ExitCode == 0)
+                {
+                    using var document = JsonDocument.Parse(result.StandardOutput);
+                    tun = document.RootElement.ValueKind == JsonValueKind.Object
+                        && document.RootElement.TryGetProperty("TUN", out var value)
+                        && value.ValueKind == JsonValueKind.True;
+                }
+            }
+            catch (Exception)
+            {
+                tun = false;
+            }
+        }
+
+        if (!tun)
+        {
+            lock (gate)
+            {
+                kernelTunExpires = time.GetUtcNow() + CacheFor;
+            }
+        }
+
+        return tun;
+    }
+
     private FleetStatus Cache(FleetStatus status)
     {
         lock (gate)
@@ -230,7 +283,7 @@ internal sealed class FleetPeers
                         ? [.. tagArray.EnumerateArray().Where(t => t.ValueKind == JsonValueKind.String).Select(t => t.GetString()!)]
                         : [];
                     var allowed = tags.Count > 0
-                        ? TailnetRules.IsAllowedTaggedNode(new WhoisNode(dnsName, tags, null), suffix, allowedTags)
+                        ? allowedTags.Count > 0 && TailnetRules.IsAllowedTaggedNode(new WhoisNode(dnsName, tags, null), suffix, allowedTags)
                         : TailnetRules.IsInTailnet(dnsName, suffix)
                             && UserId(peer) is { } userId
                             && users.TryGetValue(userId, out var owner)
