@@ -366,7 +366,7 @@ internal sealed class AssistantProcess
     private static extern int SignalGroup(int pid, int signal);
 
     /// <summary>A Job object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>: closing the handle kills every process in it.</summary>
-    private static class WindowsJob
+    internal static class WindowsJob
     {
         private const int ExtendedLimitInformation = 9;
         private const uint KillOnJobClose = 0x2000;
