@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core;
@@ -19,6 +20,9 @@ internal sealed partial class CfgdashServer
     internal Func<bool> FleetEnabled { get; set; }
 
     internal FleetPeers Fleet { get; set; }
+
+    /// <summary>Decides whether a fleet request's connection comes from the Tailscale daemon itself.</summary>
+    internal IConnectionOwner ConnectionOwner { get; set; } = new TailscaleConnectionOwner();
 
     [MemberNotNull(nameof(exportsDir), nameof(FleetEnabled), nameof(Fleet))]
     private void MapFleet(HostDependencies dependencies)
@@ -50,6 +54,7 @@ internal sealed partial class CfgdashServer
             || !HttpMethods.IsGet(request.Method)
             || request.Path.Value is not ("/api/v1/snapshot" or "/api/v1/findings" or "/api/v1/health")
             || request.QueryString.HasValue
+            || !IsFromTailscaleDaemon(ctx.Connection)
             || !await identity!.IsAllowedPeerAsync(request, ctx.RequestAborted))
         {
             await WriteJsonAsync(ctx, StatusCodes.Status403Forbidden, new { error = "forbidden", reason = "fleet" });
@@ -58,6 +63,11 @@ internal sealed partial class CfgdashServer
 
         await next(ctx);
     }
+
+    private bool IsFromTailscaleDaemon(ConnectionInfo connection) =>
+        connection.RemoteIpAddress is { } remoteIp
+        && connection.LocalIpAddress is { } localIp
+        && ConnectionOwner.IsTailscaleDaemon(new IPEndPoint(remoteIp, connection.RemotePort), new IPEndPoint(localIp, connection.LocalPort));
 
     private async Task FleetAsync(HttpContext ctx) =>
         await WriteJsonAsync(ctx, StatusCodes.Status200OK, await Fleet.GetAsync(ctx.RequestAborted));
