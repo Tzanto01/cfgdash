@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Cfgdash.Core.Infrastructure;
 
 internal static class PathUtil
@@ -71,14 +73,14 @@ internal static class PathUtil
     /// <summary>
     /// Resolves every symlink or junction in <paramref name="path"/>. On non-Windows each link is followed one hop at a time (at most <see cref="MaxLinkHops"/>),
     /// links inside link targets included, and <c>..</c> applies to the resolved parent as the kernel does. Links under <c>/proc/</c> are never followed.
-    /// False when a link loops, cannot be read, lies under <c>/proc/</c> or the chain is too long (non-Windows); <paramref name="real"/> is then a best-effort path and callers must fail closed.
+    /// False when a link loops, cannot be read, lies under <c>/proc/</c> or the chain is too long (non-Windows), or on Windows when the path or a link target is a UNC or device path
+    /// (never probed) or the chain is too long; <paramref name="real"/> is then a best-effort local path, never a refused target, and callers must fail closed.
     /// </summary>
     public static bool TryRealPath(string path, out string real)
     {
         if (OperatingSystem.IsWindows())
         {
-            real = WindowsRealPath(path);
-            return true;
+            return WindowsRealPath(path, out real);
         }
 
         var hops = 0;
@@ -144,38 +146,106 @@ internal static class PathUtil
         return current;
     }
 
-    private static string WindowsRealPath(string path)
+    private static bool WindowsRealPath(string path, out string real)
     {
         var full = Full(path);
+        real = full;
+        if (IsDevicePath(path) || IsDevicePath(full))
+        {
+            return false;
+        }
+
         var root = Path.GetPathRoot(full) ?? string.Empty;
         var current = root;
         var segments = full[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var hops = 0;
         for (var i = 0; i < segments.Length; i++)
         {
             var next = Path.Combine(current, segments[i]);
-            FileSystemInfo info = Directory.Exists(next) ? new DirectoryInfo(next) : new FileInfo(next);
-            if (!info.Exists)
+            var link = LinkTargetOf(next);
+            if (link is null)
             {
-                return Full(Path.Combine([next, .. segments[(i + 1)..]]));
+                if (!Directory.Exists(next) && !File.Exists(next))
+                {
+                    real = Full(Path.Combine([next, .. segments[(i + 1)..]]));
+                    return true;
+                }
+
+                current = next;
+                continue;
             }
 
-            try
+            while (link is not null)
             {
-                var target = info.LinkTarget is null ? null : info.ResolveLinkTarget(true);
-                current = target is null ? next : Full(target.FullName);
+                if (IsDevicePath(link) || ++hops > MaxLinkHops)
+                {
+                    real = Full(Path.Combine([next, .. segments[(i + 1)..]]));
+                    return false;
+                }
+
+                next = Full(Path.IsPathRooted(link) ? link : Path.Combine(Path.GetDirectoryName(next) ?? root, link));
+                link = LinkTargetOf(next);
             }
-            catch (IOException)
-            {
-                current = next;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                current = next;
-            }
+
+            current = next;
         }
 
-        return Full(current);
+        real = Full(current);
+        return true;
     }
+
+    private static bool IsDevicePath(string path) => IsNetworkPath(path) || path.Replace('/', '\\').StartsWith(@"\??\", StringComparison.Ordinal);
+
+    private static string? LinkTargetOf(string path)
+    {
+        try
+        {
+            return new FileInfo(path).LinkTarget;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Windows: expands 8.3 short names (<c>PROGRA~1</c>) to long names through <c>GetLongPathNameW</c>; for a missing path the longest existing ancestor is expanded and the rest re-appended.
+    /// Returns <paramref name="path"/> unchanged on other platforms, for UNC or device paths (no filesystem call) and when the call fails.
+    /// </summary>
+    public static string LongPath(string path)
+    {
+        if (!OperatingSystem.IsWindows() || IsDevicePath(path))
+        {
+            return path;
+        }
+
+        var existing = path;
+        var rest = new List<string>();
+        while (!Directory.Exists(existing) && !File.Exists(existing))
+        {
+            var parent = Path.GetDirectoryName(existing);
+            if (parent is null)
+            {
+                return path;
+            }
+
+            rest.Insert(0, Path.GetFileName(existing));
+            existing = parent;
+        }
+
+        var size = GetLongPathName(existing, null, 0);
+        if (size == 0)
+        {
+            return path;
+        }
+
+        var buffer = new char[size];
+        var length = GetLongPathName(existing, buffer, size);
+        return length == 0 || length >= size ? path : Path.Combine([new string(buffer, 0, (int)length), .. rest]);
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetLongPathNameW")]
+    private static extern uint GetLongPathName(string shortPath, [Out] char[]? longPath, uint bufferLength);
 
     public static IReadOnlyList<string> AncestorsFromRoot(string dir)
     {
