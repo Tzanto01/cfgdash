@@ -3,13 +3,15 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Button } from '../components/ui/button';
 import { api, ApiError, isAbort } from '../lib/api';
-import type { EditScope, Proposal, SettingChange, SettingRow as Row, SettingsCategory, SettingsResponse } from '../lib/models';
+import type { AuditEntry, EditScope, Proposal, SettingChange, SettingRow as Row, SettingsCategory, SettingsResponse } from '../lib/models';
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
+import { ChangeLog } from './ChangeLog';
 import { DiffCard } from './DiffCard';
+import { EditToggle } from './EditToggle';
 import { SCOPE_LABEL, SettingRow } from './SettingRow';
 
 const SCOPES: EditScope[] = ['user', 'project', 'local', 'machine'];
@@ -31,6 +33,7 @@ const INVALID: Record<string, string> = {
   'bad-request': 'The request was not valid',
   'no-change': 'Nothing would change'
 };
+const STALE_UNDO = 'These files changed since that change; undo is no longer safe.';
 const FLOATING = 'sticky z-20 bottom-[calc(56px+env(safe-area-inset-bottom)+8px)] md:bottom-[calc(env(safe-area-inset-bottom)+16px)]';
 
 interface Banner {
@@ -97,6 +100,10 @@ export default function SettingsEditor() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState<'review' | 'apply' | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [audit, setAudit] = useState<{ entries?: AuditEntry[]; failed?: boolean } | null>(null);
+  const [undoOf, setUndoOf] = useState<string | null>(null);
+  const [undoBusy, setUndoBusy] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState<{ auditId: string; text: string } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const reviewRef = useRef<HTMLHeadingElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +116,7 @@ export default function SettingsEditor() {
     setStaged({});
     setFieldErrors({});
     setProposal(null);
+    setUndoOf(null);
     setBanner(null);
   }
 
@@ -132,6 +140,19 @@ export default function SettingsEditor() {
     );
     return () => controller.abort();
   }, [dir, reloads]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.audit(controller.signal).then(
+      (response) => setAudit({ entries: response.entries }),
+      (error: unknown) => {
+        if (!isAbort(error) && !controller.signal.aborted) {
+          setAudit({ failed: true });
+        }
+      }
+    );
+    return () => controller.abort();
+  }, [reloads]);
 
   const current = loaded && loaded.dir === dir ? loaded : null;
   const data = current?.data;
@@ -245,19 +266,55 @@ export default function SettingsEditor() {
     }
   };
 
+  const undo = async (auditId: string) => {
+    if (pending.current) {
+      return;
+    }
+    pending.current = true;
+    setUndoBusy(auditId);
+    setUndoError(null);
+    try {
+      const next = await api.revert(auditId);
+      flushSync(() => {
+        setProposal(next);
+        setUndoOf(auditId);
+        setBanner(null);
+      });
+      reviewRef.current?.focus();
+    } catch (error) {
+      const text =
+        error instanceof ApiError && error.status === 409
+          ? STALE_UNDO
+          : error instanceof ApiError && error.status === 404
+            ? "This change can't be undone: its backup is gone."
+            : error instanceof ApiError && error.status === 403
+              ? FORBIDDEN
+              : "Couldn't prepare the undo.";
+      setUndoError({ auditId, text });
+    } finally {
+      pending.current = false;
+      setUndoBusy(null);
+    }
+  };
+
   const apply = async () => {
     if (pending.current || !proposal) {
       return;
     }
     pending.current = true;
     setBusy('apply');
+    const undoing = undoOf;
+    const askedDir = latest.current.dir;
     try {
       const result = await api.apply(proposal.id, proposal.confirm);
-      const text = `Applied. Audit entry ${result.auditId}.`;
+      const text = `${undoing ? 'Undone' : 'Applied'}. Audit entry ${result.auditId}.`;
       flushSync(() => {
         setProposal(null);
-        setStaged({});
-        setFieldErrors({});
+        setUndoOf(null);
+        if (!undoing && latest.current.dir === askedDir) {
+          setStaged({});
+          setFieldErrors({});
+        }
         setBanner({ tone: 'ok', title: text });
       });
       bannerRef.current?.focus();
@@ -267,7 +324,8 @@ export default function SettingsEditor() {
     } catch (error) {
       flushSync(() => {
         setProposal(null);
-        setBanner(applyFailure(error));
+        setUndoOf(null);
+        setBanner(undoing ? { ...applyFailure(error), retry: undefined } : applyFailure(error));
       });
       bannerRef.current?.focus();
       if (error instanceof ApiError && (error.code === 'write-failed' || error.status === 409)) {
@@ -281,7 +339,10 @@ export default function SettingsEditor() {
   };
 
   const backToEditing = () => {
-    flushSync(() => setProposal(null));
+    flushSync(() => {
+      setProposal(null);
+      setUndoOf(null);
+    });
     headingRef.current?.focus();
   };
 
@@ -334,7 +395,7 @@ export default function SettingsEditor() {
       return (
         <section aria-labelledby={`${baseId}-review`}>
           <h2 ref={reviewRef} id={`${baseId}-review`} tabIndex={-1} className="text-lg font-semibold">
-            Review changes
+            {undoOf ? `Review undo of ${undoOf}` : 'Review changes'}
           </h2>
           <p className="mb-4 text-muted">Dry run: nothing is written until you apply.</p>
           <div className="space-y-4">
@@ -343,7 +404,7 @@ export default function SettingsEditor() {
                 key={`${file.scope}\n${file.path}`}
                 file={file}
                 scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope}
-                gitTracked={data.files.some((f) => f.scope === file.scope && f.gitTracked)}
+                gitTracked={data.files.some((f) => f.path === file.path && f.gitTracked)}
               />
             ))}
           </div>
@@ -352,7 +413,7 @@ export default function SettingsEditor() {
               Back to editing
             </Button>
             <Button variant="primary" aria-busy={busy === 'apply'} onClick={() => void apply()}>
-              {busy === 'apply' ? 'Applying...' : `Apply ${plural(count, 'change')}`}
+              {busy === 'apply' ? 'Applying...' : undoOf ? 'Apply undo' : `Apply ${plural(count, 'change')}`}
             </Button>
           </div>
         </section>
@@ -498,6 +559,18 @@ export default function SettingsEditor() {
             ))
           )}
 
+          <ChangeLog
+            entries={audit?.entries ?? null}
+            failed={audit?.failed === true}
+            busyId={undoBusy}
+            error={undoError}
+            onUndo={(auditId) => void undo(auditId)}
+            onRetry={() => {
+              setAudit(null);
+              setReloads((n) => n + 1);
+            }}
+          />
+
           {changes.length > 0 && (
             <div className={cn(FLOATING, 'flex flex-wrap items-center gap-2 rounded-lg border border-border bg-raised px-4 py-3 shadow-overlay')}>
               <p className="mr-auto font-medium">{plural(changes.length, 'change')} staged</p>
@@ -515,9 +588,14 @@ export default function SettingsEditor() {
   return (
     <>
       <header className="mb-4">
-        <h1 ref={headingRef} tabIndex={-1} className="text-2xl leading-[30px] font-semibold">
-          Edit settings
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl leading-[30px] font-semibold">
+            Edit settings
+          </h1>
+          <span className="ml-auto">
+            <EditToggle />
+          </span>
+        </div>
         {folder && (
           <p className="mt-1 text-muted">
             Folder <span className="mono-value wrap-anywhere">{folder}</span>

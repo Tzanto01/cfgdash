@@ -7,6 +7,7 @@ import {
   Database,
   FileText,
   HeartPulse,
+  Network,
   LayoutGrid,
   Layers,
   Plug,
@@ -35,6 +36,7 @@ export interface ViewDefinition {
 export const VIEW_DEFINITIONS: readonly ViewDefinition[] = [
   { id: 'overview', label: 'Overview', description: 'What this machine is, what is active and where to look next.', group: 'machine', icon: LayoutGrid },
   { id: 'health', label: 'Health', description: 'Problems found in this harness: missing scripts and commands, errors, duplicates and overrides.', group: 'machine', icon: HeartPulse },
+  { id: 'fleet', label: 'Fleet', description: 'Other machines on your tailnet and how this harness differs from them or from an earlier export.', group: 'machine', icon: Network },
   { id: 'settings', label: 'Settings', description: 'Effective Claude Code settings for the folder and where each value comes from.', group: 'harness', icon: SlidersHorizontal },
   { id: 'instructions', label: 'Instructions', description: 'Instruction files loaded for the folder, in load order.', group: 'harness', icon: FileText },
   { id: 'agents', label: 'Agents', description: 'Agent definitions and the company agent cores.', group: 'harness', icon: Bot },
@@ -72,7 +74,7 @@ export interface ViewModel extends ViewDefinition {
   sections: Section[];
   itemCount: number;
   hasUnavailable: boolean;
-  /** Shown in the nav: overview and health always, a view with an active or unavailable collector, other with unknown ids. */
+  /** Shown in the nav: overview, health and fleet always, a view with an active or unavailable collector, other with unknown ids. */
   visible: boolean;
 }
 
@@ -83,6 +85,7 @@ export function buildViews(snapshot: Snapshot): ViewModel[] {
     const visible =
       definition.id === 'overview' ||
       definition.id === 'health' ||
+      definition.id === 'fleet' ||
       (definition.id === 'other'
         ? collectors.length > 0 || sections.length > 0
         : collectors.some((c) => c.state !== 'notPresent'));

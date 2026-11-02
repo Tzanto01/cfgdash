@@ -4,7 +4,7 @@ import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 're
 import { Button } from '../components/ui/button';
 import { TooltipProvider } from '../components/ui/tooltip';
 import { setAccessProblem, useAccessProblem } from '../lib/access';
-import { readParams } from '../lib/url';
+import { mergeSearch, readParams } from '../lib/url';
 import { VIEW_DEFINITIONS } from '../lib/views';
 import { OverviewPage } from '../pages/OverviewPage';
 import { ViewPage } from '../pages/ViewPage';
@@ -23,7 +23,8 @@ const CommandPalette = lazy(loadPalette);
 const SearchPage = lazy(() => import('../pages/SearchPage'));
 const HealthPage = lazy(() => import('../pages/HealthPage'));
 const UsagePage = lazy(() => import('../pages/UsagePage'));
-const SettingsEditor = lazy(() => import('../pages/SettingsEditor'));
+const FleetPage = lazy(() => import('../pages/FleetPage'));
+const CfgdashSettingsPage = lazy(() => import('../pages/CfgdashSettingsPage'));
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -36,7 +37,7 @@ function needsRedirect(pathname: string): boolean {
 
 function pageTitle(pathname: string): string {
   const id = pathname.split('/').filter(Boolean)[0];
-  return id === 'search' ? 'Search' : id === 'edit' ? 'Edit settings' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
+  return id === 'search' ? 'Search' : id === 'cfgdash' ? 'cfgdash settings' : (VIEW_DEFINITIONS.find((v) => v.id === id)?.label ?? 'Nothing here');
 }
 
 function Root() {
@@ -176,6 +177,12 @@ export function App() {
   );
 }
 
+/** `/edit` (v0.4 links) opens the Settings view in edit mode, keeping the query. */
+function EditRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/settings', search: mergeSearch(location.search, { edit: '1' }) }} replace />;
+}
+
 /** Replaces the app when a route fails to render, typically a lazy chunk gone after cfgdash was updated or restarted. */
 function ReloadPanel() {
   return (
@@ -222,11 +229,20 @@ export const routes: RouteObject[] = [
           </Suspense>
         )
       },
+      { path: 'edit', element: <EditRedirect /> },
       {
-        path: 'edit',
+        path: 'fleet',
         element: (
-          <Suspense fallback={<LoadingPanel text="Loading settings..." />}>
-            <SettingsEditor />
+          <Suspense fallback={<LoadingPanel text="Loading fleet..." />}>
+            <FleetPage />
+          </Suspense>
+        )
+      },
+      {
+        path: 'cfgdash',
+        element: (
+          <Suspense fallback={<LoadingPanel text="Loading cfgdash settings..." />}>
+            <CfgdashSettingsPage />
           </Suspense>
         )
       },

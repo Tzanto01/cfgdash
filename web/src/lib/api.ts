@@ -1,9 +1,15 @@
 import { setAccessProblem } from './access';
 import type {
   ApplyResult,
+  AuditResponse,
+  CfgdashPatch,
+  CfgdashSettings,
+  CompareResponse,
   DetailContent,
   DirsResponse,
+  ExportsResponse,
   FileContent,
+  FleetResponse,
   FindingsResponse,
   HealthInfo,
   Proposal,
@@ -68,14 +74,14 @@ async function get<T>(path: string, params: URLSearchParams, signal?: AbortSigna
 }
 
 /**
- * A guarded `/api/v2` POST (edits-v1): JSON body and `X-Cfgdash-Request: 1`. Only 401 goes to the access panel; every
+ * A guarded `/api/v2` POST or PUT (edits-v1): JSON body and `X-Cfgdash-Request: 1`. Only 401 goes to the access panel; every
  * other failure (including 403 from the origin and header checks) is thrown for the caller to show inline.
  */
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
-      method: 'POST',
+      method,
       credentials: 'same-origin',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Cfgdash-Request': '1' },
       body: JSON.stringify(body)
@@ -143,6 +149,28 @@ export const api = {
   },
   apply(id: string, confirm: string): Promise<ApplyResult> {
     return post<ApplyResult>(`/api/v2/proposals/${encodeURIComponent(id)}/apply`, { confirm });
+  },
+  audit(signal?: AbortSignal): Promise<AuditResponse> {
+    return get<AuditResponse>('/api/v2/audit', new URLSearchParams({ limit: '50' }), signal);
+  },
+  /** Dry run of an undo (edits-v1): a proposal that restores that apply's backups. */
+  revert(auditId: string): Promise<Proposal> {
+    return post<Proposal>(`/api/v2/audit/${encodeURIComponent(auditId)}/revert`, {});
+  },
+  cfgdashSettings(signal?: AbortSignal): Promise<CfgdashSettings> {
+    return get<CfgdashSettings>('/api/v2/cfgdash-settings', new URLSearchParams(), signal);
+  },
+  putCfgdashSettings(values: CfgdashPatch): Promise<CfgdashSettings> {
+    return post<CfgdashSettings>('/api/v2/cfgdash-settings', values, 'PUT');
+  },
+  fleet(signal?: AbortSignal): Promise<FleetResponse> {
+    return get<FleetResponse>('/api/v1/fleet', new URLSearchParams(), signal);
+  },
+  exports(signal?: AbortSignal): Promise<ExportsResponse> {
+    return get<ExportsResponse>('/api/v1/exports', new URLSearchParams(), signal);
+  },
+  compare(dir: string | undefined, against: string, signal?: AbortSignal): Promise<CompareResponse> {
+    return get<CompareResponse>('/api/v1/compare', withDir(new URLSearchParams({ against }), dir), signal);
   },
   dirs(path?: string, signal?: AbortSignal): Promise<DirsResponse> {
     return get<DirsResponse>('/api/v1/dirs', path ? new URLSearchParams({ path }) : new URLSearchParams(), signal);

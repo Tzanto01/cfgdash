@@ -81,7 +81,7 @@ export function OverviewPage() {
   }
 
   const collectorsById = new Map(s.collectors.map((c) => [c.id, c]));
-  const tiles = store.navViews.filter((v) => v.id !== 'overview' && v.id !== 'health');
+  const tiles = store.navViews.filter((v) => v.id !== 'overview' && v.id !== 'health' && v.id !== 'fleet');
   const active = s.collectors.filter((c) => c.state === 'active').length;
   const nonActive = s.collectors.filter((c) => c.state !== 'active');
   const collected = formatTime(s.machine.collectedAt);

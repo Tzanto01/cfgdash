@@ -75,7 +75,7 @@ export function NavList({ collapsed = false, onNavigate }: { collapsed?: boolean
                           </span>
                         </>
                       )
-                    ) : !collapsed && (
+                    ) : !collapsed && view.id !== 'fleet' && (
                       <span className="shrink-0 rounded-full border border-border bg-raised px-1 font-mono text-[10px] leading-4 text-muted tabular">
                         {view.itemCount}
                         <span className="sr-only"> items</span>

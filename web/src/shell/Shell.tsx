@@ -135,8 +135,8 @@ function SearchButton() {
   );
 }
 
-/** The header link to the settings editor; only when health says `edits: true`. */
-function EditLink({ iconOnly = false }: { iconOnly?: boolean }) {
+/** The header gear: cfgdash's own settings (cfgdash-config-v1); only when health says `edits: true`. */
+function GearLink() {
   const ui = useUi();
   const url = useUrl();
   if (!ui.edits) {
@@ -144,16 +144,12 @@ function EditLink({ iconOnly = false }: { iconOnly?: boolean }) {
   }
   return (
     <Link
-      to={url.link('/edit')}
-      aria-label="Edit settings"
-      aria-current={url.path === '/edit' ? 'page' : undefined}
-      className={cn(
-        'touch-target inline-flex h-8 items-center gap-1.5 rounded-md text-sm font-medium hover:bg-hover [&_svg]:size-4',
-        iconOnly ? 'size-8 justify-center' : 'border border-border-strong bg-raised px-3'
-      )}
+      to={url.link('/cfgdash')}
+      aria-label="cfgdash settings"
+      aria-current={url.path === '/cfgdash' ? 'page' : undefined}
+      className="touch-target inline-flex size-8 items-center justify-center rounded-md hover:bg-hover [&_svg]:size-4"
     >
       <Settings strokeWidth={1.75} aria-hidden="true" />
-      {!iconOnly && 'Settings'}
     </Link>
   );
 }
@@ -200,9 +196,9 @@ function WideShell() {
           )}
           <span className="flex-1" />
           <SearchButton />
-          {snapshot && <EditLink />}
           {snapshot && <RefreshButton />}
           <ThemeToggle />
+          {snapshot && <GearLink />}
         </header>
         <MainContent className="mx-auto w-full max-w-[1248px] flex-1 p-6" />
       </div>
@@ -243,7 +239,7 @@ function NarrowShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const snapshot = store.snapshot;
   const viewId = url.path.split('/').filter(Boolean)[0] ?? '';
-  const title = viewId === 'search' ? 'Search' : viewId === 'edit' ? 'Edit settings' : (VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '');
+  const title = viewId === 'search' ? 'Search' : viewId === 'cfgdash' ? 'cfgdash settings' : (VIEW_DEFINITIONS.find((v) => v.id === viewId)?.label ?? '');
   const settingsVisible = store.navViews.some((v) => v.id === 'settings');
   return (
     <div className="min-h-screen">
@@ -256,8 +252,8 @@ function NarrowShell() {
         <Button variant="ghost" size="icon" aria-label="Search" aria-haspopup="dialog" onClick={() => ui.setPaletteOpen(true)}>
           <Search strokeWidth={1.75} aria-hidden="true" />
         </Button>
-        {snapshot && <EditLink iconOnly />}
         <ThemeToggle />
+        {snapshot && <GearLink />}
       </header>
       <MainContent className="p-4 pb-[calc(72px+env(safe-area-inset-bottom))]" />
       {snapshot && (
