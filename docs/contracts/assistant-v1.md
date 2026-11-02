@@ -115,6 +115,7 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 ## Accepted residuals
 
 - A turn killed before its result event (timeout, crash) adds no cost to the session budget. Each process still runs under `--max-budget-usd` set to what the session has left.
+- Company paths are matched by the company folder name as a path segment in any spelling. A Windows 8.3 short name of that folder in the hashed form (`COMPAN~1` style with a hash) is not matched.
 - On Linux, a hard kill of cfgdash itself (SIGKILL) can leave the `claude` child running until its stdin closes.
 
 ## Write exceptions
