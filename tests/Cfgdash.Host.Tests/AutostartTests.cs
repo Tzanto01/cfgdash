@@ -44,6 +44,24 @@ public sealed class SystemdAutostartTests : IDisposable
     }
 
     [Fact]
+    public async Task On_keeps_the_callers_path_with_spaces_and_escaped_percent_signs()
+    {
+        var autostart = new SystemdAutostart(Systemd(), Systemctl, UnitPath, Exe, "/home/user/my bin:/opt/100%/bin:/usr/bin");
+
+        Assert.Null(await autostart.SetAsync(true, default));
+
+        Assert.Contains("Environment=\"PATH=/home/user/my bin:/opt/100%%/bin:/usr/bin\"", File.ReadAllLines(UnitPath));
+        Assert.Equal("on", (await autostart.GetAsync(default)).Actual);
+        Assert.Null((await autostart.GetAsync(default)).Detail);
+    }
+
+    [Fact]
+    public void A_path_with_a_control_character_is_refused()
+    {
+        Assert.Null(SystemdAutostart.Unit("/opt/cfgdash", "/usr/bin\nExecStartPre=/bin/true"));
+    }
+
+    [Fact]
     public async Task Written_unit_reads_back_as_on_without_detail()
     {
         var autostart = new SystemdAutostart(Systemd(), Systemctl, UnitPath, Exe);

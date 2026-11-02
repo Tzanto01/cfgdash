@@ -10,6 +10,7 @@
  * Triggers:
  * - env `MOCK_AUTOSTART=fail`: any PUT with `startAtLogin` answers 500 `autostart-failed` and nothing changes;
  * - env `MOCK_AUTOSTART=unsupported`: `startAtLogin.actual` is `unsupported` and any PUT with `startAtLogin` answers 500 `autostart-failed`;
+ * - env `MOCK_CONFIG=unreadable`: GET carries `configError` with default values and any PUT answers 409 `config-unreadable`;
  * - apply A, apply B on the same scope, revert A: 409 `stale`.
  */
 import { randomBytes } from 'node:crypto';
@@ -55,6 +56,7 @@ function view() {
       ...(mode === 'unsupported' ? { detail: UNSUPPORTED } : {}),
     },
     paths: { config: CONFIG_FILE, overrides: OVERRIDES_FILE },
+    ...(process.env.MOCK_CONFIG === 'unreadable' ? { configError: 'config.json is not valid JSON' } : {}),
   };
 }
 
@@ -137,5 +139,5 @@ export async function platformApi(req, url) {
   const body = await readBody(req);
   if (!body) return [403, { error: 'forbidden' }];
   if (revertMatch) return isObject(body.json) ? revert(revertMatch[1]) : [400, { error: 'bad-request' }];
-  return put(body.json);
+  return process.env.MOCK_CONFIG === 'unreadable' ? [409, { error: 'config-unreadable' }] : put(body.json);
 }

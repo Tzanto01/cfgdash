@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Cfgdash.Core.Files;
 using Cfgdash.Core.Infrastructure;
+using Cfgdash.Core.Snapshot;
 using Cfgdash.Core.Tests.Support;
 
 namespace Cfgdash.Core.Tests;
@@ -48,5 +49,23 @@ public sealed class WindowsPathSecurityTests
         Assert.False(PathUtil.IsNetworkPath(real));
         Assert.True(PathUtil.PathEquals(link, real));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2));
+    }
+
+    [WindowsFact]
+    public void A_referenced_link_to_a_unc_target_is_skipped_without_a_network_probe()
+    {
+        using var tree = new TempTree();
+        tree.Dir("app/.git");
+        tree.Write("app/CLAUDE.md", "See docs/remote.md before editing.\n");
+        tree.Dir("app/docs");
+        File.CreateSymbolicLink(tree.Path("app/docs/remote.md"), @"\\192.0.2.1\share\remote.md");
+        var watch = Stopwatch.StartNew();
+
+        var result = InstructionChainFixture.Collect(tree, TestEnvironments.Create(tree), tree.Path("app"), null);
+
+        watch.Stop();
+        var nodes = ((TreeBlock)result.Blocks.Single()).Nodes;
+        Assert.DoesNotContain(nodes.SelectMany(n => n.Children), c => c.Label == "docs/remote.md");
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"took {watch.Elapsed}");
     }
 }
