@@ -29,13 +29,17 @@ public sealed class FleetReceivingTests
 
     private static int WhoisCalls(ServerHost host) => host.Processes.Calls.Count(c => c.Args is ["whois", ..]);
 
-    private static async Task<(ServerHost Host, FakeOwner Owner)> StartAsync(string? whois, bool enabled = true, bool daemon = true, IReadOnlyList<string>? allowedTags = null, string status = """{"TUN": true}""")
+    private static async Task<(ServerHost Host, FakeOwner Owner)> StartAsync(string? whois, bool? enabled = true, bool daemon = true, IReadOnlyList<string>? allowedTags = null, string status = """{"TUN": true}""")
     {
         var host = await ServerHost.StartAsync(ServerHost.TailnetOptions(allowedTags), processes: new FakeProcesses(call =>
             call.Args is ["status", "--json"] ? FakeProcesses.Ok(status)
             : call.Args is ["whois", "--json", _] && whois is not null ? FakeProcesses.Ok(whois) : FakeProcesses.Fail("no such node")));
         var owner = new FakeOwner(daemon);
-        host.Server.FleetEnabled = () => enabled;
+        if (enabled is { } on)
+        {
+            host.Server.FleetEnabled = () => on;
+        }
+
         host.Server.ConnectionOwner = owner;
         return (host, owner);
     }
@@ -112,6 +116,20 @@ public sealed class FleetReceivingTests
 
         Assert.Equal(403, response.Status);
         Assert.Equal(0, WhoisCalls(host));
+    }
+
+    [Fact]
+    public async Task Fleet_enabled_comes_from_the_cfgdash_config_file()
+    {
+        var (host, _) = await StartAsync(WhoisOf("laptop.example.ts.net.", "tagged-devices", "tag:pc"), enabled: null, allowedTags: ["tag:pc"]);
+        await using var _ = host;
+
+        var before = await host.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
+        Directory.CreateDirectory(host.ConfigDir);
+        File.WriteAllText(Path.Combine(host.ConfigDir, "config.json"), """{ "fleet": { "enabled": true } }""");
+        var after = await host.TailAsync("/api/v1/health", bearer: null, headers: [Fleet, Forwarded]);
+
+        Assert.Equal([403, 200], [before.Status, after.Status]);
     }
 
     [Fact]

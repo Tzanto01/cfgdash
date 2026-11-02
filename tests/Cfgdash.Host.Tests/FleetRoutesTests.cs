@@ -365,6 +365,25 @@ public sealed class ConnectionOwnerTests
         Assert.True(TailscaleConnectionOwner.IsRootOwned(Header + Line($"{address}:C350", $"{address}:1F90", 0), client, server));
     }
 
+    [Theory]
+    [InlineData(100, true)]
+    [InlineData(200, true)]
+    [InlineData(300, false)]
+    [InlineData(400, false)]
+    [InlineData(500, false)]
+    public void Only_the_tailscale_service_or_its_same_image_child_owns_the_socket(int ownerPid, bool expected)
+    {
+        var processes = new Dictionary<int, (int ParentPid, string? ImagePath)>
+        {
+            [100] = (4, @"C:\Program Files\Tailscale\tailscaled.exe"),
+            [200] = (100, @"c:\program files\tailscale\TAILSCALED.EXE"),
+            [300] = (100, @"C:\Users\user\AppData\Local\Temp\tailscaled.exe"),
+            [400] = (200, @"C:\Program Files\Tailscale\tailscaled.exe"),
+        };
+
+        Assert.Equal(expected, TailscaleConnectionOwner.IsServiceOrWorker(ownerPid, 100, pid => processes.TryGetValue(pid, out var p) ? p : null));
+    }
+
     [Fact]
     public void Ambiguous_matches_fail_closed()
     {

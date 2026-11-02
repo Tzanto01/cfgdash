@@ -12,7 +12,7 @@ internal interface IConnectionOwner
     bool IsTailscaleDaemon(IPEndPoint remote, IPEndPoint local);
 }
 
-/// <summary>Linux: the ESTABLISHED client socket in <c>/proc/net/tcp</c> or <c>/proc/net/tcp6</c> is owned by uid 0. Windows: the owning PID of the ESTABLISHED client socket from <c>GetExtendedTcpTable</c> is the PID of the running <c>Tailscale</c> service. Other platforms: never.</summary>
+/// <summary>Linux: the ESTABLISHED client socket in <c>/proc/net/tcp</c> or <c>/proc/net/tcp6</c> is owned by uid 0. Windows: the owning PID of the ESTABLISHED client socket from <c>GetExtendedTcpTable</c> is the PID of the running <c>Tailscale</c> service or of a direct child of it with the same image path. Other platforms: never.</summary>
 internal sealed class TailscaleConnectionOwner : IConnectionOwner
 {
     private const int TcpTableOwnerPidAll = 5;
@@ -25,6 +25,9 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
     private const int ScStatusProcessInfo = 0;
     private const int ServiceStatusProcessSize = 36;
     private const int ServiceRunning = 4;
+    private const uint Th32csSnapProcess = 0x2;
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+    private static readonly IntPtr InvalidHandleValue = new(-1);
 
     /// <inheritdoc/>
     public bool IsTailscaleDaemon(IPEndPoint remote, IPEndPoint local)
@@ -136,11 +139,94 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
         {
             if (FindOwnerPid(r, l) is int pid)
             {
-                return TailscaleServicePid() is int servicePid && pid == servicePid;
+                return TailscaleServicePid() is int servicePid && IsServiceOrWorker(pid, servicePid, WindowsProcessInfo);
             }
         }
 
         return false;
+    }
+
+    /// <summary>True when <paramref name="ownerPid"/> is <paramref name="servicePid"/>, or a direct child of it whose image path equals the service's own image path (ordinal, case-insensitive). <paramref name="process"/> returns the parent PID and image path of a PID, or null when unknown; any unknown is false.</summary>
+    internal static bool IsServiceOrWorker(int ownerPid, int servicePid, Func<int, (int ParentPid, string? ImagePath)?> process)
+    {
+        if (servicePid <= 0 || ownerPid <= 0)
+        {
+            return false;
+        }
+
+        if (ownerPid == servicePid)
+        {
+            return true;
+        }
+
+        return process(ownerPid) is { } owner
+            && owner.ParentPid == servicePid
+            && process(servicePid) is { ImagePath: { Length: > 0 } serviceImage }
+            && string.Equals(owner.ImagePath, serviceImage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static (int ParentPid, string? ImagePath)? WindowsProcessInfo(int pid)
+    {
+        try
+        {
+            return ParentPid(pid) is int parent && ImagePath(pid) is string image ? (parent, image) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static int? ParentPid(int pid)
+    {
+        var snapshot = CreateToolhelp32Snapshot(Th32csSnapProcess, 0);
+        if (snapshot == InvalidHandleValue)
+        {
+            return null;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry32W { dwSize = (uint)Marshal.SizeOf<ProcessEntry32W>() };
+            for (var more = Process32FirstW(snapshot, ref entry); more; more = Process32NextW(snapshot, ref entry))
+            {
+                if (entry.th32ProcessID == (uint)pid)
+                {
+                    return (int)entry.th32ParentProcessID;
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static string? ImagePath(int pid)
+    {
+        var process = OpenProcess(ProcessQueryLimitedInformation, false, (uint)pid);
+        if (process == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var buffer = new char[1024];
+            var size = buffer.Length;
+            return QueryFullProcessImageNameW(process, 0, buffer, ref size) && size > 0 && size <= buffer.Length
+                ? new string(buffer, 0, size)
+                : null;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
     }
 
     [SupportedOSPlatform("windows")]
@@ -301,4 +387,54 @@ internal sealed class TailscaleConnectionOwner : IConnectionOwner
     [SupportedOSPlatform("windows")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseServiceHandle(IntPtr hSCObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32FirstW(IntPtr hSnapshot, ref ProcessEntry32W lppe);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32NextW(IntPtr hSnapshot, ref ProcessEntry32W lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr hProcess, uint dwFlags, [Out] char[] lpExeName, ref int lpdwSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [SupportedOSPlatform("windows")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32W
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
+    }
 }
