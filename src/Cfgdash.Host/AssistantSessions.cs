@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Cfgdash.Core;
 using Cfgdash.Core.Assistant;
+using Cfgdash.Core.Config;
 
 namespace Cfgdash.Host;
 
@@ -23,7 +24,7 @@ internal enum AssistantState
 internal sealed record AssistantProbe(bool Available, string? Reason, string? ClaudePath = null, string? Version = null, string? Setsid = null);
 
 /// <summary>One cfgdash assistant session: its bound dir, its current <c>claude</c> process and its SSE events. <see cref="State"/>, <see cref="Process"/>, <see cref="Probe"/>, <see cref="ToolCalls"/> and <see cref="Sequence"/> change only under the registry lock.</summary>
-internal sealed class AssistantSession(string id, string dir, string model, string effort, long created)
+internal sealed class AssistantSession(string id, string dir, string model, string effort, decimal maxBudgetUsd, long created)
 {
     public const int MaxQueuedEvents = 512;
     private readonly Lock events = new();
@@ -40,6 +41,9 @@ internal sealed class AssistantSession(string id, string dir, string model, stri
     public string Model { get; } = model;
 
     public string Effort { get; } = effort;
+
+    /// <summary>The session-wide <c>--max-budget-usd</c> cap, read from cfgdash settings when the session was created.</summary>
+    public decimal MaxBudgetUsd { get; } = maxBudgetUsd;
 
     /// <summary>The per-session fence nonce of the system prompt, context block and <c>get_file</c> content.</summary>
     public string Nonce { get; } = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -178,6 +182,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     private readonly TimeProvider time;
     private readonly string cacheDir;
     private readonly string? exePath;
+    private readonly CfgdashConfig config;
     private readonly Func<int> port;
     private readonly CfgdashLog log;
     private readonly CancellationTokenSource stop = new();
@@ -193,6 +198,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         time = dependencies.TimeProvider;
         cacheDir = dependencies.CacheDir(core.EnvironmentReader);
         exePath = dependencies.ExePath;
+        config = new CfgdashConfig(dependencies.ConfigDir(core.EnvironmentReader), cacheDir, time);
         sweep = SweepAsync();
     }
 
@@ -297,9 +303,18 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         }
     }
 
-    /// <summary>Reserves a slot, then starts the process. 200 <c>{ id }</c>, 429 at 2 live processes, 503 when unavailable or stopping.</summary>
-    public async Task<(int Status, JsonObject Body)> CreateAsync(string dir, string model, string effort, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reserves a slot, then starts the process. A null <paramref name="model"/> or <paramref name="effort"/> takes the cfgdash setting
+    /// (<c>assistant.model</c>, <c>assistant.effort</c>); the budget is always <c>assistant.maxBudgetUsd</c>. An invalid setting falls back to
+    /// the built-in default. 200 <c>{ id }</c>, 429 at 2 live processes, 503 when unavailable or stopping.
+    /// </summary>
+    public async Task<(int Status, JsonObject Body)> CreateAsync(string dir, string? model, string? effort, CancellationToken cancellationToken)
     {
+        var settings = config.Read();
+        model ??= AssistantLaunch.IsValidModel(settings.AssistantModel) ? settings.AssistantModel : DefaultModel;
+        effort ??= AssistantLaunch.IsValidEffort(settings.AssistantEffort) ? settings.AssistantEffort : DefaultEffort;
+        var budget = double.IsFinite(settings.AssistantMaxBudgetUsd) && settings.AssistantMaxBudgetUsd > 0 ? (decimal)settings.AssistantMaxBudgetUsd : DefaultMaxBudgetUsd;
+
         lock (gate)
         {
             if (LiveCount() >= MaxLive)
@@ -328,7 +343,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             }
 
             Evict();
-            session = new AssistantSession(Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)), dir, model, effort, Now);
+            session = new AssistantSession(Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)), dir, model, effort, budget, Now);
             sessions[session.Id] = session;
         }
 
@@ -974,7 +989,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
     /// <summary>The per-session cap minus what the session's earlier processes spent, floored to cents; each new process gets only this.</summary>
     private static decimal RemainingBudget(AssistantSession session) =>
-        Math.Floor((DefaultMaxBudgetUsd - (decimal)session.CostUsd) * 100) / 100;
+        Math.Floor((session.MaxBudgetUsd - (decimal)session.CostUsd) * 100) / 100;
 
     private void Evict()
     {

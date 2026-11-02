@@ -101,10 +101,10 @@ internal sealed partial class CfgdashServer
         }
 
         if (ParseObject(bytes) is not { } body
-            || OptionalString(body, "model", AssistantRegistry.DefaultModel) is not { } model
-            || OptionalString(body, "effort", AssistantRegistry.DefaultEffort) is not { } effort
-            || !AssistantLaunch.IsValidModel(model)
-            || !AssistantLaunch.IsValidEffort(effort))
+            || OptionalString(body, "model", string.Empty) is not { } model
+            || OptionalString(body, "effort", string.Empty) is not { } effort
+            || (model.Length > 0 && !AssistantLaunch.IsValidModel(model))
+            || (effort.Length > 0 && !AssistantLaunch.IsValidEffort(effort)))
         {
             await WriteBadRequestAsync(ctx);
             return;
@@ -116,7 +116,7 @@ internal sealed partial class CfgdashServer
             return;
         }
 
-        var (status, answer) = await assistants.CreateAsync(dir, model, effort, ctx.RequestAborted);
+        var (status, answer) = await assistants.CreateAsync(dir, model.Length > 0 ? model : null, effort.Length > 0 ? effort : null, ctx.RequestAborted);
         await WriteJsonAsync(ctx, status, answer);
     }
 
