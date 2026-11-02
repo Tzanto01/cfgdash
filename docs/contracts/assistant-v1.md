@@ -71,6 +71,7 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 | `propose_change` (`changes`, `rationale`) | A proposal for the bound dir (a `dir` argument is ignored), checked against edits-v1 validation and the assistant policy. Answers `{ proposalId, files[].diff }`, never `confirm`. Assistant proposals have their own quota of 8 open proposals |
 
 - **Collector allowlist:** every collector except `engram.memory`, `sessions.transcripts` and `usage.metrics`. Items flagged `company` are dropped unless the bound dir is under the company layer.
+- **Company content outside the layer:** for a file outside the company layer that a company-flagged item points at (for example user `settings.json` with a hook into the company layer), `get_snapshot` drops only the rows and values that contain a company-layer path; its other rows stay visible. `get_file` and `search` skip that whole file.
 - **Tool-call log:** `<cache>/assistant/<cfgdash-session-id>.jsonl` (0600) records tool name, redacted arguments capped at 2 KiB, and timing. Results are never logged.
 
 ## Assistant policy (on top of edits-v1)
@@ -107,9 +108,14 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 | `POST /api/v2/assistant/sessions/{id}/check` | The full check: a fixed prompt that starts from the findings and asks for ranked suggestions, using `propose_change` where the policy allows. Same events |
 | `DELETE /api/v2/assistant/sessions/{id}` | Ends the process tree |
 
-- All routes answer 404 on the tailnet listener.
+- All routes answer 404 on the tailnet listener (a request without the tailnet login gets the existing 401 first; neither grants anything).
 - The UI renders model text as markdown with raw HTML off and no images. Links show as text with the full URL.
 - Audit entries of applied assistant proposals carry `"origin": "assistant"` and the cfgdash session id.
+
+## Accepted residuals
+
+- A turn killed before its result event (timeout, crash) adds no cost to the session budget. Each process still runs under `--max-budget-usd` set to what the session has left.
+- On Linux, a hard kill of cfgdash itself (SIGKILL) can leave the `claude` child running until its stdin closes.
 
 ## Write exceptions
 

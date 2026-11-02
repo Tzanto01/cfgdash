@@ -75,7 +75,7 @@ public sealed class AutostartCliTests
     [InlineData("off", null, false, "off")]
     [InlineData("on", null, false, "mismatch")]
     [InlineData("off", null, true, "mismatch")]
-    [InlineData("on", "the unit file differs from the expected one", true, "mismatch")]
+    [InlineData("on", "the unit's ExecStart does not point at this executable", true, "mismatch")]
     public async Task Status_prints_on_off_or_mismatch(string actual, string? detail, bool configured, string expected)
     {
         using var env = new CliEnv(autostart: new FakeAutostart(actual, detail).Factory);

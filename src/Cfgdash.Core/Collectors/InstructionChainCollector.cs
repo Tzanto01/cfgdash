@@ -26,7 +26,7 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
 
     public CollectorManifest Manifest { get; } = new("instructions.chain", "Instruction chain", "1.0.0", "instructions", new Requirements(TargetDir: true));
 
-    /// <summary>The existence probe for referenced files; it only ever sees paths that passed the never-read rules.</summary>
+    /// <summary>The existence probe for imported and referenced files; it only ever sees paths that passed the never-read rules.</summary>
     internal Func<string, bool> ReferenceExists { get; init; } = File.Exists;
 
     public async Task<CollectorResult> CollectAsync(CollectContext context, CancellationToken cancellationToken)
@@ -305,10 +305,11 @@ internal sealed partial class InstructionChainCollector(SettingsLayers settings,
             {
                 var target = Resolve(import.Path, dir, context.Environment.HomeDir);
                 var network = target is not null && PathUtil.IsNetworkPath(target);
+                var neverRead = target is not null && !network && FileRegistry.IsNeverRead(target);
                 Node child;
-                if (target is null || network || !File.Exists(target))
+                if (target is null || network || neverRead || !referenceExists(target))
                 {
-                    child = new Node("@" + import.Raw) { Error = network ? "network path not read" : "missing" };
+                    child = new Node("@" + import.Raw) { Error = network ? "network path not read" : neverRead ? "not readable" : "missing" };
                     child.Badges.AddRange(["import", "error"]);
                 }
                 else

@@ -40,13 +40,13 @@ public sealed class ApiV2SettingsTests
     [Fact]
     public async Task Get_shows_the_os_state_and_detail_even_when_the_file_disagrees()
     {
-        await using var host = await StartAsync(new FakeAutostart("on", "the unit file differs from the expected one"));
+        await using var host = await StartAsync(new FakeAutostart("on", "the unit's ExecStart does not point at this executable"));
 
         var start = (await host.GetAsync(Route)).Json.GetProperty("startAtLogin");
 
         Assert.False(start.GetProperty("configured").GetBoolean());
         Assert.Equal("on", start.GetProperty("actual").GetString());
-        Assert.Equal("the unit file differs from the expected one", start.GetProperty("detail").GetString());
+        Assert.Equal("the unit's ExecStart does not point at this executable", start.GetProperty("detail").GetString());
     }
 
     [Fact]

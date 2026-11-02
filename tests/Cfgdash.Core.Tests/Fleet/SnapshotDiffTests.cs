@@ -151,6 +151,33 @@ public sealed class SnapshotDiffTests
     }
 
     [Fact]
+    public void A_table_row_under_a_secret_named_id_is_redacted_even_when_it_looks_harmless()
+    {
+        var right = Snap(
+            collectors: $"[{Active("c")}]",
+            sections: $"[{Section("c", $"[{TableBlock("tbl", ("API_TOKEN", "abc123plain", "f1"), ("MODE", "fast", "f2"))}]")}]");
+
+        var report = SnapshotDiff.Compare(Snap(), right);
+
+        var rows = Assert.Single(report.Collectors).Rows.ToDictionary(r => r.ItemId);
+        Assert.Equal("[redacted]", (string?)rows["API_TOKEN"].Right!["name"]);
+        Assert.Equal("fast", (string?)rows["MODE"].Right!["name"]);
+        Assert.DoesNotContain("abc123plain", System.Text.Json.JsonSerializer.Serialize(report));
+    }
+
+    [Fact]
+    public void A_secret_shaped_item_id_is_redacted()
+    {
+        var right = Snap(
+            collectors: $"[{Active("c")}]",
+            sections: $"[{Section("c", $"[{KvBlock("kv", ("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "x"))}]")}]");
+
+        var report = SnapshotDiff.Compare(Snap(), right);
+
+        Assert.DoesNotContain("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", System.Text.Json.JsonSerializer.Serialize(report));
+    }
+
+    [Fact]
     public void A_secret_in_the_right_hostname_or_dir_is_redacted()
     {
         var secret = "sk-" + "ant-" + new string('a', 24);
