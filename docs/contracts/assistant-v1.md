@@ -35,6 +35,9 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 ### Fail-closed checks
 
 - cfgdash reads the first stream-json `system`/`init` event. Unless `tools` is exactly the five `mcp__cfgdash__*` names, `mcp_servers` is exactly `[cfgdash]`, and plugins, agents, skills and slash commands are empty, it kills the process and emits `error` ("containment check failed").
+- CLI 2.1.316 emits `init` only after the first user stdin line, so the first message (the user's text and context references, no file content) reaches the CLI before the check. Accepted residual. cfgdash forwards nothing to the UI before the check passes, and on failure kills the tree before it reads any further stdout.
+- Besides `CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1`, the child env adds `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1` as defense in depth. Otherwise it inherits cfgdash's env unchanged and never carries the MCP capability.
+- `status` also requires `claude auth status` to report `loggedIn: true`. Only that field is read, and the output is never logged.
 - If the installed CLI lacks one of these flags, or the init event cannot be read, `status` answers `available: false` with the reason. There is no fallback that widens anything.
 - A canary test runs against a fake `claude` and a synthetic home that holds a user hook, a plugin, a user CLAUDE.md marker, a `.mcp.json` and a connector-style permission. It asserts that none of them reach the session (flags, settings file and init check).
 
