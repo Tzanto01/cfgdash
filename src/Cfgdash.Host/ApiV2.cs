@@ -14,7 +14,7 @@ internal sealed partial class CfgdashServer
 
     private void MapApiV2(HostDependencies dependencies)
     {
-        var edits = new Lazy<IEditService>(() => CfgdashCore.CreateEdits(core, dependencies.CacheDir(core.EnvironmentReader), dependencies.TimeProvider));
+        var edits = editService = new Lazy<IEditService>(() => CfgdashCore.CreateEdits(core, dependencies.CacheDir(core.EnvironmentReader), dependencies.TimeProvider));
         app.MapGet("/api/v2/settings", ctx => EditSettingsAsync(ctx, edits));
         app.MapPost("/api/v2/proposals", ctx => ProposeAsync(ctx, edits));
         app.MapPost("/api/v2/proposals/{id}/apply", ctx => ApplyAsync(ctx, edits));
