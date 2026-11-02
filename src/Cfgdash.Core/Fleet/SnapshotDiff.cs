@@ -155,9 +155,9 @@ public static class SnapshotDiff
 
                 void Put(string? itemId, Func<JsonNode?> value)
                 {
-                    if (itemId is not null && !collectorItems.ContainsKey((blockId, itemId)))
+                    if (itemId is not null && (redactor.RedactText(blockId), redactor.RedactText(itemId)) is var key && !collectorItems.ContainsKey(key))
                     {
-                        collectorItems[(blockId, itemId)] = Clean(value(), Normalize);
+                        collectorItems[key] = Clean(value(), Normalize);
                     }
                 }
 
@@ -173,8 +173,9 @@ public static class SnapshotDiff
                     case "table":
                         foreach (var row in Objects(block["rows"]))
                         {
+                            var secretRow = Str(row["id"]) is { } rowId && redactor.IsSecretName(rowId);
                             Put(Str(row["id"]), () => row["cells"] is JsonObject cells
-                                ? new JsonObject(cells.Select(c => KeyValuePair.Create(c.Key, c.Value is JsonObject cell ? Clean(cell["text"], s => s) : Clean(c.Value, s => s))))
+                                ? new JsonObject(cells.Select(c => KeyValuePair.Create(c.Key, c.Value is JsonObject cell ? Clean(cell["text"], s => secretRow ? Redactor.Marker : s) : Clean(c.Value, s => secretRow ? Redactor.Marker : s))))
                                 : null);
                         }
 
