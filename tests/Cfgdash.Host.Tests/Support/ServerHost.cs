@@ -62,6 +62,8 @@ internal sealed class ServerHost : IAsyncDisposable
 
     public string LogDir { get; }
 
+    public string ExportsDir => owned.Combine("cache/exports");
+
     public int Port => Server.Port;
 
     public int BackendPort => Server.BackendPort!.Value;
