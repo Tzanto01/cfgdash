@@ -10,7 +10,7 @@ using Cfgdash.Core.Tests.Support;
 
 namespace Cfgdash.Core.Tests;
 
-public sealed class UsageMetricsCollectorTests : IDisposable
+public sealed partial class UsageMetricsCollectorTests : IDisposable
 {
     private const string UserInfoEndpoint = "http://user:" + "pw@metrics.example:8428/opentelemetry/v1/metrics";
     private static readonly TimeZoneInfo PlusTwo = TimeZoneInfo.CreateCustomTimeZone("Test/PlusTwo", TimeSpan.FromHours(2), "Test/PlusTwo", "Test/PlusTwo");
@@ -65,7 +65,7 @@ public sealed class UsageMetricsCollectorTests : IDisposable
             else
             {
                 var key = (path.EndsWith("query_range", StringComparison.Ordinal) ? "range:" : "instant:")
-                    + (query.Contains(" or ", StringComparison.Ordinal) ? (query.Contains("project", StringComparison.Ordinal) ? "project" : "machine")
+                    + (query.Contains(" or ", StringComparison.Ordinal) ? (query.Contains("project", StringComparison.Ordinal) ? "project" : query.Contains("host", StringComparison.Ordinal) ? "machine" : "tail")
                     : query.Contains("cost", StringComparison.Ordinal) ? "cost"
                     : query.Contains("token", StringComparison.Ordinal) ? "token"
                     : query.Contains("session", StringComparison.Ordinal) ? "session" : "active");
@@ -88,12 +88,12 @@ public sealed class UsageMetricsCollectorTests : IDisposable
     private static Dictionary<string, string> L(params string[] pairs) =>
         Enumerable.Range(0, pairs.Length / 2).ToDictionary(i => pairs[2 * i], i => pairs[(2 * i) + 1]);
 
-    private async Task<CollectorResult> CollectAsync(HttpMessageHandler handler, string? settingsEnv = """{ "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://metrics.example:8428/opentelemetry/v1/metrics" }""", FakeEnvironmentReader? env = null)
+    private async Task<CollectorResult> CollectAsync(HttpMessageHandler handler, string? settingsEnv = """{ "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://metrics.example:8428/opentelemetry/v1/metrics" }""", FakeEnvironmentReader? env = null, DateTimeOffset? now = null)
     {
         var config = tree.Dir("config");
         tree.Write("config/settings.json", settingsEnv is null ? "{}" : $$"""{ "env": {{settingsEnv}} }""");
         var collector = new UsageMetricsCollector(
-            new SettingsLayers(new PlatformLocations(null, null, _ => null)), env ?? new FakeEnvironmentReader(), tree.Path("cfgdash/overrides.json"), handler, new FixedTime(Now, PlusTwo));
+            new SettingsLayers(new PlatformLocations(null, null, _ => null)), env ?? new FakeEnvironmentReader(), tree.Path("cfgdash/overrides.json"), handler, new FixedTime(now ?? Now, PlusTwo));
         return await collector.CollectAsync(TestContexts.Create(TestContexts.WithConfigDir(tree, config), tree.Dir("proj")), CancellationToken.None);
     }
 
@@ -140,8 +140,8 @@ public sealed class UsageMetricsCollectorTests : IDisposable
         Assert.Equal(1.75, Kv(result, "cost-today")!.GetValue<double>());
         Assert.Equal(3.75, Kv(result, "cost-7d")!.GetValue<double>());
         Assert.Equal(7.75, Kv(result, "cost-30d")!.GetValue<double>());
-        Assert.Equal(6500, Kv(result, "tokens-30d")!.GetValue<long>());
-        Assert.Equal(3, Kv(result, "sessions-30d")!.GetValue<long>());
+        Assert.Equal(6500, Kv(result, "tok-30d")!.GetValue<long>());
+        Assert.Equal(3, Kv(result, "sess-30d")!.GetValue<long>());
         Assert.Equal("2.0 h", Kv(result, "active-time-30d")!.GetValue<string>());
         Assert.Equal("metrics.example:8428", Kv(result, "source")!.GetValue<string>());
         Assert.Equal("2026-09-16 to 2026-10-15 (Test/PlusTwo)", Kv(result, "range")!.GetValue<string>());
@@ -233,6 +233,82 @@ public sealed class UsageMetricsCollectorTests : IDisposable
         Assert.DoesNotContain(delta.Queries, q => q.Contains("increase(", StringComparison.Ordinal));
         Assert.Contains(cumulative.Queries, q => q.Contains("increase(", StringComparison.Ordinal));
         Assert.DoesNotContain(cumulative.Queries, q => q.Contains("sum_over_time(", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Evaluates <c>sum(sum_over_time(m[w]))</c> over raw delta samples like VictoriaMetrics: windows are (t - w, t], range points
+    /// see every sample, instant queries within 30 s of now are shifted back by the latency offset.
+    /// </summary>
+    private sealed partial class VmLikeStore(DateTimeOffset now, params (DateTimeOffset At, double Value)[] samples) : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var q = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            var query = q["query"] ?? "";
+            Requests.Add(request.RequestUri.AbsolutePath + " " + query);
+            double Sum(double t, string w)
+            {
+                var m = WindowRegex().Match(w);
+                var seconds = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) * (m.Groups[2].Value == "h" ? 3600 : 1);
+                return samples.Where(x => x.At.ToUnixTimeSeconds() > t - seconds && x.At.ToUnixTimeSeconds() <= t).Sum(x => x.Value);
+            }
+
+            string data;
+            if (request.RequestUri.AbsolutePath == "/api/v1/labels")
+            {
+                data = """["__name__"]""";
+            }
+            else if (query.Contains("count by (__name__)", StringComparison.Ordinal))
+            {
+                data = Vector([(L("__name__", "claude_code.cost.usage"), 1)]);
+            }
+            else if (request.RequestUri.AbsolutePath.EndsWith("query_range", StringComparison.Ordinal))
+            {
+                var (start, end, step) = (double.Parse(q["start"]!, System.Globalization.CultureInfo.InvariantCulture), double.Parse(q["end"]!, System.Globalization.CultureInfo.InvariantCulture), int.Parse(q["step"]!, System.Globalization.CultureInfo.InvariantCulture));
+                var points = new List<(double, double)>();
+                for (var t = start; t <= end; t += step)
+                {
+                    if (Sum(t, query) is var v and > 0)
+                    {
+                        points.Add((t, v));
+                    }
+                }
+
+                data = Matrix((L(), [.. points]));
+            }
+            else
+            {
+                var t = double.Parse(q["time"]!, System.Globalization.CultureInfo.InvariantCulture);
+                t = now.ToUnixTimeSeconds() - t < 30 ? t - 30 : t;
+                data = Vector([(query.Contains("\"m\", \"cost\"", StringComparison.Ordinal) ? L("m", "cost") : L(), Sum(t, query))]);
+            }
+
+            return Task.FromResult(Json($$"""{ "status": "success", "data": {{data}} }"""));
+        }
+
+        [System.Text.RegularExpressions.GeneratedRegex(@"\[(\d+)(h|s)\]")]
+        private static partial System.Text.RegularExpressions.Regex WindowRegex();
+    }
+
+    [Fact]
+    public async Task Totals_and_days_match_instant_sums_when_the_newest_samples_are_still_settling()
+    {
+        var now = new DateTimeOffset(2026, 10, 15, 22, 21, 0, TimeSpan.Zero);
+        var store = new VmLikeStore(
+            now,
+            (new DateTimeOffset(2026, 10, 15, 20, 30, 0, TimeSpan.Zero), 0.5),
+            (new DateTimeOffset(2026, 10, 15, 21, 50, 0, TimeSpan.Zero), 2.0),
+            (new DateTimeOffset(2026, 10, 15, 22, 10, 0, TimeSpan.Zero), 1.0),
+            (new DateTimeOffset(2026, 10, 15, 22, 20, 30, TimeSpan.Zero), 5.0));
+
+        var result = await CollectAsync(store, now: now);
+
+        Assert.Equal((1.0, 3.5, 3.5), (Kv(result, "cost-today")!.GetValue<double>(), Kv(result, "cost-7d")!.GetValue<double>(), Kv(result, "cost-30d")!.GetValue<double>()));
+        var byDay = Block<TableBlock>(result, "by-day");
+        Assert.Equal((1.0, 2.5), (Cell(byDay, "2026-10-16", "cost")!.GetValue<double>(), Cell(byDay, "2026-10-15", "cost")!.GetValue<double>()));
+        Assert.InRange(store.Requests.Count, 1, 10);
     }
 
     [Fact]

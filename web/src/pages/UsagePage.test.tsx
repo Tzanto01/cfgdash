@@ -15,8 +15,8 @@ const totals: KvBlock = {
     kv('cost-today', 1.5),
     kv('cost-7d', 12.25),
     kv('cost-30d', 40),
-    kv('tokens-30d', 1234567),
-    kv('sessions-30d', 1234),
+    kv('tok-30d', 1234567),
+    kv('sess-30d', 1234),
     kv('active-time-30d', '41.5 h'),
     kv('source', 'metrics.example:8428'),
     kv('range', '2026-10-01 to 2026-10-03 (UTC)')

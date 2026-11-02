@@ -10,6 +10,8 @@ namespace Cfgdash.Core.Collectors;
 /// <summary>
 /// <c>usage.metrics</c>: Claude Code cost, tokens and sessions from the OpenTelemetry metrics in a Prometheus-API store
 /// (VictoriaMetrics), see docs/contracts/usage-v1.md. Days use <see cref="TimeProvider.LocalTimeZone"/>.
+/// Every query is evaluated at one instant a minute back: VictoriaMetrics shifts and caches instant queries near now
+/// (<c>-search.latencyOffset</c>), so whole hours come from one range query and the partial hour from one instant query at that instant.
 /// </summary>
 internal sealed partial class UsageMetricsCollector(
     SettingsLayers settings,
@@ -23,6 +25,7 @@ internal sealed partial class UsageMetricsCollector(
     private const string Temporality = "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE";
     private const int Days = 30;
     private const int Hour = 3600;
+    private static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);
 
     private static readonly HttpMessageHandler SharedHandler = new SocketsHttpHandler
     {
@@ -71,11 +74,12 @@ internal sealed partial class UsageMetricsCollector(
     private async Task<CollectorResult> CollectAsync(PrometheusClient client, bool delta, IRedactor redactor, CancellationToken ct)
     {
         var zone = clock.LocalTimeZone;
-        var now = clock.GetUtcNow();
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+        var at = clock.GetUtcNow() - Settle;
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime);
         var firstDay = today.AddDays(1 - Days);
         var start = LocalMidnight(firstDay, zone).ToUnixTimeSeconds();
-        var end = start + Hour * (long)Math.Ceiling((now.ToUnixTimeSeconds() - start) / (double)Hour);
+        var end = at.ToUnixTimeSeconds();
+        var lastHour = start + (Hour * ((end - start) / Hour));
         var window = $"[{end - start}s]";
         var notes = new List<string> { delta ? "Counters read as delta temporality (Claude Code default)" : "Counters read as cumulative temporality" };
         var range = $"{firstDay:yyyy-MM-dd} to {today:yyyy-MM-dd} ({ZoneName(zone)})";
@@ -104,9 +108,26 @@ internal sealed partial class UsageMetricsCollector(
         string Group(string expr, string target, string? label) =>
             label is null ? expr : $"label_replace({expr}, \"{target}\", \"$1\", \"{label}\", \"(.*)\")";
 
-        var costHours = cost is null ? [] : await client.QueryRangeAsync($"sum by (g) ({Group(Rate(cost, "[1h]"), "g", model)})", start + Hour, end, Hour, ct);
-        var tokenHours = tokens is null ? [] : await client.QueryRangeAsync($"sum by (g, t) ({Group(Group(Rate(tokens, "[1h]"), "g", model), "t", type)})", start + Hour, end, Hour, ct);
-        var sessionHours = sessions is null ? [] : await client.QueryRangeAsync($"sum({Rate(sessions, "[1h]")})", start + Hour, end, Hour, ct);
+        string CostBy(string w) => $"sum by (g) ({Group(Rate(cost!, w), "g", model)})";
+        string TokensBy(string w) => $"sum by (g, t) ({Group(Group(Rate(tokens!, w), "g", model), "t", type)})";
+        string SessionsBy(string w) => $"sum({Rate(sessions!, w)})";
+        var costHours = cost is null ? [] : (await client.QueryRangeAsync(CostBy("[1h]"), start + Hour, lastHour, Hour, ct)).ToList();
+        var tokenHours = tokens is null ? [] : (await client.QueryRangeAsync(TokensBy("[1h]"), start + Hour, lastHour, Hour, ct)).ToList();
+        var sessionHours = sessions is null ? [] : (await client.QueryRangeAsync(SessionsBy("[1h]"), start + Hour, lastHour, Hour, ct)).ToList();
+        if (end > lastHour)
+        {
+            var tail = $"[{end - lastHour}s]";
+            var parts = new[] { (cost, "cost", (Func<string, string>)CostBy), (tokens, "tokens", TokensBy), (sessions, "sessions", SessionsBy) }
+                .Where(p => p.Item1 is not null)
+                .Select(p => $"label_replace({p.Item3(tail)}, \"m\", \"{p.Item2}\", \"m\", \"(.*)\")");
+            foreach (var s in await client.QueryAsync(string.Join(" or ", parts), end, ct))
+            {
+                var labelsOnly = s.Labels.Where(l => l.Key != "m").ToDictionary(l => l.Key, l => l.Value, StringComparer.Ordinal);
+                var series = new PromSeries(labelsOnly, [.. s.Samples.Select(x => ((double)(lastHour + Hour), x.Value))]);
+                (s.Labels.GetValueOrDefault("m") switch { "cost" => costHours, "tokens" => tokenHours, _ => sessionHours }).Add(series);
+            }
+        }
+
         double? activeSeconds = active is null ? null : (await client.QueryAsync($"sum({Rate(active, window)})", end, ct)).SelectMany(s => s.Samples).Sum(s => s.Value);
 
         DateOnly DayOf(double t) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds((long)t - Hour), zone).DateTime);
@@ -138,8 +159,8 @@ internal sealed partial class UsageMetricsCollector(
             new KvRow("cost-today", CostTotal(1), null),
             new KvRow("cost-7d", CostTotal(7), null),
             new KvRow("cost-30d", CostTotal(Days), null),
-            new KvRow("tokens-30d", tokens is null ? null : (long)Math.Round(Enumerable.Range(1, 4).Sum(c => DaySum(c, Days))), null),
-            new KvRow("sessions-30d", sessions is null ? null : (long)Math.Round(DaySum(5, Days)), null),
+            new KvRow("tok-30d", tokens is null ? null : (long)Math.Round(Enumerable.Range(1, 4).Sum(c => DaySum(c, Days))), null),
+            new KvRow("sess-30d", sessions is null ? null : (long)Math.Round(DaySum(5, Days)), null),
         ]);
         if (activeSeconds is { } seconds)
         {

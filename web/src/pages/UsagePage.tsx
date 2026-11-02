@@ -12,8 +12,8 @@ const TILES: readonly { key: string; label: string; kind: 'usd' | 'compact' | 'c
   { key: 'cost-today', label: 'Cost today', kind: 'usd' },
   { key: 'cost-7d', label: 'Cost, 7 days', kind: 'usd' },
   { key: 'cost-30d', label: 'Cost, 30 days', kind: 'usd' },
-  { key: 'tokens-30d', label: 'Tokens, 30 days', kind: 'compact' },
-  { key: 'sessions-30d', label: 'Sessions, 30 days', kind: 'count' },
+  { key: 'tok-30d', label: 'Tokens, 30 days', kind: 'compact' },
+  { key: 'sess-30d', label: 'Sessions, 30 days', kind: 'count' },
   { key: 'active-time-30d', label: 'Active time, 30 days', kind: 'count' }
 ];
 const TABLES = ['by-model', 'by-machine', 'by-project'];
