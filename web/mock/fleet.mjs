@@ -115,9 +115,9 @@ export function withDriftFindings(report, snapshot) {
   if (claudeDocs && codexDocs && claudeDocs.r.cells.target !== codexDocs.r.cells.target) {
     add('mcp-drift', 'MCP server defined differently', `docs runs ${claudeDocs.r.cells.target} in Claude Code and ${codexDocs.r.cells.target} in Codex.`, claudeDocs.s, 'servers', 'project-docs', claudeDocs.r.fileId);
   }
-  const codexGlobal = row('codex.config', 'instructions', '1');
+  const codexGlobal = row('codex.config', 'instructions', '2');
   if (codexGlobal && section('opencode.config')) {
-    add('instructions-drift', 'Instruction file not shared', `${codexGlobal.r.cells.file.text} is loaded by Codex but not by OpenCode or Claude Code.`, codexGlobal.s, 'instructions', '1', codexGlobal.r.fileId);
+    add('instructions-drift', 'Instruction file not shared', `${codexGlobal.r.cells.file.text} is loaded by Codex but not by Claude Code.`, codexGlobal.s, 'instructions', '2', codexGlobal.r.fileId);
   }
 
   const findings = [...report.findings, ...extra.filter((f) => !report.findings.some((x) => x.id === f.id))];
