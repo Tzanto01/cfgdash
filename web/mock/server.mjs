@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { buildSnapshot, START_DIR } from './data.mjs';
 import { listDirs, resolveDir } from './dirs.mjs';
 import { editsApi } from './edits.mjs';
+import { platformApi } from './platform.mjs';
 import { search } from './search.mjs';
 import { findings } from './health.mjs';
 
@@ -93,6 +94,8 @@ async function api(req, res, url) {
   if (latency) await new Promise((r) => setTimeout(r, latency));
   if (opts.auth && !hasCookie(req) && !isBearer(req)) return send(res, 401, { error: 'unauthenticated' });
   if (opts.forbid) return send(res, 403, { error: 'forbidden', reason: 'tailnet-identity' });
+  const platform = await platformApi(req, url);
+  if (platform) return send(res, platform[0], platform[1]);
   const v2 = await editsApi(req, url);
   if (v2) return send(res, v2[0], v2[1]);
   for (const route of ROUTES) {

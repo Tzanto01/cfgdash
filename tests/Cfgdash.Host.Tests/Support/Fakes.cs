@@ -263,11 +263,13 @@ internal static class TestCore
     public static CoreServices Create(MachineEnvironment? environment = null, IProcessRunner? processes = null, FakeSnapshots? snapshots = null, IEnvironmentReader? reader = null) =>
         new(environment ?? Machine(), reader ?? new FakeEnv(), processes ?? new FakeProcesses(), snapshots ?? new FakeSnapshots(), new FakeFileReader(), new FakeSearch(), new FakeDetails());
 
-    public static HostDependencies Deps(CoreServices core, string cacheDir, TextWriter? output = null, TextWriter? error = null, TimeProvider? time = null, Action<string>? open = null, string? exe = null, IFileProvider? ui = null) =>
+    public static HostDependencies Deps(CoreServices core, string cacheDir, TextWriter? output = null, TextWriter? error = null, TimeProvider? time = null, Action<string>? open = null, string? exe = null, IFileProvider? ui = null, string? configDir = null, Func<CoreServices, string?, IAutostart>? autostart = null) =>
         new()
         {
             CreateCore = _ => Task.FromResult(core),
             CacheDir = _ => cacheDir,
+            ConfigDir = _ => configDir ?? Path.Combine(Path.GetDirectoryName(cacheDir)!, "config"),
+            Autostart = autostart ?? ((_, _) => new UnsupportedAutostart("test")),
             Out = output ?? new CaptureWriter(),
             Error = error ?? new CaptureWriter(),
             TimeProvider = time ?? TimeProvider.System,

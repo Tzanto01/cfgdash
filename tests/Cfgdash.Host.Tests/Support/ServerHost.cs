@@ -62,6 +62,10 @@ internal sealed class ServerHost : IAsyncDisposable
 
     public string LogDir { get; }
 
+    public string CacheDir => owned.Combine("cache");
+
+    public string ConfigDir => owned.Combine("config");
+
     public int Port => Server.Port;
 
     public int BackendPort => Server.BackendPort!.Value;
@@ -71,7 +75,7 @@ internal sealed class ServerHost : IAsyncDisposable
     public static TailnetListenerOptions TailnetOptions(IReadOnlyList<string>? allowedTags = null) =>
         new(DnsName + ".", [Login], "example.ts.net", allowedTags ?? []);
 
-    public static async Task<ServerHost> StartAsync(TailnetListenerOptions? tailnet = null, IFileProvider? ui = null, FakeProcesses? processes = null, FakeSnapshots? snapshots = null, MachineEnvironment? environment = null)
+    public static async Task<ServerHost> StartAsync(TailnetListenerOptions? tailnet = null, IFileProvider? ui = null, FakeProcesses? processes = null, FakeSnapshots? snapshots = null, MachineEnvironment? environment = null, Func<CoreServices, string?, IAutostart>? autostart = null, bool autostartMode = false)
     {
         var dirs = new TempDir();
         var startDir = dirs.Sub("start");
@@ -82,8 +86,8 @@ internal sealed class ServerHost : IAsyncDisposable
         var core = TestCore.Create(machine, processes, snapshots);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
         var token = TokenVerifier.CreateToken();
-        var deps = TestCore.Deps(core, dirs.Combine("cache"), time: time, ui: ui);
-        var server = await CfgdashServer.StartAsync(new ServerOptions(0, startDir, token, tailnet), core, deps, new CfgdashLog(logDir, time), CancellationToken.None);
+        var deps = TestCore.Deps(core, dirs.Combine("cache"), time: time, ui: ui, autostart: autostart);
+        var server = await CfgdashServer.StartAsync(new ServerOptions(0, startDir, token, tailnet, autostartMode), core, deps, new CfgdashLog(logDir, time), CancellationToken.None);
         return new ServerHost(dirs, server, token, CfgdashServer.NormalizeDir(startDir)!, snapshots, processes, time, logDir);
     }
 

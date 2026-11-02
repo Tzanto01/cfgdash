@@ -20,6 +20,12 @@ public interface IEditService
     /// <summary>Applies a stored proposal once when <paramref name="confirm"/> matches and no target changed since the proposal.</summary>
     Task<EditResult> ApplyAsync(string id, string? confirm, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Builds a dry-run proposal that restores the backups of the apply <paramref name="auditId"/> (a file it created is deleted);
+    /// apply it with <see cref="ApplyAsync"/>. NotFound for an unknown id or missing backup, Stale when a file changed since that apply.
+    /// </summary>
+    Task<EditResult> RevertAsync(string auditId, CancellationToken cancellationToken);
+
     /// <summary>The <c>GET /api/v2/audit</c> body: newest first, <paramref name="limit"/> clamped to 1..500.</summary>
     JsonObject ReadAudit(int limit);
 }

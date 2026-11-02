@@ -11,9 +11,11 @@ namespace Cfgdash.Host.Tests;
 internal sealed class CliEnv : IDisposable
 {
     private readonly TempDir temp = new();
+    private readonly Func<CoreServices, string?, IAutostart>? autostart;
 
-    public CliEnv(MachineEnvironment? environment = null, FakeProcesses? processes = null, IDictionary<string, string>? variables = null, FakeSnapshots? snapshots = null)
+    public CliEnv(MachineEnvironment? environment = null, FakeProcesses? processes = null, IDictionary<string, string>? variables = null, FakeSnapshots? snapshots = null, Func<CoreServices, string?, IAutostart>? autostart = null)
     {
+        this.autostart = autostart;
         Processes = processes ?? new FakeProcesses();
         Core = TestCore.Create(environment, Processes, snapshots, new FakeEnv(variables));
         Dir = CfgdashServer.NormalizeDir(temp.Sub("project"))!;
@@ -32,6 +34,8 @@ internal sealed class CliEnv : IDisposable
 
     public string Cache => temp.Combine("cache");
 
+    public string ConfigDir => temp.Combine("config");
+
     public RunStateStore Store { get; }
 
     public CaptureWriter Out { get; } = new();
@@ -45,7 +49,7 @@ internal sealed class CliEnv : IDisposable
     public string Root => temp.Root;
 
     public Task<int> RunAsync(params string[] args) =>
-        CfgdashCli.RunAsync(args, TestCore.Deps(Core, Cache, Out, Error, Time, Opened.Add, Exe));
+        CfgdashCli.RunAsync(args, TestCore.Deps(Core, Cache, Out, Error, Time, Opened.Add, Exe, autostart: autostart));
 
     /// <summary>Starts <c>run</c> in-process and returns once run.json exists and the URL was printed.</summary>
     public async Task<(Task<int> Exit, RunState State)> StartRunAsync(params string[] args)
