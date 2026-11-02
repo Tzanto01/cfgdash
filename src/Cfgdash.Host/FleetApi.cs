@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core;
+using Cfgdash.Core.Config;
 using Cfgdash.Core.Fleet;
 
 namespace Cfgdash.Host;
@@ -27,8 +28,8 @@ internal sealed partial class CfgdashServer
     [MemberNotNull(nameof(exportsDir), nameof(FleetEnabled), nameof(Fleet))]
     private void MapFleet(HostDependencies dependencies)
     {
-        var configFile = Path.Combine(CfgdashPaths.ConfigDir(core.EnvironmentReader), "config.json");
-        FleetEnabled = () => FleetConfig.Enabled(configFile);
+        var config = new CfgdashConfig(dependencies.ConfigDir(core.EnvironmentReader), dependencies.CacheDir(core.EnvironmentReader), time);
+        FleetEnabled = () => config.Read().FleetEnabled;
         exportsDir = Path.Combine(dependencies.CacheDir(core.EnvironmentReader), "exports");
         core.Environment.Tools.TryGetValue("tailscale", out var tailscalePath);
         Fleet = new FleetPeers(

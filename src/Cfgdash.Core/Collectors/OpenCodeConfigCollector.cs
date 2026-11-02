@@ -68,7 +68,13 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
         var globalDir = PathUtil.Full(!string.IsNullOrWhiteSpace(xdg) && Path.IsPathRooted(xdg) && !PathUtil.IsNetworkPath(xdg)
             ? Path.Combine(xdg, "opencode")
             : Path.Combine(home, ".config", "opencode"));
-        var dataDir = PathUtil.Full(Path.Combine(home, ".local", "share", "opencode"));
+        var dataDirs = new List<string> { PathUtil.Full(Path.Combine(home, ".local", "share", "opencode")) };
+        var xdgData = environmentReader.Get("XDG_DATA_HOME");
+        if (!string.IsNullOrWhiteSpace(xdgData) && Path.IsPathRooted(xdgData) && !PathUtil.IsNetworkPath(xdgData))
+        {
+            dataDirs.Add(PathUtil.Full(Path.Combine(xdgData, "opencode")));
+        }
+
         var target = PathUtil.Full(context.TargetDir);
         var projectRoot = PathUtil.FindGitRoot(target) ?? target;
         var projectDirs = PathUtil.AncestorsFromRoot(target).Where(d => PathUtil.IsUnder(d, projectRoot)).ToList();
@@ -76,7 +82,7 @@ internal sealed class OpenCodeConfigCollector(IEnvironmentReader environmentRead
         bool Forbidden(string path) =>
             PathUtil.IsNetworkPath(path)
             || IsAuthJson(path)
-            || ToolConfig.IsUnderAny(path, [dataDir])
+            || ToolConfig.IsUnderAny(path, dataDirs)
             || IsAuthJson(PathUtil.RealPath(path))
             || FileRegistry.IsNeverRead(path);
 

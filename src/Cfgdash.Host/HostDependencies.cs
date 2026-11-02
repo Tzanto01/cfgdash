@@ -16,6 +16,10 @@ internal sealed class HostDependencies
 
     public Func<IEnvironmentReader, string> CacheDir { get; init; } = CfgdashPaths.CacheDir;
 
+    public Func<IEnvironmentReader, string> ConfigDir { get; init; } = CfgdashPaths.ConfigDir;
+
+    public Func<CoreServices, string?, IAutostart> Autostart { get; init; } = AutostartFactory.Create;
+
     public TextWriter Out { get; init; } = Console.Out;
 
     public TextWriter Error { get; init; } = Console.Error;

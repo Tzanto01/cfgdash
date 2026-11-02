@@ -107,7 +107,7 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16];
     }
 
-    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path, for paths whose links loop or cannot be resolved, and for network and pseudo-filesystem paths.</summary>
+    /// <summary>True for credential files by name or path segment, checked on the path and on its resolved real path (each also with Windows 8.3 short names expanded), for paths whose links loop or cannot be resolved, and for network and pseudo-filesystem paths.</summary>
     public static bool IsNeverRead(string path)
     {
         var full = PathUtil.Full(path);
@@ -116,7 +116,8 @@ internal sealed class FileRegistry(IReadOnlyList<string> companyPrefixes) : IFil
             return true;
         }
 
-        return IsNeverReadName(full) || !PathUtil.TryRealPath(full, out var real) || PathUtil.IsNetworkPath(real) || IsNeverReadName(real);
+        return IsNeverReadName(full) || !PathUtil.TryRealPath(full, out var real) || PathUtil.IsNetworkPath(real)
+            || IsNeverReadName(real) || IsNeverReadName(PathUtil.LongPath(full)) || IsNeverReadName(PathUtil.LongPath(real));
     }
 
     private static bool IsNeverReadName(string full)

@@ -23,7 +23,7 @@ CLI flags win over the file for one run.
 
 - `cfgdash autostart on|off|status`. Exit codes follow api-v1; `status` prints `on`, `off` or `mismatch`.
 - Windows: the HKCU `Software\Microsoft\Windows\CurrentVersion\Run` value `cfgdash`, set to `"<exe>" run --autostart`. No admin, no scheduled task.
-- Linux: `$XDG_CONFIG_HOME/systemd/user/cfgdash.service` (default `~/.config/systemd/user/`, where `systemd --user` looks) (`ExecStart=<exe> run --autostart`, `Restart=on-failure`, `WantedBy=default.target`), then `systemctl --user enable --now` (or `disable --now` and delete the file). Without a user systemd it fails with exit 2 and the reason.
+- Linux: `$XDG_CONFIG_HOME/systemd/user/cfgdash.service` (default `~/.config/systemd/user/`, where `systemd --user` looks) (`ExecStart=<exe> run --autostart`, `Restart=on-failure`, `RestartSec=10`, `WantedBy=default.target`), then `systemctl --user enable --now` (or `disable --now --no-block`, since the stopped instance may be the one serving the request, and delete the file). Without a user systemd it fails with exit 2 and the reason.
 - `run --autostart` means `--no-open`, no idle shutdown, the snapshot for the start dir built at start, localhost only unless `tailnet` is true. With no `defaultDir`, the start dir is the user's home dir.
 - `cfgdash` or `cfgdash run` while an instance is alive opens the browser on the live URL in a desktop session (the same rule as today), otherwise it prints the URL.
 - These two OS entries are the only files outside the cache and config dirs cfgdash writes for this feature. They need a line in `AGENTS.md`'s write exceptions; the department lead adds it with Nico's authorization.
