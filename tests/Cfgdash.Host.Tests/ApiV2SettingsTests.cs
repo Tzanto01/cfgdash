@@ -67,7 +67,24 @@ public sealed class ApiV2SettingsTests
         Assert.Equal("dark", file.RootElement.GetProperty("theme").GetString());
     }
 
+    [Fact]
+    public async Task Put_round_trips_the_revision_3_assistant_keys()
+    {
+        await using var host = await StartAsync(new FakeAutostart());
+
+        var put = await PutAsync(host, "{ \"assistant\": { \"budgetEnabled\": false, \"applyEnabled\": true, \"provider\": \"claude\" } }");
+        var assistant = (await host.GetAsync(Route)).Json.GetProperty("values").GetProperty("assistant");
+
+        Assert.Equal(200, put.Status);
+        Assert.False(assistant.GetProperty("budgetEnabled").GetBoolean());
+        Assert.True(assistant.GetProperty("applyEnabled").GetBoolean());
+        Assert.Equal("claude", assistant.GetProperty("provider").GetString());
+        Assert.Equal(2.0, assistant.GetProperty("maxBudgetUsd").GetDouble());
+    }
+
     [Theory]
+    [InlineData("{ \"assistant\": { \"provider\": \"codex\" } }", "assistant.provider", "bad-value")]
+    [InlineData("{ \"assistant\": { \"applyEnabled\": \"yes\" } }", "assistant.applyEnabled", "bad-type")]
     [InlineData("{ \"theme\": \"neon\" }", "theme", "bad-value")]
     [InlineData("{ \"assistant\": { \"maxBudgetUsd\": 500 } }", "assistant.maxBudgetUsd", "bad-value")]
     [InlineData("{ \"fleet\": { \"enabled\": \"yes\" } }", "fleet.enabled", "bad-type")]

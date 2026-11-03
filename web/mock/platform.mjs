@@ -28,9 +28,10 @@ const invalid = (key, reason) => [400, { error: 'invalid-setting', key: key ?? n
 
 const values = {
   startAtLogin: false, theme: 'system', defaultDir: null, tailnet: false, fleet: { enabled: false },
-  assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2.0 },
+  assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2.0, budgetEnabled: true, applyEnabled: false, provider: 'claude' },
 };
 let configText = null;
+export const assistantSettings = () => values.assistant;
 
 const bool = (v) => (typeof v === 'boolean' ? null : 'bad-type');
 const oneOf = (options) => (v) => (typeof v !== 'string' ? 'bad-type' : options.includes(v) ? null : 'bad-value');
@@ -43,6 +44,9 @@ const RULES = {
   'assistant.model': (v) => (typeof v !== 'string' ? 'bad-type' : MODEL.test(v) ? null : 'bad-value'),
   'assistant.effort': oneOf(['low', 'medium', 'high', 'xhigh', 'max']),
   'assistant.maxBudgetUsd': (v) => (!Number.isFinite(v) ? 'bad-type' : v >= 0.1 && v <= 50 ? null : 'bad-value'),
+  'assistant.budgetEnabled': bool,
+  'assistant.applyEnabled': bool,
+  'assistant.provider': oneOf(['claude']),
 };
 const GROUPS = new Set(['fleet', 'assistant']);
 

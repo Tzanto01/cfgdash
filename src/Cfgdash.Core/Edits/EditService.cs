@@ -48,18 +48,18 @@ internal sealed partial class EditService(
 
     private sealed record PlannedFile(EditTarget Target, string Path, byte[]? Before, string? Sha256Before, byte[] After, string Sha256After, bool Delete = false, string? Dir = null);
 
-    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? RevertOf = null, string? AssistantSession = null);
+    private sealed record Proposal(string Dir, DateTimeOffset ExpiresAt, string Confirm, IReadOnlyList<PlannedFile> Files, IReadOnlyList<Change> Changes, string? RevertOf = null, string? AssistantSession = null, bool Auto = false);
 
     public Task<EditResult> ProposeAsync(string dir, JsonNode? changes, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Propose(PathUtil.Full(dir), changes, null));
+        return Task.FromResult(Propose(PathUtil.Full(dir), changes, null, false));
     }
 
-    public Task<EditResult> ProposeForAssistantAsync(string dir, JsonNode? changes, string sessionId, CancellationToken cancellationToken)
+    public Task<EditResult> ProposeForAssistantAsync(string dir, JsonNode? changes, string sessionId, bool auto, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Propose(PathUtil.Full(dir), changes, sessionId));
+        return Task.FromResult(Propose(PathUtil.Full(dir), changes, sessionId, auto));
     }
 
     public async Task<EditResult> ApplyAsync(string id, string? confirm, CancellationToken cancellationToken)
@@ -126,7 +126,7 @@ internal sealed partial class EditService(
         return new JsonObject { ["entries"] = Nodes(entries.Reverse()) };
     }
 
-    private EditResult Propose(string dir, JsonNode? body, string? assistantSession)
+    private EditResult Propose(string dir, JsonNode? body, string? assistantSession, bool auto)
     {
         if (body is not JsonArray { Count: > 0 and <= MaxChanges } list)
         {
@@ -262,7 +262,7 @@ internal sealed partial class EditService(
         }
 
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)], AssistantSession: assistantSession);
+        var proposal = new Proposal(dir, time.GetUtcNow() + Lifetime, Confirm(planned), planned, [.. planned.SelectMany(p => files[p.Target.Real].Changes)], AssistantSession: assistantSession, Auto: auto);
         if (!Store(id, proposal))
         {
             return Invalid(null, "quota");
@@ -291,7 +291,7 @@ internal sealed partial class EditService(
                 }
             }
 
-            if (proposal.AssistantSession is not null && proposals.Values.Count(p => p.AssistantSession is not null) >= MaxAssistantProposals)
+            if (proposal.AssistantSession is not null && !proposal.Auto && proposals.Values.Count(p => p.AssistantSession is not null && !p.Auto) >= MaxAssistantProposals)
             {
                 return false;
             }
@@ -416,6 +416,10 @@ internal sealed partial class EditService(
         {
             line["origin"] = "assistant";
             line["sessionId"] = sessionId;
+            if (proposal.Auto)
+            {
+                line["mode"] = "auto";
+            }
         }
 
         return line;

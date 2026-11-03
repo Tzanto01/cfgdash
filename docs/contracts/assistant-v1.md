@@ -128,12 +128,12 @@ The CLI runs with `--no-session-persistence`, so it writes no transcript. Claude
 
 ### Budget
 
-- `assistant.budgetEnabled` (cfgdash-config-v1, default true). When false, cfgdash passes no `--max-budget-usd` and does not enforce a session budget. The 10-minute turn limit, the 40-tool-call limit, the two-process limit and the idle end stay. `cost` events still report the spend.
+- `assistant.budgetEnabled` (cfgdash-config-v1, default true; read when a session starts). When false, cfgdash passes no `--max-budget-usd` and does not enforce a session budget. The 10-minute turn limit, the 40-tool-call limit, the two-process limit and the idle end stay. `cost` events still report the spend.
 
 ### Apply mode (settings keys only)
 
 - `assistant.applyEnabled` (cfgdash-config-v1, default false) is read at every `propose_change` call, so turning it off takes effect at once.
-- When it is on, `propose_change` applies the change directly through the edits-v1 apply path after the same validation and assistant policy (`deny` keys stay denied; `tighten-only` stays tighten-only), with the stale check against the current file. The tool answers `{ "applied": true, "auditId", "files[].diff" }` and the SSE stream emits `applied` (`auditId`, diffs). The audit entry carries `origin: assistant`, the session id and `mode: "auto"`. Undo is the normal revert.
+- When it is on, `propose_change` applies the change directly through the edits-v1 apply path after the same validation and assistant policy (`deny` keys stay denied; `tighten-only` stays tighten-only), with the stale check against the current file. The tool answers `{ "applied": true, "auditId", "files[].diff" }` and the SSE stream emits `applied` (`auditId`, diffs). When an auto-apply writes only part of its files, the stream emits `error` with `apply-partial` and the `auditId`, so Undo can restore what was written. The audit entry carries `origin: assistant`, the session id and `mode: "auto"`. Undo is the normal revert.
 - File edits (`propose_file_edit`) are never applied by the assistant, whatever this setting says.
 - The panel shows a persistent "The assistant can apply settings changes" badge while the setting is on.
 
@@ -144,7 +144,7 @@ The CLI runs with `--no-session-persistence`, so it writes no transcript. Claude
 
 ### Diagnose from Health
 
-- `POST /api/v2/assistant/sessions/{id}/check` takes an optional body `{ "findingIds": [ ... ] }` (at most 50) that limits the check to those findings. The Health view's "Diagnose all" button opens the panel, creates a session when none is live, and calls `check` with the visible findings.
+- `POST /api/v2/assistant/sessions/{id}/check` takes an optional body `{ "findingIds": [ ... ] }` (at most 50) that limits the check to those findings. When ids are given but none resolve, it answers `400 {"error":"no-findings"}` and starts no turn. The Health view's "Diagnose all" button opens the panel, creates a session when none is live, and calls `check` with the visible findings.
 
 ### Providers
 

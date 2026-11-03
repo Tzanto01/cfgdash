@@ -24,7 +24,7 @@ internal enum AssistantState
 internal sealed record AssistantProbe(bool Available, string? Reason, string? ClaudePath = null, string? Version = null, string? Setsid = null);
 
 /// <summary>One cfgdash assistant session: its bound dir, its current <c>claude</c> process and its SSE events. <see cref="State"/>, <see cref="Process"/>, <see cref="Probe"/>, <see cref="ToolCalls"/> and <see cref="Sequence"/> change only under the registry lock.</summary>
-internal sealed class AssistantSession(string id, string dir, string model, string effort, decimal maxBudgetUsd, long created)
+internal sealed class AssistantSession(string id, string dir, string model, string effort, decimal? maxBudgetUsd, long created)
 {
     public const int MaxQueuedEvents = 512;
     private readonly Lock events = new();
@@ -42,8 +42,8 @@ internal sealed class AssistantSession(string id, string dir, string model, stri
 
     public string Effort { get; } = effort;
 
-    /// <summary>The session-wide <c>--max-budget-usd</c> cap, read from cfgdash settings when the session was created.</summary>
-    public decimal MaxBudgetUsd { get; } = maxBudgetUsd;
+    /// <summary>The session-wide <c>--max-budget-usd</c> cap, read from cfgdash settings when the session was created; null when <c>assistant.budgetEnabled</c> was false.</summary>
+    public decimal? MaxBudgetUsd { get; } = maxBudgetUsd;
 
     /// <summary>The per-session fence nonce of the system prompt, context block and <c>get_file</c> content.</summary>
     public string Nonce { get; } = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -159,7 +159,11 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     public const string DefaultModel = "sonnet";
     public const string DefaultEffort = "medium";
     public const decimal DefaultMaxBudgetUsd = 2.0m;
-    public static readonly IReadOnlyList<string> Models = ["sonnet", "opus", "haiku"];
+    /// <summary>The model aliases Claude Code 2.1.316 and 2.1.317 accept with <c>--model</c> (checked against the CLI), with their labels.</summary>
+    public static readonly IReadOnlyList<(string Id, string Label)> ClaudeModels =
+        [("sonnet", "Sonnet"), ("opus", "Opus"), ("haiku", "Haiku"), ("fable", "Fable"), ("sonnet[1m]", "Sonnet (1M context)"), ("opus[1m]", "Opus (1M context)")];
+
+    public static readonly IReadOnlyList<string> Models = [.. ClaudeModels.Select(m => m.Id)];
     internal static readonly TimeSpan IdleLimit = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan TurnLimit = TimeSpan.FromMinutes(10);
@@ -282,6 +286,9 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         }
     }
 
+    /// <summary><c>assistant.applyEnabled</c>, read from cfgdash settings at every call (assistant-v1 rev 3).</summary>
+    public bool ApplyEnabled => config.Read().AssistantApplyEnabled;
+
     public List<AssistantSession> List()
     {
         lock (gate)
@@ -305,7 +312,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
     /// <summary>
     /// Reserves a slot, then starts the process. A null <paramref name="model"/> or <paramref name="effort"/> takes the cfgdash setting
-    /// (<c>assistant.model</c>, <c>assistant.effort</c>); the budget is always <c>assistant.maxBudgetUsd</c>. An invalid setting falls back to
+    /// (<c>assistant.model</c>, <c>assistant.effort</c>); the budget is always <c>assistant.maxBudgetUsd</c>, or none when <c>assistant.budgetEnabled</c> is false. An invalid setting falls back to
     /// the built-in default. 200 <c>{ id }</c>, 429 at 2 live processes, 503 when unavailable or stopping.
     /// </summary>
     public async Task<(int Status, JsonObject Body)> CreateAsync(string dir, string? model, string? effort, CancellationToken cancellationToken)
@@ -313,7 +320,8 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         var settings = config.Read();
         model ??= AssistantLaunch.IsValidModel(settings.AssistantModel) ? settings.AssistantModel : DefaultModel;
         effort ??= AssistantLaunch.IsValidEffort(settings.AssistantEffort) ? settings.AssistantEffort : DefaultEffort;
-        var budget = double.IsFinite(settings.AssistantMaxBudgetUsd) && settings.AssistantMaxBudgetUsd > 0 ? (decimal)settings.AssistantMaxBudgetUsd : DefaultMaxBudgetUsd;
+        decimal? budget = !settings.AssistantBudgetEnabled ? null
+            : double.IsFinite(settings.AssistantMaxBudgetUsd) && settings.AssistantMaxBudgetUsd > 0 ? (decimal)settings.AssistantMaxBudgetUsd : DefaultMaxBudgetUsd;
 
         lock (gate)
         {
@@ -899,9 +907,9 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
                     if (isError)
                     {
-                        var detail = Cap(AssistantRedaction.Text(subtype ?? "error"));
-                        SetFailure("the last turn failed: " + detail);
-                        session.Error("turn-failed", detail);
+                        var (message, detail) = CliMessages.ForResult(subtype, resultText);
+                        SetFailure("the last turn failed: " + message);
+                        session.Emit("error", new JsonObject { ["error"] = "turn-failed", ["message"] = message, ["detail"] = detail });
                     }
                     else
                     {
@@ -987,9 +995,9 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
     private int LiveCount() => sessions.Values.Count(s => s.State != AssistantState.Dead);
 
-    /// <summary>The per-session cap minus what the session's earlier processes spent, floored to cents; each new process gets only this.</summary>
-    private static decimal RemainingBudget(AssistantSession session) =>
-        Math.Floor((session.MaxBudgetUsd - (decimal)session.CostUsd) * 100) / 100;
+    /// <summary>The per-session cap minus what the session's earlier processes spent, floored to cents; each new process gets only this. Null without a budget.</summary>
+    private static decimal? RemainingBudget(AssistantSession session) =>
+        session.MaxBudgetUsd is { } cap ? Math.Floor((cap - (decimal)session.CostUsd) * 100) / 100 : null;
 
     private void Evict()
     {
