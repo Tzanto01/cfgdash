@@ -17,3 +17,4 @@ v1 shows the harness of the machine it runs on, read-only. Next, in order:
 13. **Undo applied changes.** Revert any audited apply from its backup through the same dry-run diff and confirm. Shipped in v0.5.0.
 14. **Browser tests in CI.** Real-exe Playwright journeys (views, one propose/apply/undo, CSP, no foreign requests) on every push. Shipped in v0.5.0.
 15. **Cross-tool drift.** Health rules for differences between Claude Code, Codex, OpenCode and T3 on the same machine (MCP servers, loaded instructions). Shipped in v0.5.0.
+16. **Assistant that edits, and editable files.** Shipped in v0.6.0 ([plan](docs/plans/v0.6.md)). Opt-in auto-apply of settings keys by the assistant (audited, undoable), text config files editable in the file viewer (`edits-v2`), an optional cost cap, context states, "Diagnose all" on Health, a resizable panel, and a provider and model picker.
