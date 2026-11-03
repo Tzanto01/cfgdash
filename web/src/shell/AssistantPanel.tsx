@@ -132,6 +132,8 @@ function undoFailure(error: unknown): string {
   return "Couldn't undo the change.";
 }
 
+const scopeLabel = (scope: string) => (scope === 'file' ? 'File' : (SCOPE_LABEL[scope as keyof typeof SCOPE_LABEL] ?? scope));
+
 /** A redacted raw text behind a cfgdash message, shown only on request. */
 function Details({ text }: { text: string }) {
   return (
@@ -488,6 +490,7 @@ export default function AssistantPanel() {
 
   const data = status?.data;
   const providers = pickerProviders(data);
+  const statusDetail = data?.detail ?? providers[0]?.detail;
   const chosenModel = model || (providers.find((p) => p.id === provider) ?? providers[0])?.models[0]?.id || '';
 
   return (
@@ -559,10 +562,16 @@ export default function AssistantPanel() {
         <div className="space-y-2 p-4">
           <p className="font-medium">The assistant isn't available on this machine.</p>
           <p>{data.reason ?? 'No reason given.'}</p>
-          {data.detail && <Details text={data.detail} />}
+          {statusDetail && <Details text={statusDetail} />}
         </div>
       ) : (
         <>
+          {data.reason && (
+            <div className="tint-warn shrink-0 space-y-1 border-b border-warn px-4 py-2">
+              <p className="text-sm font-medium text-warn">{data.reason}</p>
+              {statusDetail && <Details text={statusDetail} />}
+            </div>
+          )}
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" aria-live="off">
             {entries.length === 0 && (
               <p className="text-muted">
@@ -624,14 +633,14 @@ export default function AssistantPanel() {
                       </p>
                       {entry.rationale && <p className="whitespace-pre-wrap">{showHidden(entry.rationale)}</p>}
                       {entry.files.map((file) => (
-                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
+                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={scopeLabel(file.scope)} gitTracked={tracked.includes(file.path)} />
                       ))}
                       <p className="mono-value text-xs text-muted">Audit entry {entry.auditId}</p>
                       {entry.undo?.proposal && !entry.undo.result?.ok && <p className="text-sm font-semibold">Review undo of {entry.auditId}</p>}
                       {entry.undo?.proposal &&
                         !entry.undo.result?.ok &&
                         entry.undo.proposal.files.map((file) => (
-                          <DiffCard key={`undo\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
+                          <DiffCard key={`undo\n${file.path}`} file={file} scopeLabel={scopeLabel(file.scope)} gitTracked={tracked.includes(file.path)} />
                         ))}
                       {entry.undo?.result && (
                         <p role={entry.undo.result.ok ? 'status' : 'alert'} className={cn('text-sm font-medium', entry.undo.result.ok ? 'text-ok' : 'text-danger')}>
@@ -664,7 +673,7 @@ export default function AssistantPanel() {
                       <p className="tint-accent rounded-md px-2 py-1 text-sm font-medium text-accent">{BANNER}</p>
                       {entry.proposal.rationale && <p className="whitespace-pre-wrap">{showHidden(entry.proposal.rationale)}</p>}
                       {entry.proposal.files.map((file) => (
-                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
+                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={scopeLabel(file.scope)} gitTracked={tracked.includes(file.path)} />
                       ))}
                       {entry.result ? (
                         <p role={entry.result.ok ? 'status' : 'alert'} className={cn('text-sm font-medium', entry.result.ok ? 'text-ok' : 'text-danger')}>

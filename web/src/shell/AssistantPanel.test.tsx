@@ -530,4 +530,30 @@ describe('assistant panel', () => {
 
     expect(panel()?.textContent).toContain('The assistant can apply settings changes');
   });
+
+  it('shows a start failure with its reason and the raw detail behind a toggle, keeping the composer', async () => {
+    await openPanel({ ...READY, reason: 'Claude Code could not start; run `claude` once in a terminal to check it', providers: [{ id: 'claude', label: 'Claude', available: true, detail: 'Error: settings file is not valid JSON', models: [], efforts: [] }] });
+
+    expect(panel()?.textContent).toContain('Claude Code could not start');
+    expect(panel()!.querySelector('details')?.open).toBe(false);
+    expect(panel()!.querySelector('details')?.textContent).toContain('Error: settings file is not valid JSON');
+    expect(panel()!.querySelector('textarea')).not.toBeNull();
+  });
+
+  it('renders an assistant file-edit proposal under the banner with its own Apply', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+    const fileDiff = ['--- a/D:/ws/app/CLAUDE.md', '+++ b/D:/ws/app/CLAUDE.md', '@@ -1,1 +1,2 @@', ' # App', '+- Keep changes small.', ''].join('\n');
+
+    await emit('proposal', { proposalId: 'f1', expiresAt: '2030-01-01T00:00:00Z', confirm: 'confirm-f1', rationale: 'Add the rule.', files: [{ path: 'D:/ws/app/CLAUDE.md', scope: 'file', sha256Before: 'a', diff: fileDiff }] });
+
+    const card = panel()!.querySelector('section[aria-label="Assistant proposal"]')!;
+    expect(card.textContent).toContain('Proposed by the assistant from your config files');
+    expect(card.querySelector('section[aria-label="Changes to D:/ws/app/CLAUDE.md"]')?.textContent).toContain('File');
+    expect(card.textContent).toContain('- Keep changes small.');
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply'))).toBe(false);
+    await h.click(h.button('Apply this proposal'));
+    expect(body(await h.answer('/api/v2/proposals/f1/apply', { applied: true, auditId: 'a3' }))).toEqual({ confirm: 'confirm-f1' });
+  });
 });

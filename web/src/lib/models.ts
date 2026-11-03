@@ -454,6 +454,8 @@ export interface AssistantProvider {
   label: string;
   available: boolean;
   reason?: string;
+  /** The redacted raw text behind `reason`. */
+  detail?: string;
   models: { id: string; label: string }[];
   efforts: AssistantEffort[];
 }
