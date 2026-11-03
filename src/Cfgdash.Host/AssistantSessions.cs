@@ -836,6 +836,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
                     }
                     else
                     {
+                        await Task.WhenAny(process.StderrDrained, Task.Delay(TimeSpan.FromSeconds(2)));
                         SetFailure(CouldNotStart, process.StderrSummary is { Length: > 0 } detail ? detail : "claude exited before init");
                     }
 

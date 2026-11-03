@@ -45,7 +45,7 @@ public sealed class AssistantMcpTests
         "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"tools/call\",\"params\":{\"name\":\"" + tool + "\",\"arguments\":" + arguments + "}}";
 
     [Fact]
-    public async Task Initialize_and_tools_list_serve_exactly_the_five_assistant_tools()
+    public async Task Initialize_and_tools_list_serve_exactly_the_six_assistant_tools()
     {
         var handler = new StubHandler((_, _) => throw new InvalidOperationException("no link call expected"));
 

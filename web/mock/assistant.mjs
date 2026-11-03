@@ -4,7 +4,8 @@
  * through `POST /api/v2/proposals/{id}/apply` with its `confirm`.
  *
  * Triggers:
- * - `GET /api/v2/assistant/status?variant=unavailable` answers `available: false`;
+ * - `GET /api/v2/assistant/status?variant=unavailable` answers `available: false`; `?variant=start-failed` answers available with the
+ *   mapped `reason` and a redacted `detail` (on the body and on the provider);
  * - a session created with model `"unavailable"` answers 503 `unavailable`;
  * - a message whose text contains `fail` ends its turn with a mapped `error` event (`message` plus redacted `detail`) instead of `done`;
  * - with `assistant.applyEnabled` on in the platform mock, the turn applies its change and emits `applied` (audited `mode: "auto"`)
@@ -44,17 +45,21 @@ const sessions = new Map();
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const liveCount = () => [...sessions.values()].filter((s) => s.live).length;
 
-const provider = (available, reason) => ({
-  id: 'claude', label: 'Claude', available, ...(reason ? { reason } : {}), models: CLAUDE_MODELS, efforts: EFFORTS,
+const provider = (available, reason, detail) => ({
+  id: 'claude', label: 'Claude', available, ...(reason ? { reason } : {}), ...(detail ? { detail } : {}), models: CLAUDE_MODELS, efforts: EFFORTS,
 });
+const START_FAILED = 'Claude Code could not start; run `claude` once in a terminal to check it';
+const START_DETAIL = 'Error: settings file is not valid JSON (token [redacted])';
 
 function status(url) {
   if (url.searchParams.get('variant') === 'unavailable') {
     return [200, { available: false, reason: 'claude not found on PATH', models: [], providers: [provider(false, 'claude not found on PATH')], sessions: [] }];
   }
+  const failed = url.searchParams.get('variant') === 'start-failed';
   return [200, {
     available: true,
-    providers: [provider(true)],
+    ...(failed ? { reason: START_FAILED, detail: START_DETAIL } : {}),
+    providers: [failed ? provider(true, START_FAILED, START_DETAIL) : provider(true)],
     claudePath: '/home/user/.local/bin/claude',
     claudeVersion: '2.1.316 (Claude Code)',
     models: MODELS,

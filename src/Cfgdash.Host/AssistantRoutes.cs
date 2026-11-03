@@ -530,6 +530,11 @@ internal sealed partial class CfgdashServer
             return (new JsonObject { ["error"] = "bad-request" }, false);
         }
 
+        if (content.Contains(AssistantTools.CompanyPathHidden, StringComparison.Ordinal))
+        {
+            return (new JsonObject { ["error"] = "invalid-change", ["key"] = null, ["reason"] = "redacted-value" }, false);
+        }
+
         var result = await editService!.Value.ProposeFileAsync(session.Dir, view.Files, fileId, content, null, session.Id, cancellationToken);
         if (result.Status != EditStatus.Ok)
         {

@@ -339,7 +339,10 @@ public sealed class AssistantFileEditTests
         var settings = Path.Combine(Directory.CreateDirectory(Path.Combine(host.Project, ".claude")).FullName, "settings.json");
         File.WriteAllText(claudeMd, "# App\n");
         File.WriteAllText(settings, "{}\n");
+        var unreferenced = Path.Combine(host.Project, "AGENTS.md");
+        File.WriteAllText(unreferenced, "# Agents\n");
         host.Snapshots.Files = new FakeCatalog(
+            new RegisteredFile(new FileRef("unreferenced", unreferenced, "instruction", 9, 2, false), unreferenced),
             new RegisteredFile(new FileRef("md", claudeMd, "instruction", 6, 1, false), claudeMd),
             new RegisteredFile(new FileRef("settings", settings, "settings", 3, 1, false), settings));
         host.Snapshots.Sections =
@@ -398,11 +401,16 @@ public sealed class AssistantFileEditTests
         var denied = await host.InternalAsync("propose_file_edit", run.Capability, Edit("settings", """{"model":"opus"}""" + "\n"));
         var hidden = await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", "# App\ntoken ghp_" + new string('z', 36) + "\n"));
         var unknown = await host.InternalAsync("propose_file_edit", run.Capability, Edit("nope", "x"));
+        var placeholder = await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", "# App\n[company path hidden]\n"));
+        var outsideView = await host.InternalAsync("propose_file_edit", run.Capability, Edit("unreferenced", "# Agents\nmore\n"));
 
         Assert.Equal("settings", denied.Json.GetProperty("denied").GetString());
         Assert.Equal("assistant-policy", denied.Reason);
         Assert.Equal("would-hide", hidden.Reason);
         Assert.Equal("not-found", unknown.Json.GetProperty("error").GetString());
+        Assert.Equal("not-found", outsideView.Json.GetProperty("error").GetString());
+        Assert.Equal("redacted-value", placeholder.Reason);
+        Assert.Equal("# Agents\n", await File.ReadAllTextAsync(Path.Combine(host.Project, "AGENTS.md")));
         Assert.DoesNotContain("proposal", events.Names);
         Assert.Equal("{}\n", await File.ReadAllTextAsync(settings));
         Assert.Equal("# App\n", await File.ReadAllTextAsync(claudeMd));

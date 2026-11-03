@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core;
@@ -17,7 +18,7 @@ internal static class McpCapability
 }
 
 /// <summary>
-/// <c>cfgdash mcp</c>: an MCP server over stdio (newline-delimited JSON-RPC 2.0) that forwards the five assistant tools to
+/// <c>cfgdash mcp</c>: an MCP server over stdio (newline-delimited JSON-RPC 2.0) that forwards the six assistant tools to
 /// <c>POST http://127.0.0.1:&lt;port&gt;/api/v2/assistant/internal/&lt;tool&gt;</c> with the capability as bearer. It never listens and
 /// never reads <c>run.json</c>. Exit 0 on stdin EOF, 1 when the link fails (connection error, 401 or 404); a slow call answers a <c>timeout</c> tool error.
 /// </summary>
@@ -123,7 +124,7 @@ internal static class McpServer
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
-            Content = new StringContent(arguments.ToJsonString(), new UTF8Encoding(false), "application/json"),
+            Content = new StringContent(arguments.ToJsonString(RelaxedJson), new UTF8Encoding(false), "application/json"),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", capability);
         try
@@ -237,6 +238,8 @@ internal static class McpServer
 
     private static JsonObject Tool(string name, string description, JsonNode schema) =>
         new() { ["name"] = name, ["description"] = description, ["inputSchema"] = schema };
+
+    private static readonly JsonSerializerOptions RelaxedJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private static JsonObject StringSchema() => new() { ["type"] = "string" };
 

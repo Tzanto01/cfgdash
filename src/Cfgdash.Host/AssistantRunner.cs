@@ -35,6 +35,7 @@ internal sealed class AssistantProcess
 {
     public const int MaxLineBytes = 1024 * 1024;
     private const int MaxStderrChars = 16 * 1024;
+    private static readonly TimeSpan StderrGrace = TimeSpan.FromSeconds(2);
     private const string CapabilityVariable = "CFGDASH_MCP_CAPABILITY";
     private const int SigKill = 9;
 
@@ -48,6 +49,7 @@ internal sealed class AssistantProcess
     private readonly StringBuilder stderr = new();
     private readonly TaskCompletionSource exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private SafeFileHandle? job;
+    private Task stderrDrained = Task.CompletedTask;
     private int killed;
     private volatile bool initPassed;
     private volatile string? failure;
@@ -86,7 +88,10 @@ internal sealed class AssistantProcess
     /// <summary>Completes after the process exited (or was killed) and the generated files are gone.</summary>
     public Task Exited => exited.Task;
 
-    /// <summary>The first stderr line, redacted and capped; for the status reason only.</summary>
+    /// <summary>Completes when stderr reached its end (or failed); <see cref="StderrSummary"/> is complete after it.</summary>
+    public Task StderrDrained => stderrDrained;
+
+    /// <summary>The first stderr line, redacted and capped; for the status <c>detail</c> only.</summary>
     public string StderrSummary
     {
         get
@@ -108,6 +113,7 @@ internal sealed class AssistantProcess
         var mcpPath = Path.Combine(start.FilesDir, $"mcp-{start.FilePrefix}.json");
         string[] files = [settingsPath, mcpPath];
         Process? process = null;
+        int? pid = null;
         SafeFileHandle? job = null;
         try
         {
@@ -142,6 +148,7 @@ internal sealed class AssistantProcess
 
             process = new Process { StartInfo = startInfo };
             process.Start();
+            pid = process.Id;
             if (OperatingSystem.IsWindows())
             {
                 job = WindowsJob.Assign(process);
@@ -155,7 +162,11 @@ internal sealed class AssistantProcess
         {
             if (process is not null)
             {
-                KillTree(process, process.Id, start.Setsid is not null);
+                if (pid is { } started)
+                {
+                    KillTree(process, started, start.Setsid is not null);
+                }
+
                 process.Dispose();
             }
 
@@ -225,7 +236,7 @@ internal sealed class AssistantProcess
     private void Run()
     {
         var reader = Task.Run(ReadStdoutAsync);
-        _ = Task.Run(DrainStderrAsync);
+        var drain = stderrDrained = Task.Run(DrainStderrAsync);
         _ = Task.Run(async () =>
         {
             try
@@ -238,6 +249,7 @@ internal sealed class AssistantProcess
             }
             finally
             {
+                await Task.WhenAny(drain, Task.Delay(StderrGrace));
                 job?.Dispose();
                 DeleteFiles(files);
                 process.Dispose();
