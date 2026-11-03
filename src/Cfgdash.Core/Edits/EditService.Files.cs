@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using Cfgdash.Core.Files;
 using Cfgdash.Core.Infrastructure;
 using Cfgdash.Core.Redaction;
 
@@ -95,7 +94,17 @@ internal sealed partial class EditService
             return Invalid(null, "no-change");
         }
 
-        var shownAfter = !hidden ? content : json is not null ? JsonEdit.Serialize(redactor.RedactJson(json)!, "\n") : redactor.RedactText(content);
+        var shownBefore = before;
+        var shownAfter = !hidden ? content : redactor.RedactText(content);
+        if (hidden && json is not null)
+        {
+            shownAfter = JsonEdit.Serialize(redactor.RedactJson(json)!, "\n");
+            if (JsonEdit.Parse(raw, "\n", out var canonical) is not null)
+            {
+                shownBefore = canonical;
+            }
+        }
+
         var path = PathUtil.ToJson(target.Real);
         var planned = new PlannedFile(new EditTarget(FileScope, target.Real) { File = target }, path, raw, Hash(raw), after, Hash(after), Dir: dir);
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -114,7 +123,7 @@ internal sealed partial class EditService
                 ["path"] = path,
                 ["scope"] = FileScope,
                 ["sha256Before"] = planned.Sha256Before,
-                ["diff"] = UnifiedDiff.Create(before, shownAfter, path, false),
+                ["diff"] = UnifiedDiff.Create(shownBefore, shownAfter, path, false),
             }),
             ["confirm"] = proposal.Confirm,
         });
@@ -164,8 +173,13 @@ internal sealed partial class EditService
             return "not-text";
         }
 
-        if (redactor.RedactText(text) != text
-            || (target.Settings && FileContentReader.TryParse(text, out var node) && !JsonNode.DeepEquals(redactor.RedactJson(node), node)))
+        var root = target.Settings ? JsonEdit.Parse(raw, "\n", out _) : null;
+        if (target.Settings && root is null)
+        {
+            return "parse-error";
+        }
+
+        if (redactor.RedactText(text) != text || (root is not null && !JsonNode.DeepEquals(redactor.RedactJson(root), root)))
         {
             return "contains-redacted-values";
         }

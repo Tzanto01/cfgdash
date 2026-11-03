@@ -89,6 +89,8 @@ public sealed class FileEditTests : IDisposable
     [InlineData("ws/proj/.claude/commands/ship.md", "command")]
     [InlineData("config/.claude/settings.json", "settings")]
     [InlineData("ws/proj/.claude/settings.local.json", "settings")]
+    [InlineData("ws/proj/.t3/worktrees/proj/branch/CLAUDE.md", "instruction")]
+    [InlineData("ws/proj/.codex/worktrees/b1/.claude/agents/reviewer.md", "agent")]
     public async Task Editable_kinds_are_editable(string relative, string kind)
     {
         var id = Register(relative, relative.EndsWith(".json", StringComparison.Ordinal) ? "{ \"model\": \"opus\" }\n" : "# notes\n", kind);
@@ -192,6 +194,17 @@ public sealed class FileEditTests : IDisposable
 
         Assert.Equal(new FileEditInfo(false, "contains-redacted-values", null, null, null), info);
         Assert.Equal("contains-redacted-values", await ReasonOf(json));
+    }
+
+    [Fact]
+    public async Task A_settings_file_that_fails_the_strict_parse_is_not_editable_so_comments_are_never_served_raw()
+    {
+        var id = Register("ws/proj/.claude/settings.json", "{\n  // \"env\": { \"OTEL_EXPORTER_OTLP_HEADERS\": \"x-team=abc123\" },\n  \"model\": \"opus\"\n}\n", "settings");
+
+        var info = await Info(id);
+
+        Assert.Equal("parse-error", info.Reason);
+        Assert.Null(info.Content);
     }
 
     [Fact]
@@ -320,6 +333,51 @@ public sealed class FileEditTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(path));
         var revertEntry = JsonNode.Parse(File.ReadAllLines(AuditPath)[^1])!;
         Assert.Equal("revert", (string?)revertEntry["changes"]![0]!["action"]);
+    }
+
+    [Fact]
+    public async Task An_assistant_proposal_without_sha256Before_is_stale_when_the_file_changes_before_apply()
+    {
+        var id = Register("ws/proj/CLAUDE.md", "# notes\n");
+        var proposal = await Propose(id, "# assistant\n", assistant: "s1");
+        File.WriteAllText(tree.Path("ws/proj/CLAUDE.md"), "# user\n");
+
+        Assert.Equal(EditStatus.Stale, (await Apply(proposal)).Status);
+        Assert.Equal("# user\n", File.ReadAllText(tree.Path("ws/proj/CLAUDE.md")));
+    }
+
+    [Fact]
+    public async Task Reverting_a_file_changed_since_the_apply_is_stale()
+    {
+        var id = Register("ws/proj/CLAUDE.md", "# notes\n");
+        var applied = await Apply(await Propose(id, "# edited\n"));
+        File.WriteAllText(tree.Path("ws/proj/CLAUDE.md"), "# later\n");
+
+        Assert.Equal(EditStatus.Stale, (await service.RevertAsync(EditFixture.Text(applied.Body["auditId"]), CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public async Task A_settings_edit_adding_a_secret_shows_a_redacted_diff_of_only_the_change()
+    {
+        var id = Register("ws/proj/.claude/settings.json", "{\r\n    \"model\": \"opus\"\r\n}\r\n", "settings");
+
+        var proposal = await Propose(id, "{\r\n    \"model\": \"opus\",\r\n    \"headers\": { \"X-Trace\": \"abc\" }\r\n}\r\n");
+
+        var diff = EditFixture.Text(proposal.Body["files"]![0]!["diff"]);
+        Assert.DoesNotContain("abc", diff, StringComparison.Ordinal);
+        Assert.Single(diff.Split('\n'), l => l.StartsWith('-') && !l.StartsWith("---", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_revert_diff_of_a_settings_edit_redacts_secret_named_keys()
+    {
+        var id = Register("ws/proj/.claude/settings.json", "{\n  \"model\": \"opus\"\n}\n", "settings");
+        var applied = await Apply(await Propose(id, "{\n  \"model\": \"opus\",\n  \"headers\": { \"X-Trace\": \"abc\" }\n}\n"));
+
+        var revert = await service.RevertAsync(EditFixture.Text(applied.Body["auditId"]), CancellationToken.None);
+
+        Assert.Equal(EditStatus.Ok, revert.Status);
+        Assert.DoesNotContain("abc", EditFixture.Text(revert.Body["files"]![0]!["diff"]), StringComparison.Ordinal);
     }
 
     [Fact]

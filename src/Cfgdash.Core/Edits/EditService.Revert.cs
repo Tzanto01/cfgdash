@@ -177,7 +177,7 @@ internal sealed partial class EditService
             return true;
         }
 
-        if (target.File is not null)
+        if (target.File is { Settings: false })
         {
             redacted = redactor.RedactText(new UTF8Encoding(false).GetString(bytes).TrimStart('\uFEFF'));
             return true;

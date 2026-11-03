@@ -91,6 +91,10 @@ function store(file, before, after, revertOf) {
 }
 
 function apply(proposal, body) {
+  if (proposal.expires <= Date.now()) {
+    proposals.delete(proposal.id);
+    return [404, { error: 'not-found' }];
+  }
   if (body?.confirm !== proposal.confirm) return [400, { error: 'confirm-mismatch' }];
   proposals.delete(proposal.id);
   if (proposal.stale || current(proposal.file) !== proposal.f.before) return [409, { error: 'stale' }];
@@ -144,6 +148,12 @@ export async function filesEditApi(req, url) {
   const raw = url.searchParams.get('dir');
   const dir = raw === null ? null : resolveDir(raw);
   if (!dir) return [400, { error: 'bad-dir' }];
-  const file = buildSnapshot(dir).files.get(decodeURIComponent(proposeMatch[1]));
+  let id;
+  try {
+    id = decodeURIComponent(proposeMatch[1]);
+  } catch {
+    return [404, { error: 'not-found' }];
+  }
+  const file = buildSnapshot(dir).files.get(id);
   return file ? propose(file, body.json) : [404, { error: 'not-found' }];
 }

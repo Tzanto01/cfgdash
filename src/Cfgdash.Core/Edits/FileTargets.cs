@@ -22,12 +22,14 @@ internal sealed class FileTargets(MachineEnvironment environment, EditTargets ta
     /// </summary>
     public FileTarget? Resolve(string dir, string path, string kind, out string? reason)
     {
-        var logical = PathUtil.Full(path);
+        var logical = PathUtil.LongPath(PathUtil.Full(path));
         if (!PathUtil.TryRealPath(logical, out var real) || Directory.Exists(real) || !File.Exists(real))
         {
             reason = "unreadable";
             return null;
         }
+
+        real = PathUtil.LongPath(real);
 
         reason = Reason(dir, logical, kind) ?? Reason(dir, real, kind)
             ?? (IsSettings(logical) != IsSettings(real) ? "not-editable-kind" : null);
@@ -91,10 +93,12 @@ internal sealed class FileTargets(MachineEnvironment environment, EditTargets ta
 
     private static bool IsSettings(string path) => SettingsNames.Any(n => string.Equals(n, Path.GetFileName(path), PathUtil.Comparison));
 
+    /// <summary>A <c>.codex</c>, <c>.t3</c> or <c>.opencode</c> segment (except their <c>worktrees</c> checkouts) or <c>.config/opencode</c>.</summary>
     private static bool IsOtherApp(string path)
     {
         var segments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return segments.Any(s => OtherAppSegments.Any(o => s.Equals(o, StringComparison.OrdinalIgnoreCase)))
+        return segments.Where((s, i) => OtherAppSegments.Any(o => s.Equals(o, StringComparison.OrdinalIgnoreCase))
+                && !(i + 1 < segments.Length - 1 && segments[i + 1].Equals("worktrees", StringComparison.OrdinalIgnoreCase))).Any()
             || segments.Skip(1).Where((s, i) => segments[i].Equals(".config", StringComparison.OrdinalIgnoreCase) && s.Equals("opencode", StringComparison.OrdinalIgnoreCase)).Any();
     }
 }

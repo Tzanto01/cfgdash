@@ -56,7 +56,7 @@ internal sealed partial class CfgdashServer
             return;
         }
 
-        if (!TryGetDir(ctx.Request.Query["dir"], out var dir))
+        if (ctx.Request.Query["dir"].Count == 0 || !TryGetDir(ctx.Request.Query["dir"], out var dir))
         {
             await WriteBadDirAsync(ctx);
             return;

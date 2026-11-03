@@ -137,7 +137,7 @@ public sealed class ApiV2FilesTests : IAsyncLifetime
         var body = ProposalBody("# x\n", Sha256("# notes\r\n"));
 
         Assert.Equal(403, (await PostAsync("/api/v2/files/md/proposals" + Query, body, marker: false)).Status);
-        Assert.Equal(400, (await PostAsync("/api/v2/files/md/proposals", body)).Status);
+        Assert.Equal("bad-dir", (await PostAsync("/api/v2/files/md/proposals", body)).Error);
         Assert.Equal("bad-request", (await PostAsync("/api/v2/files/md/proposals" + Query, "{\"content\":\"# x\"}")).Reason);
     }
 }
