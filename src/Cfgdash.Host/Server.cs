@@ -104,6 +104,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
         app.MapGet("/api/v1/dirs", ctx => DirsAsync(ctx));
         app.MapPost("/api/v1/shutdown", ctx => ShutdownAsync(ctx));
         MapApiV2(dependencies);
+        MapApiV2Files();
         MapFleet(dependencies);
         MapCfgdashSettings(dependencies);
         MapAssistant(dependencies);
@@ -413,7 +414,7 @@ internal sealed partial class CfgdashServer : IAsyncDisposable
             return;
         }
 
-        await WriteJsonAsync(ctx, StatusCodes.Status200OK, content);
+        await WriteJsonAsync(ctx, StatusCodes.Status200OK, await FileAnswerAsync(ctx, dir, file, content));
     }
 
     private async Task DetailAsync(HttpContext ctx)
