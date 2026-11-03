@@ -1,4 +1,4 @@
-import { act, fireEvent } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import type { CfgdashSettings } from '../lib/models';
 import { startApp, type AppHarness, type RequestRecord } from '../test/harness';
 import { answerWhenSent } from '../test/lazy';
@@ -13,7 +13,7 @@ function makeSettings(extra: Partial<CfgdashSettings> = {}): CfgdashSettings {
       defaultDir: null,
       tailnet: false,
       fleet: { enabled: false },
-      assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2 }
+      assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2, budgetEnabled: true, applyEnabled: false, provider: 'claude' }
     },
     startAtLogin: { configured: false, actual: 'off' },
     paths: { config: '/home/user/.config/cfgdash/config.json', overrides: '/home/user/.config/cfgdash/overrides.json' },
@@ -29,7 +29,7 @@ async function openGear(settings: CfgdashSettings = makeSettings()): Promise<App
 
 function control(label: string): HTMLElement {
   const span = [...document.querySelectorAll('main span[id$="-label"]')].find((s) => s.textContent === label);
-  const el = span && document.querySelector<HTMLElement>(`main [aria-labelledby="${span.id}"]`);
+  const el = span && document.querySelector<HTMLElement>(`main [aria-labelledby~="${span.id}"]`);
   if (!el) {
     throw new Error(`No control for ${label}`);
   }
@@ -44,7 +44,7 @@ describe('cfgdash settings (gear)', () => {
     const h = await openGear(makeSettings({ startAtLogin: { configured: true, actual: 'off' } }));
 
     expect(h.el.querySelector('main h1')?.textContent).toBe('cfgdash settings');
-    for (const label of ['Start at login', 'Default folder', 'Publish on the tailnet', 'Theme', 'Answer fleet peers', 'Model', 'Effort', 'Budget per session (USD)']) {
+    for (const label of ['Start at login', 'Default folder', 'Publish on the tailnet', 'Theme', 'Answer fleet peers', 'Model and effort', 'Budget per session (USD)']) {
       expect(() => control(label)).not.toThrow();
     }
     expect(h.text()).toContain('Configured: On · Actual: Off');
@@ -161,5 +161,61 @@ describe('theme from config.json', () => {
     await h.click(h.button('Theme: system. Switch to light'));
 
     expect(h.requests.some((r) => r.url.pathname === '/api/v2/cfgdash-settings')).toBe(false);
+  });
+
+  it('sets the default effort in the model picker as a PUT of only the effort, with the models from the assistant status', async () => {
+    const h = await openGear();
+    await h.answer('/api/v2/assistant/status', { available: true, models: ['sonnet', 'opus'], sessions: [] });
+
+    await h.click(control('Model and effort'));
+    expect(screen.getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Claude', 'sonnet', 'opus', 'Low', 'MediumDefault', 'High', 'Extra high', 'Max']);
+    await h.click(screen.getByRole('radio', { name: 'High' }));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, effort: 'high' } } }));
+
+    expect(put.method).toBe('PUT');
+    expect(body(put)).toEqual({ assistant: { effort: 'high' } });
+    expect(control('Model and effort').textContent).toBe('sonnet · High');
+  });
+
+  it('keeps the latest pick made while a save runs, shows it, and saves it once the first save is done', async () => {
+    const h = await openGear();
+    await h.answer('/api/v2/assistant/status', { available: true, models: ['sonnet', 'opus'], sessions: [] });
+    const withEffort = (effort: 'high' | 'low') => makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, effort } } });
+
+    await h.click(control('Model and effort'));
+    await h.click(screen.getByRole('radio', { name: 'High' }));
+    await h.click(screen.getByRole('radio', { name: 'Max' }));
+    await h.click(screen.getByRole('radio', { name: 'Low' }));
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+
+    const first = await h.answer('/api/v2/cfgdash-settings', withEffort('high'));
+    expect(body(first)).toEqual({ assistant: { effort: 'high' } });
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+    const second = await h.answer('/api/v2/cfgdash-settings', withEffort('low'));
+
+    expect(body(second)).toEqual({ assistant: { effort: 'low' } });
+    expect(h.requests.filter((r) => r.method === 'PUT')).toHaveLength(2);
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+  });
+
+  it('turns the cost limit off as a PUT of budgetEnabled and then hides the budget field', async () => {
+    const h = await openGear();
+
+    await h.click(control('Limit cost per session'));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, budgetEnabled: false } } }));
+
+    expect(body(put)).toEqual({ assistant: { budgetEnabled: false } });
+    expect(() => control('Budget per session (USD)')).toThrow();
+  });
+
+  it('turns apply mode on as a PUT of applyEnabled, with its warning', async () => {
+    const h = await openGear();
+    expect(h.text()).toContain('Changes take effect without asking you first.');
+
+    await h.click(control('Let the assistant apply settings changes'));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, applyEnabled: true } } }));
+
+    expect(body(put)).toEqual({ assistant: { applyEnabled: true } });
+    expect(control('Let the assistant apply settings changes').getAttribute('aria-checked')).toBe('true');
   });
 });

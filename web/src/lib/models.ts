@@ -184,6 +184,8 @@ export interface FileContent {
   contentType: 'markdown' | 'json' | 'text';
   content: string;
   truncated: boolean;
+  /** edits-v2, on the UI listener: whether the file viewer may edit it. `sha256` only when editable. */
+  edit?: { editable: boolean; reason?: string; sha256?: string; gitTracked?: boolean };
 }
 
 /** `GET /api/v1/details/{detailId}`. */
@@ -354,7 +356,8 @@ export interface AuditEntry {
   /** The reverted `auditId` when this entry is an undo. */
   revertOf?: string;
   files: { path: string; scope: string; sha256Before: string | null; sha256After: string | null }[];
-  changes: { key: string; scope: string; action: string }[];
+  /** Settings changes carry `key` and `scope`; file edits (edits-v2) carry `file`, the file id. */
+  changes: { key?: string; scope?: string; file?: string; action: string }[];
 }
 
 /** `GET /api/v2/audit`. */
@@ -371,7 +374,16 @@ export interface CfgdashValues {
   defaultDir: string | null;
   tailnet: boolean;
   fleet: { enabled: boolean };
-  assistant: { model: string; effort: AssistantEffort; maxBudgetUsd: number };
+  assistant: {
+    model: string;
+    effort: AssistantEffort;
+    maxBudgetUsd: number;
+    /** When false there is no cost cap (assistant-v1 revision 3). */
+    budgetEnabled: boolean;
+    /** The assistant may apply settings-key changes without a confirm, never file edits. */
+    applyEnabled: boolean;
+    provider: string;
+  };
 }
 
 /** A partial `values` object for `PUT /api/v2/cfgdash-settings`. */
@@ -426,10 +438,26 @@ export interface CompareResponse {
 export interface AssistantStatus {
   available: boolean;
   reason?: string;
+  /** The redacted raw text behind `reason`, shown only on request. */
+  detail?: string;
   claudePath?: string;
   claudeVersion?: string;
   models: string[];
+  /** The assistant runtimes (assistant-v1 revision 3); older servers send only `models`. */
+  providers?: AssistantProvider[];
   sessions: { id: string; dir: string; model: string; effort: string; live: boolean; costUsd: number }[];
+}
+
+/** One assistant runtime of `GET /api/v2/assistant/status` (assistant-v1 revision 3). */
+export interface AssistantProvider {
+  id: string;
+  label: string;
+  available: boolean;
+  reason?: string;
+  /** The redacted raw text behind `reason`. */
+  detail?: string;
+  models: { id: string; label: string }[];
+  efforts: AssistantEffort[];
 }
 
 /** A context reference sent with an assistant message: ids only, never content. */
@@ -437,6 +465,13 @@ export type ContextRef =
   | { kind: 'row'; collectorId: string; blockId: string; itemId: string }
   | { kind: 'file'; fileId: string }
   | { kind: 'finding'; findingId: string };
+
+/** What the server did with one context reference of a message, by its index in the sent list. */
+export interface ContextResult {
+  index: number;
+  state: 'added' | 'not-found' | 'not-allowed' | 'too-many' | string;
+  title?: string;
+}
 
 /** The `proposal` event of the assistant stream: an edits-v1 proposal plus the model's rationale. */
 export interface AssistantProposal {

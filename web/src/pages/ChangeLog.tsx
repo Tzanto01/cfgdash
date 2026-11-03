@@ -60,7 +60,7 @@ export function ChangeLog({ entries, failed, busyId, error, onUndo, onRetry }: C
                 <ul className="mono-value text-muted">
                   {entry.changes.map((change, index) => (
                     <li key={index} className="wrap-anywhere">
-                      {change.action} {change.key} ({change.scope})
+                      {change.file ? `${change.action} ${entry.files[index]?.path ?? change.file}` : `${change.action} ${change.key} (${change.scope})`}
                     </li>
                   ))}
                 </ul>

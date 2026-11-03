@@ -7,6 +7,7 @@ import type {
   CfgdashSettings,
   CompareResponse,
   ContextRef,
+  ContextResult,
   DetailContent,
   DirsResponse,
   ExportsResponse,
@@ -22,6 +23,9 @@ import type {
 } from './models';
 
 /** A non-2xx answer (`status` > 0) or a network failure (`status` 0). */
+/** The window event the cfgdash settings screen dispatches with the saved settings (`CustomEvent<CfgdashSettings>`). */
+export const SETTINGS_SAVED = 'cfgdash-settings-saved';
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -150,6 +154,10 @@ export const api = {
   propose(dir: string, changes: SettingChange[]): Promise<Proposal> {
     return post<Proposal>('/api/v2/proposals', { dir, changes });
   },
+  /** Dry run of a whole-file edit (edits-v2). */
+  proposeFile(fileId: string, dir: string, content: string, sha256Before: string): Promise<Proposal> {
+    return post<Proposal>(`/api/v2/files/${encodeURIComponent(fileId)}/proposals?${new URLSearchParams({ dir })}`, { content, sha256Before });
+  },
   apply(id: string, confirm: string): Promise<ApplyResult> {
     return post<ApplyResult>(`/api/v2/proposals/${encodeURIComponent(id)}/apply`, { confirm });
   },
@@ -181,11 +189,13 @@ export const api = {
   assistantStart(dir: string, model: string, effort: string): Promise<{ id: string }> {
     return post<{ id: string }>('/api/v2/assistant/sessions', { dir, model, effort });
   },
-  assistantMessage(id: string, text: string, context: ContextRef[]): Promise<unknown> {
+  /** Sends a message; the answer says per context reference what the server resolved (assistant-v1 revision 3). */
+  assistantMessage(id: string, text: string, context: ContextRef[]): Promise<{ context?: ContextResult[] } | null> {
     return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/messages`, { text, context });
   },
-  assistantCheck(id: string): Promise<unknown> {
-    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/check`, {});
+  /** The full check, limited to `findingIds` when given (assistant-v1 revision 3, at most 50). */
+  assistantCheck(id: string, findingIds?: string[]): Promise<unknown> {
+    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/check`, findingIds ? { findingIds } : {});
   },
   /** Ends a session; `keepalive` lets the request finish while the page unloads. */
   assistantEnd(id: string, keepalive = false): Promise<unknown> {

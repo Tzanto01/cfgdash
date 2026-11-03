@@ -2,7 +2,7 @@
  * Browser test of a published cfgdash exe (v0.5 plan section 5), run by CI after the Linux publish.
  *
  * Builds a synthetic harness in a temp dir, starts `cfgdash run` with HOME and the XDG dirs pointed at it, and drives
- * the UI with Chromium: walks every view in the nav, does one edit in the project scope (propose, apply, undo) and checks
+ * the UI with Chromium: walks every view in the nav, switches the effort in the gear picker, resizes the assistant panel, does one settings edit and one CLAUDE.md file edit (propose, apply, undo) and checks
  * the file after each step, checks the assistant panel shows why it is unavailable (no `claude` on PATH), asserts the CSP
  * header and that no request leaves the cfgdash origin, then runs `cfgdash stop`.
  *
@@ -140,13 +140,44 @@ async function main() {
     await page.getByRole('switch', { name: 'Start at login' }).waitFor();
     step('/cfgdash: the gear opens cfgdash settings');
 
+    const configFile = path.join(harness.env.XDG_CONFIG_HOME, 'cfgdash', 'config.json');
+    const pickerButton = page.getByRole('button', { name: /^Model and effort/ });
+    await pickerButton.click();
+    const picker = page.getByRole('dialog', { name: 'Model and effort' });
+    await picker.getByText('Default', { exact: true }).waitFor();
+    const saved = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v2/cfgdash-settings' && r.request().method() === 'PUT');
+    await picker.getByText('High', { exact: true }).click();
+    assert.equal((await saved).status(), 200, 'the gear PUT succeeds');
+    assert.equal(JSON.parse(await readFile(configFile, 'utf8')).assistant.effort, 'high', 'config.json holds the effort picked in the gear');
+    await page.keyboard.press('Escape');
+    assert.equal(await picker.count(), 0, 'Escape closes the picker');
+    step('gear model picker: opened, effort switched to High and saved in config.json');
+
     await page.getByRole('button', { name: 'Assistant', exact: true }).click();
     const assistantPanel = page.locator('aside[aria-labelledby="assistant-title"]');
     await assistantPanel.getByText("The assistant isn't available on this machine.").waitFor();
     assert.ok((await assistantPanel.innerText()).includes('claude not found on PATH'), 'the panel shows the available: false reason');
     assert.equal(await assistantPanel.locator('textarea').count(), 0, 'no message box while unavailable');
+    const handle = page.getByRole('separator', { name: 'Resize assistant panel' });
+    const viewport = page.viewportSize().width;
+    const widest = Math.max(320, Math.min(Math.floor(viewport * 0.6), viewport - 480));
+    const box = await handle.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(10, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    assert.equal(Math.round((await assistantPanel.boundingBox()).width), widest, 'dragging stops at the widest the panel may be');
+    await handle.focus();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(Math.round((await assistantPanel.boundingBox()).width), 320, 'the keyboard stops at 320 px');
+    await page.keyboard.press('ArrowLeft');
     await page.getByRole('button', { name: 'Close assistant' }).click();
     step('assistant panel: shows "claude not found on PATH" instead of the input');
+    await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+    assert.equal(await handle.getAttribute('aria-valuenow'), '336', 'the width is remembered when the panel opens again');
+    await page.getByRole('button', { name: 'Close assistant' }).click();
+    step(`assistant panel: resized between 320 and ${widest} px by drag and keys, width remembered`);
 
     await page.goto(`${origin}/settings`);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -170,6 +201,26 @@ async function main() {
     await page.getByText(/^Undone\. Audit entry /).waitFor();
     assert.equal(await exists(settingsFile), false, 'the undo removes the file the apply created');
     step('undone: project settings file removed again');
+
+    const claudeFile = path.join(harness.project, 'CLAUDE.md');
+    const claudeBefore = await readFile(claudeFile);
+    const files = await page.evaluate(async () => (await (await fetch('/api/v1/snapshot')).json()).files);
+    const claudeId = files.find((f) => f.path.endsWith('/ws/app/CLAUDE.md')).id;
+    await page.goto(`${origin}/instructions?file=${encodeURIComponent(claudeId)}`);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const fileEditor = page.getByRole('textbox', { name: 'Edit CLAUDE.md' });
+    await fileEditor.fill('# App\n\nKeep changes small.\nTest first.\n');
+    await page.getByRole('button', { name: 'Review changes' }).click();
+    await page.getByRole('button', { name: 'Apply change' }).waitFor();
+    assert.deepEqual(await readFile(claudeFile), claudeBefore, 'the file review writes nothing');
+    await page.getByRole('button', { name: 'Apply change' }).click();
+    await page.getByText(/^Applied\. Audit entry /).waitFor();
+    assert.equal(await readFile(claudeFile, 'utf8'), '# App\n\nKeep changes small.\nTest first.\n', 'CLAUDE.md holds the edited bytes');
+    await page.getByRole('button', { name: /^Undo change / }).click();
+    await page.getByRole('button', { name: 'Apply undo' }).click();
+    await page.getByText(/^Undone\. Audit entry /).waitFor();
+    assert.deepEqual(await readFile(claudeFile), claudeBefore, 'the undo restores the original bytes');
+    step('file edit: CLAUDE.md proposed, applied and undone, bytes checked on disk');
 
     assert.deepEqual(foreign, [], 'requests that left the cfgdash origin');
     assert.deepEqual(errors, [], 'page and console errors');

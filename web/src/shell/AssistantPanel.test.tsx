@@ -1,6 +1,6 @@
-import { act, fireEvent } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import type { AssistantStatus, CfgdashSettings } from '../lib/models';
-import { makeSnapshot } from '../test/fixtures';
+import { makeFindings, makeSnapshot } from '../test/fixtures';
 import { startApp, type AppHarness, type RequestRecord } from '../test/harness';
 import { answerWhenSent } from '../test/lazy';
 
@@ -14,7 +14,7 @@ const settings = (): CfgdashSettings => ({
     defaultDir: null,
     tailnet: false,
     fleet: { enabled: false },
-    assistant: { model: 'opus', effort: 'high', maxBudgetUsd: 2 }
+    assistant: { model: 'opus', effort: 'high', maxBudgetUsd: 2, budgetEnabled: true, applyEnabled: false, provider: 'claude' }
   },
   startAtLogin: { configured: false, actual: 'off' },
   paths: { config: '/home/user/.config/cfgdash/config.json', overrides: '/home/user/.config/cfgdash/overrides.json' }
@@ -45,6 +45,7 @@ const proposal = (id: string) => ({
 
 const panel = () => document.querySelector<HTMLElement>('aside[aria-labelledby="assistant-title"]');
 const body = (r: RequestRecord) => JSON.parse(r.body ?? 'null') as unknown;
+const picker = () => panel()!.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
 
 async function emit(name: string, data: unknown, source = FakeEventSource.all[FakeEventSource.all.length - 1]): Promise<void> {
   await act(async () => {
@@ -104,8 +105,7 @@ describe('assistant panel', () => {
 
   it('starts a session with the defaults from cfgdash settings, sends row context as ids and streams the answer', async () => {
     const h = await openPanel();
-    const selects = [...panel()!.querySelectorAll('select')].map((s) => s.value);
-    expect(selects).toEqual(['opus', 'high']);
+    expect(picker().textContent).toBe('opus · High');
 
     await h.click(h.button('Add Effective settings / model to assistant context'));
     expect(panel()?.textContent).toContain('Context 1 of 8');
@@ -146,6 +146,7 @@ describe('assistant panel', () => {
 
     await emit('proposal', proposal('p1'));
     await emit('proposal', proposal('p2'));
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply'))).toBe(false);
 
     const cards = [...panel()!.querySelectorAll('section[aria-label="Assistant proposal"]')];
     expect(cards).toHaveLength(2);
@@ -206,7 +207,7 @@ describe('assistant panel', () => {
 
   it('falls back to the first model when cfgdash settings give none', async () => {
     const h = await openPanel(READY, { ...settings(), configError: 'bad JSON' });
-    expect(panel()!.querySelector('select')!.value).toBe('sonnet');
+    expect(picker().textContent).toBe('sonnet · Medium');
 
     const start = await startTurn(h);
 
@@ -288,5 +289,271 @@ describe('assistant panel', () => {
 
     const end = h.pending((r) => r.method === 'DELETE' && r.url.pathname === '/api/v2/assistant/sessions/s1');
     expect(end?.headers['x-cfgdash-request']).toBe('1');
+  });
+
+  it('resizes from its handle with the arrow keys between 320 px and the window limit, and remembers the width', async () => {
+    const h = await openPanel();
+    const handle = () => screen.getByRole('separator', { name: 'Resize assistant panel' });
+    const key = async (k: string) => {
+      await act(async () => {
+        fireEvent.keyDown(handle(), { key: k });
+      });
+    };
+    expect(handle().getAttribute('aria-valuenow')).toBe('400');
+
+    await key('End');
+    expect(handle().getAttribute('aria-valuenow')).toBe(String(Math.min(Math.floor(window.innerWidth * 0.6), window.innerWidth - 480)));
+    await key('Home');
+    await key('ArrowRight');
+    expect(handle().getAttribute('aria-valuenow')).toBe('320');
+    await key('ArrowLeft');
+    expect(panel()!.style.getPropertyValue('--assistant-width')).toBe('336px');
+
+    await h.click(h.button('Close assistant'));
+    await h.click(h.button('Assistant'));
+    expect(handle().getAttribute('aria-valuenow')).toBe('336');
+  });
+
+  it('picks the model and effort in the popover, labels the default effort and starts the session with them', async () => {
+    const h = await openPanel();
+    await h.click(picker());
+    const popover = screen.getByRole('dialog', { name: 'Model and effort' });
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search models' }));
+    expect(screen.getByRole('radio', { name: /^High/ }).closest('label')?.textContent).toContain('Default');
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hai' } });
+    });
+    expect(screen.getAllByRole('radio', { name: /^(sonnet|opus|haiku)/ }).map((r) => r.closest('label')?.textContent)).toEqual(['haiku']);
+    await h.click(screen.getByRole('radio', { name: 'haiku' }));
+    await h.click(screen.getByRole('radio', { name: 'Low' }));
+    expect(picker().textContent).toBe('haiku · Low');
+
+    await act(async () => {
+      fireEvent.keyDown(popover, { key: 'Escape' });
+    });
+    expect(screen.queryByRole('dialog', { name: 'Model and effort' })).toBeNull();
+    expect(panel()).not.toBeNull();
+    expect(document.activeElement).toBe(picker());
+
+    const start = await startTurn(h);
+    expect(body(start)).toMatchObject({ model: 'haiku', effort: 'low' });
+  });
+
+  it('accepts a full model id typed into the search', async () => {
+    const h = await openPanel();
+    await h.click(picker());
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'claude-sonnet-9-9' } });
+    });
+
+    await h.click(h.button('Use model id claude-sonnet-9-9'));
+
+    expect(picker().textContent).toBe('claude-sonnet-9-9 · High');
+  });
+
+  it('runs Diagnose all from Health as a check limited to the visible findings', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+    await h.click(h.button('Warning'));
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    const start = await h.answer('/api/v2/assistant/sessions', { id: 's1' });
+    const check = await h.answer('/api/v2/assistant/sessions/s1/check', null, 202);
+
+    expect(body(start)).toMatchObject({ model: 'opus', effort: 'high' });
+    expect(body(check)).toEqual({ findingIds: ['overridden:settings.effective:effective:model'] });
+    expect(panel()?.textContent).toContain('Diagnose 1 finding');
+  });
+
+  it('drops a Diagnose request when the panel closes before it ran, so reopening starts no check', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.click(h.button('Close assistant'));
+    await h.click(h.button('Assistant'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await answerWhenSent(h, '/api/v2/cfgdash-settings', settings());
+
+    expect(h.requests.some((r) => r.url.pathname === '/api/v2/assistant/sessions')).toBe(false);
+    expect(h.button('Full check').disabled).toBe(false);
+  });
+
+  it('has no resize handle below 768 px, where it covers the screen', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    await openPanel();
+
+    expect(panel()).not.toBeNull();
+    expect(screen.queryByRole('separator')).toBeNull();
+  });
+
+  it('shows per sent context item what the server did with it, in words', async () => {
+    const h = await openPanel(READY, settings(), '/hooks?dir=D%3A%2Fws%2Fapp');
+    const adds = h.buttons(/^Add Many rows \/ .* to assistant context$/);
+    await h.click(adds[0]);
+    await h.click(adds[1]);
+    await startTurn(h);
+
+    await h.answer('/api/v2/assistant/sessions/s1/messages', { context: [{ index: 0, state: 'added', title: 'Row' }, { index: 1, state: 'not-allowed' }] }, 202);
+
+    const sent = [...panel()!.querySelectorAll('ul[aria-label="Context sent"] li')].map((li) => li.textContent ?? '');
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatch(/: added$/);
+    expect(sent[1]).toMatch(/: not available to the assistant$/);
+  });
+
+  it('shows a change the assistant applied, with Undo through the audit revert', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('applied', { auditId: 'a7', files: proposal('x').files, rationale: '<b>Pin</b> the model.' });
+    const card = panel()!.querySelector('section[aria-label="Applied by the assistant"]')!;
+    expect(card.textContent).toContain('<b>Pin</b> the model.');
+    expect(card.querySelector('b')).toBeNull();
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply') || r.url.pathname.endsWith('/revert'))).toBe(false);
+    expect(card.textContent).toContain('Applied by the assistant');
+    expect(card.textContent).toContain('"model": "sonnet"');
+    expect(card.textContent).toContain('Audit entry a7');
+    expect(h.buttons('Apply this proposal')).toHaveLength(0);
+
+    await h.click(h.button('Undo change a7'));
+    const revert = await h.answer('/api/v2/audit/a7/revert', { id: 'u1', expiresAt: '2030-01-01T00:00:00Z', files: proposal('x').files, confirm: 'confirm-u1' });
+    expect(revert.headers['x-cfgdash-request']).toBe('1');
+    expect(card.textContent).toContain('Review undo of a7');
+    await h.click(h.button('Apply undo'));
+    const apply = await h.answer('/api/v2/proposals/u1/apply', { applied: true, auditId: 'a8' });
+
+    expect(body(apply)).toEqual({ confirm: 'confirm-u1' });
+    expect(card.textContent).toContain('Undone. Audit entry a8.');
+  });
+
+  it('shows a partly written auto-apply with its audit entry and Undo', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('error', { error: 'apply-partial', message: 'The change was only partly written. Open the change log to undo it.', auditId: 'a9' });
+
+    const card = panel()!.querySelector('section[aria-label="Applied by the assistant"]')!;
+    expect(card.textContent).toContain('The change was only partly written.');
+    expect(h.buttons('Undo change a9')).toHaveLength(1);
+    expect(panel()?.textContent).toContain('The assistant is working');
+  });
+
+  it("shows cfgdash's message for a failed turn and the raw detail only behind a toggle", async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('error', { error: 'turn-failed', message: 'Claude is overloaded right now. Try again in a moment.', detail: 'API Error: 529 Overloaded' });
+
+    const details = panel()!.querySelector('details')!;
+    expect(panel()?.textContent).toContain('Claude is overloaded right now.');
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')?.textContent).toBe('Details');
+    expect(details.textContent).toContain('API Error: 529 Overloaded');
+  });
+
+  it('shows the apply badge only while the assistant may apply settings changes', async () => {
+    await openPanel(READY, { ...settings(), values: { ...settings().values, assistant: { ...settings().values.assistant, applyEnabled: true } } });
+    expect(panel()?.textContent).toContain('The assistant can apply settings changes');
+  });
+
+  it('has no apply badge while apply mode is off', async () => {
+    await openPanel();
+    expect(panel()?.textContent).not.toContain('The assistant can apply settings changes');
+  });
+
+  it('says so when none of the diagnosed findings exist anymore', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await h.answer('/api/v2/assistant/sessions', { id: 's1' });
+    await h.answer('/api/v2/assistant/sessions/s1/check', { error: 'no-findings' }, 400);
+
+    expect(panel()?.querySelector('[role="alert"]')?.textContent).toBe('None of these findings exist anymore; refresh.');
+  });
+
+  it('keeps the raw unavailable detail behind a toggle', async () => {
+    await openPanel({ available: false, reason: "Claude Code isn't logged in.", detail: 'auth status: loggedIn false', models: [], sessions: [] });
+
+    expect(panel()?.textContent).toContain("Claude Code isn't logged in.");
+    expect(panel()!.querySelector('details')?.open).toBe(false);
+  });
+
+  it('lets Undo be tried again after it failed', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+    await emit('applied', { auditId: 'a7', files: proposal('x').files });
+
+    await h.click(h.button('Undo change a7'));
+    await h.answer('/api/v2/audit/a7/revert', { error: 'stale' }, 409);
+    expect(panel()?.querySelector('[role="alert"]')?.textContent).toBe('These files changed since that change; undo is no longer safe.');
+
+    await h.click(h.button('Undo change a7'));
+    expect(h.pending((r) => r.url.pathname === '/api/v2/audit/a7/revert')).toBeDefined();
+  });
+
+  it('shows the apply badge as soon as apply mode is turned on in cfgdash settings while the panel is open', async () => {
+    const h = await openPanel();
+    await h.navigate('/cfgdash?dir=D%3A%2Fws%2Fapp');
+    await answerWhenSent(h, '/api/v2/cfgdash-settings', settings());
+    expect(panel()?.textContent).not.toContain('The assistant can apply settings changes');
+
+    const span = [...document.querySelectorAll('main span[id$="-label"]')].find((x) => x.textContent === 'Let the assistant apply settings changes')!;
+    await h.click(document.querySelector(`main [aria-labelledby~="${span.id}"]`)!);
+    await h.answer('/api/v2/cfgdash-settings', { ...settings(), values: { ...settings().values, assistant: { ...settings().values.assistant, applyEnabled: true } } });
+
+    expect(panel()?.textContent).toContain('The assistant can apply settings changes');
+  });
+
+  it('shows a start failure with its reason and the raw detail behind a toggle, keeping the composer', async () => {
+    await openPanel({ ...READY, reason: 'Claude Code could not start; run `claude` once in a terminal to check it', providers: [{ id: 'claude', label: 'Claude', available: true, detail: 'Error: settings file is not valid JSON', models: [], efforts: [] }] });
+
+    expect(panel()?.textContent).toContain('Claude Code could not start');
+    expect(panel()!.querySelector('details')?.open).toBe(false);
+    expect(panel()!.querySelector('details')?.textContent).toContain('Error: settings file is not valid JSON');
+    expect(panel()!.querySelector('textarea')).not.toBeNull();
+  });
+
+  it('renders an assistant file-edit proposal under the banner with its own Apply', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+    const fileDiff = ['--- a/D:/ws/app/CLAUDE.md', '+++ b/D:/ws/app/CLAUDE.md', '@@ -1,1 +1,2 @@', ' # App', '+- Keep changes small.', ''].join('\n');
+
+    await emit('proposal', { proposalId: 'f1', expiresAt: '2030-01-01T00:00:00Z', confirm: 'confirm-f1', rationale: 'Add the rule.', files: [{ path: 'D:/ws/app/CLAUDE.md', scope: 'file', sha256Before: 'a', diff: fileDiff }] });
+
+    const card = panel()!.querySelector('section[aria-label="Assistant proposal"]')!;
+    expect(card.textContent).toContain('Proposed by the assistant from your config files');
+    expect(card.querySelector('section[aria-label="Changes to D:/ws/app/CLAUDE.md"]')?.textContent).toContain('File');
+    expect(card.textContent).toContain('- Keep changes small.');
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply'))).toBe(false);
+    await h.click(h.button('Apply this proposal'));
+    expect(body(await h.answer('/api/v2/proposals/f1/apply', { applied: true, auditId: 'a3' }))).toEqual({ confirm: 'confirm-f1' });
   });
 });

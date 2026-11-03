@@ -1,9 +1,10 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
-import { api, ApiError, isAbort } from '../lib/api';
-import type { AssistantEffort, CfgdashPatch, CfgdashSettings } from '../lib/models';
+import { api, ApiError, isAbort, SETTINGS_SAVED } from '../lib/api';
+import type { AssistantStatus, CfgdashPatch, CfgdashSettings, CfgdashValues } from '../lib/models';
 import { cn } from '../lib/utils';
+import { ModelPicker, pickerProviders } from '../shell/ModelPicker';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
@@ -11,7 +12,6 @@ import { setTheme, useTheme } from '../state/theme';
 
 const LOCAL_ONLY = "cfgdash settings are only available from this machine's browser (localhost).";
 const FIELD = 'touch-target h-8 w-full rounded-md border border-border-strong bg-raised px-2 text-sm placeholder:text-muted';
-const EFFORTS: AssistantEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const INVALID: Record<string, string> = {
   'bad-type': 'Wrong type',
   'bad-value': 'Not an allowed value',
@@ -19,7 +19,7 @@ const INVALID: Record<string, string> = {
   'bad-request': 'The request was not valid'
 };
 
-type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'effort' | 'budget';
+type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'budget' | 'budgetEnabled' | 'applyEnabled';
 
 /** The inline message for a failed PUT, in words. */
 function putFailure(error: unknown, field: Field): string {
@@ -147,6 +147,10 @@ export default function CfgdashSettingsPage() {
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState<Field | null>(null);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>();
+  const [pick, setPick] = useState<CfgdashValues['assistant'] | null>(null);
+  const queuedPick = useRef<CfgdashValues['assistant'] | null>(null);
+  const picking = useRef(false);
 
   useEffect(() => {
     focusPendingHeading();
@@ -165,27 +169,66 @@ export default function CfgdashSettingsPage() {
     return () => controller.abort();
   }, [reloads]);
 
-  const save = async (field: Field, patch: CfgdashPatch) => {
+  useEffect(() => {
+    const controller = new AbortController();
+    api.assistantStatus(controller.signal).then(setAssistantStatus, () => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const save = async (field: Field, patch: CfgdashPatch): Promise<CfgdashSettings | undefined> => {
     if (busy) {
-      return;
+      return undefined;
     }
     setBusy(field);
     setErrors((prev) => ({ ...prev, [field]: undefined }));
     try {
       const data = await api.putCfgdashSettings(patch);
       setLoaded({ data });
+      window.dispatchEvent(new CustomEvent(SETTINGS_SAVED, { detail: data }));
       if (patch.theme) {
         setTheme(patch.theme);
       }
       announce('Saved');
+      return data;
     } catch (error) {
       setErrors((prev) => ({ ...prev, [field]: putFailure(error, field) }));
+      return undefined;
     } finally {
       setBusy(null);
     }
   };
 
   const data = loaded?.data;
+
+  const savePicks = async (saved: CfgdashValues['assistant']) => {
+    picking.current = true;
+    let base = saved;
+    while (queuedPick.current) {
+      const next = queuedPick.current;
+      queuedPick.current = null;
+      const patch: NonNullable<CfgdashPatch['assistant']> = {};
+      if (next.provider !== base.provider) {
+        patch.provider = next.provider;
+      }
+      if (next.model !== base.model) {
+        patch.model = next.model;
+      }
+      if (next.effort !== base.effort) {
+        patch.effort = next.effort;
+      }
+      if (!patch.provider && !patch.model && !patch.effort) {
+        continue;
+      }
+      const result = await save('model', { assistant: patch });
+      if (!result) {
+        queuedPick.current = null;
+        break;
+      }
+      base = result.values.assistant;
+    }
+    picking.current = false;
+    setPick(null);
+  };
 
   const body = () => {
     if (!loaded) {
@@ -340,45 +383,81 @@ export default function CfgdashSettingsPage() {
         </Card>
 
         <Card title="Assistant">
-          <Row label="Model" description="Default model alias for the config assistant, for example sonnet or opus." error={errors.model}>
+          <Row label="Model and effort" description="Default model and reasoning effort for the config assistant." error={errors.model}>
             {(ids) => (
-              <TextSetting
-                key={values.assistant.model}
-                ids={ids}
-                value={values.assistant.model}
-                busy={busy === 'model'}
-                onSave={(text) => void save('model', { assistant: { model: text } })}
-              />
-            )}
-          </Row>
-          <Row label="Effort" description="Default effort for the config assistant." error={errors.effort}>
-            {(ids) => (
-              <select
-                aria-labelledby={ids.labelId}
-                aria-describedby={ids.descId}
+              <ModelPicker
+                labelledBy={ids.labelId}
+                describedBy={ids.descId}
                 disabled={busy !== null}
-                value={values.assistant.effort}
-                onChange={(event) => void save('effort', { assistant: { effort: event.target.value as AssistantEffort } })}
-                className={FIELD}
-              >
-                {EFFORTS.map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effort}
-                  </option>
-                ))}
-              </select>
+                providers={pickerProviders(assistantStatus)}
+                value={pick ?? values.assistant}
+                defaultEffort="medium"
+                onChange={(next) => {
+                  const chosen = { ...values.assistant, provider: next.provider, model: next.model, effort: next.effort };
+                  setPick(chosen);
+                  queuedPick.current = chosen;
+                  if (!picking.current) {
+                    void savePicks(values.assistant);
+                  }
+                }}
+              />
             )}
           </Row>
-          <Row label="Budget per session (USD)" description="The most one assistant session may spend, from 0.1 to 50." error={errors.budget}>
+          <Row
+            label="Limit cost per session"
+            description="Stop an assistant session once it has spent the budget below. The 10-minute turn limit and the other limits stay either way."
+            error={errors.budgetEnabled}
+          >
             {(ids) => (
-              <TextSetting
-                key={values.assistant.maxBudgetUsd}
-                ids={ids}
-                type="number"
-                value={String(values.assistant.maxBudgetUsd)}
-                busy={busy === 'budget'}
-                onSave={(text) => void save('budget', { assistant: { maxBudgetUsd: Number(text) } })}
-              />
+              <div className="flex items-center gap-2">
+                <Switch
+                  on={values.assistant.budgetEnabled}
+                  aria-labelledby={ids.labelId}
+                  aria-describedby={ids.descId}
+                  aria-busy={busy === 'budgetEnabled'}
+                  disabled={busy !== null}
+                  onClick={() => void save('budgetEnabled', { assistant: { budgetEnabled: !values.assistant.budgetEnabled } })}
+                />
+                <span className="text-sm text-muted">{onOff(values.assistant.budgetEnabled)}</span>
+              </div>
+            )}
+          </Row>
+          {values.assistant.budgetEnabled && (
+            <Row label="Budget per session (USD)" description="The most one assistant session may spend, from 0.1 to 50." error={errors.budget}>
+              {(ids) => (
+                <TextSetting
+                  key={values.assistant.maxBudgetUsd}
+                  ids={ids}
+                  type="number"
+                  value={String(values.assistant.maxBudgetUsd)}
+                  busy={busy === 'budget'}
+                  onSave={(text) => void save('budget', { assistant: { maxBudgetUsd: Number(text) } })}
+                />
+              )}
+            </Row>
+          )}
+          <Row
+            label="Let the assistant apply settings changes"
+            description="The assistant applies settings changes itself instead of proposing them. Each one is audited and can be undone in the change log; file edits always wait for your confirm."
+            error={errors.applyEnabled}
+          >
+            {(ids) => (
+              <>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    on={values.assistant.applyEnabled}
+                    aria-labelledby={ids.labelId}
+                    aria-describedby={`${ids.descId} ${ids.labelId}-warn`}
+                    aria-busy={busy === 'applyEnabled'}
+                    disabled={busy !== null}
+                    onClick={() => void save('applyEnabled', { assistant: { applyEnabled: !values.assistant.applyEnabled } })}
+                  />
+                  <span className="text-sm text-muted">{onOff(values.assistant.applyEnabled)}</span>
+                </div>
+                <p id={`${ids.labelId}-warn`} className="text-xs font-medium text-warn">
+                  Changes take effect without asking you first.
+                </p>
+              </>
             )}
           </Row>
         </Card>

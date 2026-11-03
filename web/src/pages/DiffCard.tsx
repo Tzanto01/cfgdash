@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useId, useState } from 'react';
+import { showHidden } from '../lib/markdown';
 import type { ProposalFile } from '../lib/models';
 import { cn } from '../lib/utils';
 
@@ -102,7 +103,7 @@ export function DiffCard({ file, scopeLabel, gitTracked }: { file: ProposalFile;
             {diff.lines.map((line, index) =>
               line.kind === 'hunk' || line.kind === 'note' ? (
                 <div key={index} className="px-3 whitespace-pre text-muted">
-                  {line.text}
+                  {showHidden(line.text)}
                 </div>
               ) : (
                 <div key={index} className={cn('flex', line.kind === 'add' && 'tint-ok', line.kind === 'del' && 'tint-danger')}>
@@ -117,7 +118,7 @@ export function DiffCard({ file, scopeLabel, gitTracked }: { file: ProposalFile;
                   </span>
                   <span className="pr-4 whitespace-pre text-text">
                     {line.kind !== 'ctx' && <span className="sr-only">{line.kind === 'add' ? 'added ' : 'removed '}</span>}
-                    {line.text}
+                    {showHidden(line.text)}
                   </span>
                 </div>
               )
