@@ -79,6 +79,11 @@ internal sealed partial class EditService
             return Invalid(null, "would-hide");
         }
 
+        if (assistantSession is not null && target.Settings)
+        {
+            return new EditResult(EditStatus.Denied, new JsonObject { ["denied"] = fileId, ["reason"] = "assistant-policy" });
+        }
+
         if (sha256Before is not null && !string.Equals(sha256Before, Hash(raw), StringComparison.Ordinal))
         {
             return Error(EditStatus.Stale, "stale");

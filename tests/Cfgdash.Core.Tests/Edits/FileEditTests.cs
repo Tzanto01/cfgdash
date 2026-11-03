@@ -285,6 +285,17 @@ public sealed class FileEditTests : IDisposable
     }
 
     [Fact]
+    public async Task The_assistant_cannot_propose_settings_file_edits()
+    {
+        var id = Register("ws/proj/.claude/settings.json", "{}\n", "settings");
+
+        var result = await Propose(id, "{ \"model\": \"opus\" }\n", assistant: "s1");
+
+        Assert.Equal(EditStatus.Denied, result.Status);
+        Assert.Equal("assistant-policy", (string?)result.Body["reason"]);
+    }
+
+    [Fact]
     public async Task Line_endings_and_a_missing_trailing_newline_are_kept_as_sent()
     {
         var id = Register("ws/proj/CLAUDE.md", "# a\r\nb\r\n");
