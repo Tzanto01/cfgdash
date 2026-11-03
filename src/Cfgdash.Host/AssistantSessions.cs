@@ -20,8 +20,8 @@ internal enum AssistantState
     Dead,
 }
 
-/// <summary>The outcome of the CLI checks behind <c>GET /api/v2/assistant/status</c>. <paramref name="Reason"/> is redacted.</summary>
-internal sealed record AssistantProbe(bool Available, string? Reason, string? ClaudePath = null, string? Version = null, string? Setsid = null);
+/// <summary>The outcome of the CLI checks behind <c>GET /api/v2/assistant/status</c>. <paramref name="Reason"/> is a cfgdash message; <paramref name="Detail"/> is the redacted CLI text behind it, if any.</summary>
+internal sealed record AssistantProbe(bool Available, string? Reason, string? ClaudePath = null, string? Version = null, string? Setsid = null, string? Detail = null);
 
 /// <summary>One cfgdash assistant session: its bound dir, its current <c>claude</c> process and its SSE events. <see cref="State"/>, <see cref="Process"/>, <see cref="Probe"/>, <see cref="ToolCalls"/> and <see cref="Sequence"/> change only under the registry lock.</summary>
 internal sealed class AssistantSession(string id, string dir, string model, string effort, decimal? maxBudgetUsd, long created)
@@ -173,6 +173,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     private const int MaxReasonChars = 300;
     private const int MaxLoggedArgsChars = 2048;
     private const string StartFailed = "the claude process could not start";
+    private const string CouldNotStart = "Claude Code could not start; run `claude` once in a terminal to check it";
 
     private static readonly IReadOnlyList<string> RequiredFlags =
         [.. AssistantLaunch.Arguments("s", "m", DefaultModel, DefaultEffort, DefaultMaxBudgetUsd, "p").Select(a => a.Split('=')[0])];
@@ -193,6 +194,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
     private readonly Task sweep;
     private bool stopping;
     private string? lastFailure;
+    private string? lastFailureDetail;
 
     public AssistantRegistry(CoreServices core, HostDependencies dependencies, Func<int> port, CfgdashLog log)
     {
@@ -282,7 +284,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
         lock (gate)
         {
-            return new AssistantProbe(true, lastFailure, claude, versionText, setsid);
+            return new AssistantProbe(true, lastFailure, claude, versionText, setsid, lastFailureDetail);
         }
     }
 
@@ -664,6 +666,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
         lock (gate)
         {
             lastFailure = reason;
+            lastFailureDetail = null;
             session.State = AssistantState.Dead;
         }
     }
@@ -833,7 +836,8 @@ internal sealed class AssistantRegistry : IAsyncDisposable
                     }
                     else
                     {
-                        SetFailure("claude exited before init" + (process.StderrSummary is { Length: > 0 } detail ? ": " + detail : string.Empty));
+                        await Task.WhenAny(process.StderrDrained, Task.Delay(TimeSpan.FromSeconds(2)));
+                        SetFailure(CouldNotStart, process.StderrSummary is { Length: > 0 } detail ? detail : "claude exited before init");
                     }
 
                     if (process.Failure == "line-too-long")
@@ -875,7 +879,7 @@ internal sealed class AssistantRegistry : IAsyncDisposable
                         break;
                     case StreamEvent.Result(_, _, var subtype, _):
                         process.Kill();
-                        SetFailure("claude ended the turn before init" + (subtype is { Length: > 0 } ? ": " + subtype : string.Empty));
+                        SetFailure(CouldNotStart, "claude ended the turn before init" + (subtype is { Length: > 0 } ? ": " + subtype : string.Empty));
                         session.Error("turn-failed", "the assistant could not start the turn");
                         return null;
                 }
@@ -943,17 +947,19 @@ internal sealed class AssistantRegistry : IAsyncDisposable
             }
 
             lastFailure = redacted;
+            lastFailureDetail = null;
         }
 
         session.Error("containment", "containment check failed");
     }
 
-    private void SetFailure(string? reason)
+    private void SetFailure(string? reason, string? detail = null)
     {
         var redacted = reason is null ? null : Cap(AssistantRedaction.Text(reason));
         lock (gate)
         {
             lastFailure = redacted;
+            lastFailureDetail = detail is null ? null : Cap(AssistantRedaction.Text(detail));
         }
     }
 

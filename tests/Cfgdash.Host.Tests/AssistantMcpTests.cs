@@ -45,7 +45,7 @@ public sealed class AssistantMcpTests
         "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"tools/call\",\"params\":{\"name\":\"" + tool + "\",\"arguments\":" + arguments + "}}";
 
     [Fact]
-    public async Task Initialize_and_tools_list_serve_exactly_the_five_assistant_tools()
+    public async Task Initialize_and_tools_list_serve_exactly_the_six_assistant_tools()
     {
         var handler = new StubHandler((_, _) => throw new InvalidOperationException("no link call expected"));
 
@@ -59,7 +59,7 @@ public sealed class AssistantMcpTests
         Assert.Equal(2, replies.Count);
         Assert.Equal("cfgdash", replies[0]["result"]!["serverInfo"]!["name"]!.GetValue<string>());
         var names = replies[1]["result"]!["tools"]!.AsArray().Select(t => t!["name"]!.GetValue<string>()).Order().ToList();
-        Assert.Equal(new[] { "get_file", "get_findings", "get_snapshot", "propose_change", "search" }, names);
+        Assert.Equal(new[] { "get_file", "get_findings", "get_snapshot", "propose_change", "propose_file_edit", "search" }, names);
         Assert.Empty(handler.Requests);
     }
 

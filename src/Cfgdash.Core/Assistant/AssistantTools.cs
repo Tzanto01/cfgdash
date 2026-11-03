@@ -13,6 +13,9 @@ public static class AssistantTools
     public const int MaxFileBytes = 64 * 1024;
     public const int MinQueryLength = 2;
 
+    /// <summary>The placeholder that replaces a company-path line in what the model sees; never accepted back in file content.</summary>
+    public const string CompanyPathHidden = "[company path hidden]";
+
     /// <summary>
     /// The filtered snapshot, optionally narrowed to one view and/or collector, with <c>files</c> limited to those the kept sections
     /// reference. Over 48 KiB (kept under Claude Code's MCP output token limit) whole sections are left out and <c>truncated</c> is true.
@@ -131,7 +134,10 @@ public static class AssistantTools
     }
 
     private static string HideCompanyLines(string text, AssistantView view, bool keepMarker) =>
-        string.Join('\n', text.Split('\n').Select(line => view.MentionsCompanyPath(line) ? (keepMarker ? line[..1] : string.Empty) + "[company path hidden]" : line));
+        string.Join('\n', text.Split('\n').Select(line =>
+            view.MentionsCompanyPath(line) || (keepMarker && line.Length > 0 && view.MentionsCompanyPath(line[1..]))
+                ? (keepMarker ? line[..1] : string.Empty) + CompanyPathHidden
+                : line));
 
     private sealed class CompanyLineHidingReader(IFileContentReader inner, AssistantView view) : IFileContentReader
     {

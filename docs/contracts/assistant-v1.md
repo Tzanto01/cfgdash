@@ -149,7 +149,7 @@ The CLI runs with `--no-session-persistence`, so it writes no transcript. Claude
 ### Providers
 
 - `assistant.provider` (cfgdash-config-v1, default `claude`). Only `claude` is valid in v0.6.
-- `GET /api/v2/assistant/status` adds `"providers": [ { "id": "claude", "label": "Claude", "available", "reason"?, "models": [ { "id", "label" } ], "efforts": [ ... ] } ]`.
+- `GET /api/v2/assistant/status` adds `"providers": [ { "id": "claude", "label": "Claude", "available", "reason"?, "models": [ { "id", "label" } ], "efforts": [ ... ] } ]`. When the CLI cannot start, `reason` is a cfgdash message and the redacted stderr goes to `detail` (on `status` and on the provider), which the UI shows behind a toggle.
 - Claude models are the aliases the installed CLI accepts (verified by the team against the CLI, for example `opus`, `sonnet`, `haiku`), plus any full model id that matches the existing `model` pattern. A new provider needs its own containment section and a security review before it is listed.
 
 ### Tools

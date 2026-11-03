@@ -15,7 +15,8 @@ public sealed class InitCheckTests
                 "mcp__cfgdash__get_findings",
                 "mcp__cfgdash__get_file",
                 "mcp__cfgdash__search",
-                "mcp__cfgdash__propose_change"
+                "mcp__cfgdash__propose_change",
+                "mcp__cfgdash__propose_file_edit"
               ],
               "mcp_servers": [ { "name": "cfgdash", "status": "connected" } ],
               "agents": [],
@@ -31,6 +32,7 @@ public sealed class InitCheckTests
         ["duplicate tool replacing one", new Action<JsonObject>(o => o["tools"]!.AsArray()[4] = "mcp__cfgdash__search")],
         ["duplicate tool on top", new Action<JsonObject>(o => o["tools"]!.AsArray().Add("mcp__cfgdash__search"))],
         ["missing tool", new Action<JsonObject>(o => o["tools"]!.AsArray().RemoveAt(0))],
+        ["the five tools without propose_file_edit", new Action<JsonObject>(o => o["tools"]!.AsArray().RemoveAt(5))],
         ["no tools", new Action<JsonObject>(o => o["tools"] = new JsonArray())],
         ["tools field missing", new Action<JsonObject>(o => o.Remove("tools"))],
         ["second server", new Action<JsonObject>(o => o["mcp_servers"]!.AsArray().Add(new JsonObject { ["name"] = "other", ["status"] = "connected" }))],

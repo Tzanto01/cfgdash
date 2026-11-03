@@ -214,4 +214,22 @@ public sealed class AssistantToolsTests : IDisposable
 
         Assert.Equal(inCompany ? diff : "@@ -1,3 +1,3 @@\n [company path hidden]\n-  \"model\": \"sonnet\"\n+  \"model\": \"opus\"", shown);
     }
+
+    [Fact]
+    public void ProposalForModel_hides_a_removed_or_added_markdown_line_that_starts_with_the_company_folder()
+    {
+        var folder = Path.GetFileName(f.CompanyPrefix.TrimEnd('/', '\\'));
+        var diff = $"@@ -1,3 +1,3 @@\n # Layout\n-{folder}/   work repos\n+{folder}/   all repos\n keep";
+        var result = new EditResult(EditStatus.Ok, new JsonObject
+        {
+            ["id"] = "p1",
+            ["expiresAt"] = "2026-01-02T03:14:05Z",
+            ["confirm"] = "c",
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "/home/user/ws/AGENTS.md", ["scope"] = "file", ["diff"] = diff }),
+        });
+
+        var shown = (string?)AssistantTools.ProposalForModel(result, f.View(false))["files"]![0]!["diff"];
+
+        Assert.Equal("@@ -1,3 +1,3 @@\n # Layout\n-[company path hidden]\n+[company path hidden]\n keep", shown);
+    }
 }
