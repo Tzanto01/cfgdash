@@ -37,5 +37,6 @@ Line endings and a trailing newline are kept exactly as the content sends them; 
 ## Assistant
 
 - A sixth MCP tool, `propose_file_edit` (`fileId`, `content`, `rationale`). It is allowed only for files in the assistant view (allowlist and company filter of [assistant-v1](assistant-v1.md)) that are editable here. It answers `{ proposalId, files[].diff }`, never `confirm`, and counts toward the quota of 8 open proposals.
+- The assistant may not propose whole-file edits of settings JSON files: they answer `{ "denied": "<fileId>", "reason": "assistant-policy" }`, and the model uses `propose_change`, so the per-key assistant policy (hooks, `permissions.defaultMode`, `env.*` and the rest) cannot be bypassed. Markdown files (instructions, agents, skills, commands) stay proposable.
 - A file edit from the assistant is always a proposal Nico confirms, even when `assistant.applyEnabled` is on.
 - Content the redactor would change is rejected (`would-hide`).
