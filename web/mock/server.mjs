@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { buildSnapshot, START_DIR } from './data.mjs';
 import { listDirs, resolveDir } from './dirs.mjs';
 import { editsApi } from './edits.mjs';
+import { filesEditApi, withEdit } from './files-edit.mjs';
 import { fleetApi, withDriftFindings } from './fleet.mjs';
 import { platformApi } from './platform.mjs';
 import { assistantApi } from './assistant.mjs';
@@ -69,7 +70,7 @@ function withDir(url, fn, param = 'dir') {
 function fileFor(dir, id) {
   const f = snapshotFor(dir).files.get(id);
   if (!f) return [404, { error: 'not-found' }];
-  return [200, { id, path: f.ref.path, kind: f.ref.kind, contentType: f.contentType, content: f.content, truncated: f.truncated }];
+  return [200, withEdit(f, { id, path: f.ref.path, kind: f.ref.kind, contentType: f.contentType, content: f.content, truncated: f.truncated })];
 }
 
 function searchFor(url) {
@@ -98,6 +99,8 @@ async function api(req, res, url) {
   if (opts.forbid) return send(res, 403, { error: 'forbidden', reason: 'tailnet-identity' });
   const assistant = await assistantApi(req, res, url);
   if (assistant) return assistant === true ? undefined : send(res, assistant[0], assistant[1]);
+  const fileEdits = await filesEditApi(req, url);
+  if (fileEdits) return send(res, fileEdits[0], fileEdits[1]);
   const platform = await platformApi(req, url);
   if (platform) return send(res, platform[0], platform[1]);
   const v2 = await editsApi(req, url);

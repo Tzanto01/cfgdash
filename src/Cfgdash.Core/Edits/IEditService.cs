@@ -8,6 +8,12 @@ public enum EditStatus { Ok, InvalidChange, NotFound, ConfirmMismatch, Stale, Wr
 /// <summary><see cref="Body"/> is the complete JSON response body for the status; <see cref="Wrote"/> is true when at least one file was replaced.</summary>
 public sealed record EditResult(EditStatus Status, JsonObject Body, bool Wrote = false);
 
+/// <summary>
+/// The edits-v2 <c>edit</c> info of a registered file. <see cref="Sha256"/>, <see cref="GitTracked"/> and <see cref="Content"/> are set only when
+/// <see cref="Editable"/>; <see cref="Content"/> is then the raw text (BOM removed), which equals its redacted form and is what the UI shows.
+/// </summary>
+public sealed record FileEditInfo(bool Editable, string? Reason, string? Sha256, bool? GitTracked, string? Content);
+
 /// <summary>Guarded edits of catalog settings (docs/contracts/edits-v1.md). Responses carry explicit JSON nulls.</summary>
 public interface IEditService
 {
@@ -33,6 +39,17 @@ public interface IEditService
     /// apply it with <see cref="ApplyAsync"/>. NotFound for an unknown id or missing backup, Stale when a file changed since that apply.
     /// </summary>
     Task<EditResult> RevertAsync(string auditId, CancellationToken cancellationToken);
+
+    /// <summary>The edits-v2 editability of <paramref name="file"/> seen from the target <paramref name="dir"/>.</summary>
+    Task<FileEditInfo> GetFileEditAsync(string dir, RegisteredFile file, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A dry-run edits-v2 proposal that replaces the whole file <paramref name="fileId"/>, which must be in <paramref name="files"/>
+    /// (the snapshot's registry, or <c>AssistantView.Files</c> for the assistant). Null <paramref name="sha256Before"/> means the current content.
+    /// A non-null <paramref name="assistantSessionId"/> adds <c>would-hide</c>, the quota of 8 open assistant proposals and the assistant audit origin.
+    /// NotFound for an id outside <paramref name="files"/>, Stale when <paramref name="sha256Before"/> differs, otherwise InvalidChange with a reason.
+    /// </summary>
+    Task<EditResult> ProposeFileAsync(string dir, IFileCatalog files, string fileId, string content, string? sha256Before, string? assistantSessionId, CancellationToken cancellationToken);
 
     /// <summary>The <c>GET /api/v2/audit</c> body: newest first, <paramref name="limit"/> clamped to 1..500.</summary>
     JsonObject ReadAudit(int limit);

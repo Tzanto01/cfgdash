@@ -33,6 +33,7 @@ internal sealed partial class EditService(
     private static readonly Lock AuditGate = new();
 
     private readonly EditTargets targets = new(environment, locations);
+    private FileTargets FileTargets => new(environment, targets);
     private readonly ConcurrentDictionary<string, Proposal> proposals = new(StringComparer.Ordinal);
     private readonly Lock proposalGate = new();
 
@@ -41,6 +42,8 @@ internal sealed partial class EditService(
         public IReadOnlyList<string> Segments { get; init; } = [];
 
         public SettingDefinition? Definition { get; init; }
+
+        public string? File { get; init; }
     }
 
     private sealed record PlannedFile(EditTarget Target, string Path, byte[]? Before, string? Sha256Before, byte[] After, string Sha256After, bool Delete = false, string? Dir = null);
@@ -395,7 +398,9 @@ internal sealed partial class EditService(
             ["at"] = IsoTime.Format(at),
             ["listener"] = "ui",
             ["files"] = Nodes(written.Select(f => new JsonObject { ["path"] = f.Path, ["scope"] = f.Target.Scope, ["sha256Before"] = f.Sha256Before, ["sha256After"] = f.Delete ? null : f.Sha256After })),
-            ["changes"] = Nodes(proposal.Changes.Select(c => new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = proposal.RevertOf is not null ? "revert" : c.Unset ? "unset" : "set" })),
+            ["changes"] = Nodes(proposal.Changes.Select(c => c.File is { } fileId
+                ? new JsonObject { ["file"] = fileId, ["action"] = proposal.RevertOf is not null ? "revert" : "edit" }
+                : new JsonObject { ["key"] = c.Key, ["scope"] = c.Scope, ["action"] = proposal.RevertOf is not null ? "revert" : c.Unset ? "unset" : "set" })),
         };
         if (proposal.RevertOf is not null)
         {
@@ -421,7 +426,9 @@ internal sealed partial class EditService(
     }
 
     private bool IsCurrent(string dir, PlannedFile file) =>
-        targets.Resolve(file.Target.Scope, file.Dir ?? dir, out _) is { } target
+        (file.Target.File is { } fileTarget
+            ? FileTargets.Resolve(file.Dir ?? dir, fileTarget.Logical, fileTarget.Kind, out _) is { } resolved ? new EditTarget(FileScope, resolved.Real) : null
+            : targets.Resolve(file.Target.Scope, file.Dir ?? dir, out _)) is { } target
         && PathUtil.PathEquals(target.Real, file.Target.Real)
         && TryReadRaw(target.Real, out var bytes)
         && (bytes is null ? file.Before is null : file.Sha256Before is not null && Hash(bytes) == file.Sha256Before);
