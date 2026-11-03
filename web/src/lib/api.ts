@@ -150,6 +150,10 @@ export const api = {
   propose(dir: string, changes: SettingChange[]): Promise<Proposal> {
     return post<Proposal>('/api/v2/proposals', { dir, changes });
   },
+  /** Dry run of a whole-file edit (edits-v2). */
+  proposeFile(fileId: string, dir: string, content: string, sha256Before: string): Promise<Proposal> {
+    return post<Proposal>(`/api/v2/files/${encodeURIComponent(fileId)}/proposals?${new URLSearchParams({ dir })}`, { content, sha256Before });
+  },
   apply(id: string, confirm: string): Promise<ApplyResult> {
     return post<ApplyResult>(`/api/v2/proposals/${encodeURIComponent(id)}/apply`, { confirm });
   },

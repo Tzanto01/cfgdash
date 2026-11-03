@@ -1,5 +1,5 @@
-import { Copy } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Copy, Pencil } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Badges } from '../blocks/Badges';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent } from '../components/ui/sheet';
@@ -9,9 +9,13 @@ import type { DetailContent, FileContent } from '../lib/models';
 import { useUrl } from '../lib/url';
 import { cn } from '../lib/utils';
 import { useSnapshotStore, type RequestState } from '../state/snapshot';
+import { useUi } from '../state/ui';
 import { LoadingPanel } from './Shell';
 import { AddToContext } from './AddToContext';
+import { NOT_EDITABLE } from './fileEdit';
 import { useReturnFocus } from './surface';
+
+const FileEditor = lazy(() => import('./FileEditor'));
 
 type Content = FileContent | DetailContent;
 
@@ -35,6 +39,12 @@ export default function FileSheet() {
   const [result, setResult] = useState<{ key: string; state: RequestState<Content> } | null>(null);
   const [wrap, setWrap] = useState(true);
   const [copied, setCopied] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const dirty = useRef(false);
+  const ui = useUi();
+  const onDirty = useCallback((value: boolean) => {
+    dirty.current = value;
+  }, []);
 
   const fileId = url.file;
   const detailId = fileId ? undefined : url.detail;
@@ -65,6 +75,8 @@ export default function FileSheet() {
   useEffect(() => () => clearTimeout(copyTimer.current), []);
 
   const value = state.phase === 'content' ? state.value : undefined;
+  const editDir = dir ?? store.snapshot?.context.targetDir;
+  const edit = ui.edits && fileId && editDir && value && 'path' in value ? value.edit : undefined;
   const lines = value ? splitLines(value.content) : [];
   const ref = store.file(fileId);
   const path = value && 'path' in value ? value.path : (ref?.path ?? '');
@@ -113,6 +125,8 @@ export default function FileSheet() {
           heading.current?.focus();
         }}
         onCloseAutoFocus={focus.onCloseAutoFocus}
+        onEscapeKeyDown={(event) => dirty.current && event.preventDefault()}
+        onInteractOutside={(event) => dirty.current && event.preventDefault()}
       >
         <div className="flex items-start gap-3 border-b border-border p-4 pr-12">
           <div className="min-w-0 flex-1 space-y-1">
@@ -151,7 +165,23 @@ export default function FileSheet() {
                 <Button onClick={() => setAttempt(attempt + 1)}>Try again</Button>
               </div>
             ))}
-          {state.phase === 'content' && (
+          {edit?.editable && editing === key && editDir && value && 'path' in value && (
+            <Suspense fallback={<LoadingPanel text="Loading the editor..." className="py-6" />}>
+              <FileEditor
+                file={{ ...value, edit }}
+                dir={editDir}
+                onDirty={onDirty}
+                onDone={(changed) => {
+                  dirty.current = false;
+                  setEditing(null);
+                  if (changed) {
+                    setAttempt(attempt + 1);
+                  }
+                }}
+              />
+            </Suspense>
+          )}
+          {state.phase === 'content' && editing !== key && (
             <>
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 {state.value.truncated && (
@@ -162,7 +192,18 @@ export default function FileSheet() {
                 <Button size="sm" className="ml-auto" aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
                   Wrap lines
                 </Button>
+                {edit?.editable && (
+                  <Button size="sm" onClick={() => setEditing(key)}>
+                    <Pencil strokeWidth={1.75} aria-hidden="true" />
+                    Edit
+                  </Button>
+                )}
               </div>
+              {edit && !edit.editable && (
+                <p className="mb-3 text-sm text-muted">
+                  Read-only: {(edit.reason && NOT_EDITABLE[edit.reason]) ?? `cfgdash doesn't edit this file (${edit.reason ?? 'no reason given'}).`}
+                </p>
+              )}
               <ol
                 aria-label={detailId ? 'Detail content' : 'File content'}
                 tabIndex={0}

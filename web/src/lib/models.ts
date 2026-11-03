@@ -184,6 +184,8 @@ export interface FileContent {
   contentType: 'markdown' | 'json' | 'text';
   content: string;
   truncated: boolean;
+  /** edits-v2, on the UI listener: whether the file viewer may edit it. `sha256` only when editable. */
+  edit?: { editable: boolean; reason?: string; sha256?: string; gitTracked?: boolean };
 }
 
 /** `GET /api/v1/details/{detailId}`. */
@@ -354,7 +356,8 @@ export interface AuditEntry {
   /** The reverted `auditId` when this entry is an undo. */
   revertOf?: string;
   files: { path: string; scope: string; sha256Before: string | null; sha256After: string | null }[];
-  changes: { key: string; scope: string; action: string }[];
+  /** Settings changes carry `key` and `scope`; file edits (edits-v2) carry `file`, the file id. */
+  changes: { key?: string; scope?: string; file?: string; action: string }[];
 }
 
 /** `GET /api/v2/audit`. */
