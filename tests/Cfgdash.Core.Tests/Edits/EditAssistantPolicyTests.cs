@@ -10,7 +10,7 @@ public sealed class EditAssistantPolicyTests : IDisposable
     public void Dispose() => f.Dispose();
 
     private Task<EditResult> Assistant(JsonNode change) =>
-        f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(change), "session-1", CancellationToken.None);
+        f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(change), "session-1", false, CancellationToken.None);
 
     private static void AssertDenied(EditResult result, string key)
     {
@@ -110,7 +110,7 @@ public sealed class EditAssistantPolicyTests : IDisposable
     {
         f.WriteUser("{}");
 
-        var result = await f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(EditFixture.Unset(key, "user")), "session-1", CancellationToken.None);
+        var result = await f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(EditFixture.Unset(key, "user")), "session-1", false, CancellationToken.None);
 
         AssertDenied(result, key);
     }

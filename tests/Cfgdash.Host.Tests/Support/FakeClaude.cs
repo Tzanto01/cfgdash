@@ -21,6 +21,7 @@ internal enum FakeTurn
     Stall,
     ControlRequest,
     BigLine,
+    ErrorResult,
 }
 
 /// <summary>The recorded facts of one fake <c>claude</c> run.</summary>
@@ -253,6 +254,7 @@ internal sealed class FakeClaude : IDisposable
               printf '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash"}}\n'
               delta 'hello\n'; result;;
             bigline) head -c 1200000 /dev/zero | tr '\0' a; echo;;
+            errorresult) printf '{"type":"result","subtype":"error_during_execution","is_error":true,"total_cost_usd":0.01,"result":"API Error: 529 Overloaded key %s%s"}\n' AKIAABCDEF GHIJKLMNOP;;
           esac
         done
         """;

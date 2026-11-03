@@ -14,6 +14,7 @@ internal sealed partial class CfgdashServer
 {
     private const string InternalPrefix = "/api/v2/assistant/internal/";
     private const int MaxContextItems = 8;
+    private const int MaxFindingIds = 50;
     private const int MaxMessageChars = 16000;
     private const int MaxRationaleChars = 2000;
     private const int MaxToolBodyBytes = 64 * 1024;
@@ -74,6 +75,15 @@ internal sealed partial class CfgdashServer
         }
 
         body["models"] = new JsonArray([.. (probe.Available ? AssistantRegistry.Models : []).Select(m => (JsonNode)m)]);
+        var claude = new JsonObject { ["id"] = "claude", ["label"] = "Claude", ["available"] = probe.Available };
+        if (probe.Reason is not null)
+        {
+            claude["reason"] = probe.Reason;
+        }
+
+        claude["models"] = new JsonArray([.. AssistantRegistry.ClaudeModels.Select(m => (JsonNode)new JsonObject { ["id"] = m.Id, ["label"] = m.Label })]);
+        claude["efforts"] = new JsonArray([.. AssistantLaunch.Efforts.Select(e => (JsonNode)e)]);
+        body["providers"] = new JsonArray(claude);
         body["sessions"] = new JsonArray([.. assistants.List().Select(s => (JsonNode)new JsonObject
         {
             ["id"] = s.Id,
@@ -140,37 +150,71 @@ internal sealed partial class CfgdashServer
             return;
         }
 
-        var text = CheckPrompt;
-        if (!check)
+        var body = bytes.Length == 0 ? [] : ParseObject(bytes);
+        string text;
+        JsonArray? states = null;
+        if (check)
         {
-            if (ParseObject(bytes) is not { } body
+            if (body is null
+                || body["findingIds"] is not (null or JsonArray { Count: <= MaxFindingIds })
+                || (body["findingIds"] as JsonArray)?.Any(n => n is not JsonValue v || v.GetValueKind() != JsonValueKind.String) == true)
+            {
+                await WriteBadRequestAsync(ctx);
+                return;
+            }
+
+            text = CheckPrompt;
+            if (body["findingIds"] is JsonArray { Count: > 0 } ids)
+            {
+                if (await ResolveContextAsync(ctx, session, [.. ids.Select(id => (JsonNode)new JsonObject { ["kind"] = "finding", ["findingId"] = id!.DeepClone() })], MaxFindingIds) is not { } findings)
+                {
+                    return;
+                }
+
+                if (findings.Block is null)
+                {
+                    await WriteJsonAsync(ctx, StatusCodes.Status400BadRequest, new { error = "no-findings" });
+                    return;
+                }
+
+                text += " Limit the check to these findings:\n\n" + findings.Block;
+            }
+        }
+        else
+        {
+            if (body is null
                 || body["text"] is not JsonValue textValue
                 || textValue.GetValueKind() != JsonValueKind.String
                 || textValue.GetValue<string>() is not { Length: >= 1 and <= MaxMessageChars } userText
-                || body["context"] is not (null or JsonArray { Count: <= MaxContextItems }))
+                || body["context"] is not (null or JsonArray))
             {
                 await WriteBadRequestAsync(ctx);
                 return;
             }
 
             text = userText;
+            states = [];
             if (body["context"] is JsonArray { Count: > 0 } context)
             {
-                if (await ContextBlockAsync(ctx, session, context) is not { } block)
+                if (await ResolveContextAsync(ctx, session, context, MaxContextItems) is not { } resolved)
                 {
-                    if (!ctx.Response.HasStarted)
-                    {
-                        await WriteJsonAsync(ctx, StatusCodes.Status400BadRequest, new { error = "bad-context" });
-                    }
-
                     return;
                 }
 
-                text += "\n\n" + block;
+                states = resolved.States;
+                if (resolved.Block is not null)
+                {
+                    text += "\n\n" + resolved.Block;
+                }
             }
         }
 
         var (status, answer) = await assistants.SendAsync(session, text, ctx.RequestAborted);
+        if (answer is null && states is not null)
+        {
+            answer = new JsonObject { ["context"] = states };
+        }
+
         if (answer is null)
         {
             ctx.Response.StatusCode = status;
@@ -180,8 +224,13 @@ internal sealed partial class CfgdashServer
         await WriteJsonAsync(ctx, status, answer);
     }
 
-    /// <summary>The nonce-fenced reference block (kind, ids and redacted title per item); null when any item does not resolve in the session's assistant view.</summary>
-    private async Task<string?> ContextBlockAsync(HttpContext ctx, AssistantSession session, JsonArray context)
+    /// <summary>
+    /// The per-reference states of assistant-v1 rev 3 and the nonce-fenced block of the <c>added</c> references only (kind, ids and
+    /// redacted title per item; null when none was added). An item past <paramref name="max"/> is <c>too-many</c>; one that resolves in the full
+    /// snapshot but not in the session's assistant view is <c>not-allowed</c> (allowlist or company filter, without saying which);
+    /// anything else that does not resolve is <c>not-found</c>. Null when the snapshot failed (the 500 is written).
+    /// </summary>
+    private async Task<(JsonArray States, string? Block)?> ResolveContextAsync(HttpContext ctx, AssistantSession session, JsonArray context, int max)
     {
         if (await GetSnapshotAsync(ctx, session.Dir, refresh: false) is not { } result)
         {
@@ -189,21 +238,38 @@ internal sealed partial class CfgdashServer
         }
 
         var view = AssistantView.Create(result, core.Environment, session.Dir);
+        var states = new JsonArray();
         var block = new StringBuilder($"<context-{session.Nonce}>\n");
-        foreach (var node in context)
+        var added = 0;
+        for (var index = 0; index < context.Count; index++)
         {
-            if (node is not JsonObject item
-                || item["kind"] is not JsonValue kindValue
-                || kindValue.GetValueKind() != JsonValueKind.String
-                || ContextReport.Titles(view.Snapshot, kindValue.GetValue<string>(), item) is not { } title)
+            var item = context[index] as JsonObject;
+            var kind = item?["kind"] is JsonValue kindValue && kindValue.GetValueKind() == JsonValueKind.String ? kindValue.GetValue<string>() : null;
+            var state = new JsonObject { ["index"] = index };
+            if (index >= max)
             {
-                return null;
+                state["state"] = "too-many";
+            }
+            else if (kind is null)
+            {
+                state["state"] = "not-found";
+            }
+            else if (ContextReport.Titles(view.Snapshot, kind, item!) is { } title)
+            {
+                state["state"] = "added";
+                state["title"] = title;
+                block.Append("- ").Append(item!.ToJsonString()).Append(": ").Append(title).Append('\n');
+                added++;
+            }
+            else
+            {
+                state["state"] = ContextReport.Titles(result.Snapshot, kind, item!) is null ? "not-found" : "not-allowed";
             }
 
-            block.Append("- ").Append(item.ToJsonString()).Append(": ").Append(title).Append('\n');
+            states.Add(state);
         }
 
-        return block.Append($"</context-{session.Nonce}>").ToString();
+        return (states, added == 0 ? null : block.Append($"</context-{session.Nonce}>").ToString());
     }
 
     private async Task AssistantEventsAsync(HttpContext ctx)
@@ -387,7 +453,8 @@ internal sealed partial class CfgdashServer
 
     private async Task<(JsonObject Answer, bool Ok)> ProposeForAssistantAsync(AssistantSession session, AssistantView view, JsonObject args, CancellationToken cancellationToken)
     {
-        var result = await editService!.Value.ProposeForAssistantAsync(session.Dir, args["changes"], session.Id, cancellationToken);
+        var auto = assistants.ApplyEnabled;
+        var result = await editService!.Value.ProposeForAssistantAsync(session.Dir, args["changes"], session.Id, auto, cancellationToken);
         switch (result.Status)
         {
             case EditStatus.Ok:
@@ -395,6 +462,39 @@ internal sealed partial class CfgdashServer
                 if (rationale.Length > MaxRationaleChars)
                 {
                     rationale = rationale[..(char.IsHighSurrogate(rationale[MaxRationaleChars - 1]) ? MaxRationaleChars - 1 : MaxRationaleChars)];
+                }
+
+                if (auto)
+                {
+                    var applied = await editService.Value.ApplyAsync(result.Body["id"]!.GetValue<string>(), result.Body["confirm"]!.GetValue<string>(), cancellationToken);
+                    if (applied.Wrote)
+                    {
+                        snapshots.Clear();
+                    }
+
+                    if (applied.Status != EditStatus.Ok)
+                    {
+                        if (applied.Wrote)
+                        {
+                            session.Emit("error", new JsonObject
+                            {
+                                ["error"] = "apply-partial",
+                                ["message"] = "The change was only partly written. Open the change log to undo it.",
+                                ["auditId"] = applied.Body["auditId"]?.DeepClone(),
+                            });
+                        }
+
+                        return (new JsonObject { ["error"] = applied.Body["error"]?.DeepClone() ?? "apply-failed" }, false);
+                    }
+
+                    session.Emit("applied", new JsonObject
+                    {
+                        ["auditId"] = applied.Body["auditId"]?.DeepClone(),
+                        ["files"] = result.Body["files"]?.DeepClone(),
+                        ["rationale"] = rationale,
+                    });
+                    var forModel = AssistantTools.ProposalForModel(result, view);
+                    return (new JsonObject { ["applied"] = true, ["auditId"] = applied.Body["auditId"]?.DeepClone(), ["files"] = forModel["files"]?.DeepClone() }, true);
                 }
 
                 session.Emit("proposal", new JsonObject
