@@ -141,8 +141,9 @@ export function ModelPicker({ providers, value, defaultEffort, onChange, labelle
         <div
           role="dialog"
           aria-label="Model and effort"
+          tabIndex={-1}
           className={cn(
-            'absolute right-0 z-50 w-[min(560px,calc(100vw-32px))] overflow-hidden rounded-xl border border-border bg-raised text-text shadow-overlay',
+            'absolute right-0 z-50 outline-none w-[min(560px,calc(100vw-32px))] overflow-hidden rounded-xl border border-border bg-raised text-text shadow-overlay',
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
           )}
         >
