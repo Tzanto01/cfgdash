@@ -176,4 +176,25 @@ describe('theme from config.json', () => {
     expect(body(put)).toEqual({ assistant: { effort: 'high' } });
     expect(control('Model and effort').textContent).toBe('sonnet · High');
   });
+
+  it('keeps the latest pick made while a save runs, shows it, and saves it once the first save is done', async () => {
+    const h = await openGear();
+    await h.answer('/api/v2/assistant/status', { available: true, models: ['sonnet', 'opus'], sessions: [] });
+    const withEffort = (effort: 'high' | 'low') => makeSettings({ values: { ...makeSettings().values, assistant: { model: 'sonnet', effort, maxBudgetUsd: 2 } } });
+
+    await h.click(control('Model and effort'));
+    await h.click(screen.getByRole('radio', { name: 'High' }));
+    await h.click(screen.getByRole('radio', { name: 'Max' }));
+    await h.click(screen.getByRole('radio', { name: 'Low' }));
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+
+    const first = await h.answer('/api/v2/cfgdash-settings', withEffort('high'));
+    expect(body(first)).toEqual({ assistant: { effort: 'high' } });
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+    const second = await h.answer('/api/v2/cfgdash-settings', withEffort('low'));
+
+    expect(body(second)).toEqual({ assistant: { effort: 'low' } });
+    expect(h.requests.filter((r) => r.method === 'PUT')).toHaveLength(2);
+    expect(control('Model and effort').textContent).toBe('sonnet · Low');
+  });
 });

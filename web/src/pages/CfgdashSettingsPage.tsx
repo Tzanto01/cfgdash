@@ -1,8 +1,8 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
 import { api, ApiError, isAbort } from '../lib/api';
-import type { AssistantStatus, CfgdashPatch, CfgdashSettings } from '../lib/models';
+import type { AssistantStatus, CfgdashPatch, CfgdashSettings, CfgdashValues } from '../lib/models';
 import { cn } from '../lib/utils';
 import { ModelPicker, pickerProviders } from '../shell/ModelPicker';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
@@ -148,6 +148,9 @@ export default function CfgdashSettingsPage() {
   const [busy, setBusy] = useState<Field | null>(null);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>();
+  const [pick, setPick] = useState<CfgdashValues['assistant'] | null>(null);
+  const queuedPick = useRef<CfgdashValues['assistant'] | null>(null);
+  const picking = useRef(false);
 
   useEffect(() => {
     focusPendingHeading();
@@ -172,9 +175,9 @@ export default function CfgdashSettingsPage() {
     return () => controller.abort();
   }, []);
 
-  const save = async (field: Field, patch: CfgdashPatch) => {
+  const save = async (field: Field, patch: CfgdashPatch): Promise<CfgdashSettings | undefined> => {
     if (busy) {
-      return;
+      return undefined;
     }
     setBusy(field);
     setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -185,14 +188,43 @@ export default function CfgdashSettingsPage() {
         setTheme(patch.theme);
       }
       announce('Saved');
+      return data;
     } catch (error) {
       setErrors((prev) => ({ ...prev, [field]: putFailure(error, field) }));
+      return undefined;
     } finally {
       setBusy(null);
     }
   };
 
   const data = loaded?.data;
+
+  const savePicks = async (saved: CfgdashValues['assistant']) => {
+    picking.current = true;
+    let base = saved;
+    while (queuedPick.current) {
+      const next = queuedPick.current;
+      queuedPick.current = null;
+      const patch: NonNullable<CfgdashPatch['assistant']> = {};
+      if (next.model !== base.model) {
+        patch.model = next.model;
+      }
+      if (next.effort !== base.effort) {
+        patch.effort = next.effort;
+      }
+      if (!patch.model && !patch.effort) {
+        continue;
+      }
+      const result = await save('model', { assistant: patch });
+      if (!result) {
+        queuedPick.current = null;
+        break;
+      }
+      base = result.values.assistant;
+    }
+    picking.current = false;
+    setPick(null);
+  };
 
   const body = () => {
     if (!loaded) {
@@ -354,18 +386,14 @@ export default function CfgdashSettingsPage() {
                 describedBy={ids.descId}
                 disabled={busy !== null}
                 providers={pickerProviders(assistantStatus)}
-                value={{ provider: 'claude', model: values.assistant.model, effort: values.assistant.effort }}
+                value={{ provider: 'claude', model: (pick ?? values.assistant).model, effort: (pick ?? values.assistant).effort }}
                 defaultEffort="medium"
                 onChange={(next) => {
-                  const patch: NonNullable<CfgdashPatch['assistant']> = {};
-                  if (next.model !== values.assistant.model) {
-                    patch.model = next.model;
-                  }
-                  if (next.effort !== values.assistant.effort) {
-                    patch.effort = next.effort;
-                  }
-                  if (patch.model || patch.effort) {
-                    void save('model', { assistant: patch });
+                  const chosen = { ...values.assistant, model: next.model, effort: next.effort };
+                  setPick(chosen);
+                  queuedPick.current = chosen;
+                  if (!picking.current) {
+                    void savePicks(values.assistant);
                   }
                 }}
               />
