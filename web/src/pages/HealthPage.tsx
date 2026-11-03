@@ -68,7 +68,7 @@ export default function HealthPage() {
         {ui.edits && shown.length > 0 && (
           <Button className="mt-3" onClick={() => assistant.requestDiagnose(shown.slice(0, MAX_DIAGNOSE).map((f) => f.id))}>
             <Stethoscope strokeWidth={1.75} aria-hidden="true" />
-            Diagnose all
+            {shown.length > MAX_DIAGNOSE ? `Diagnose the first ${MAX_DIAGNOSE}` : 'Diagnose all'}
           </Button>
         )}
       </header>

@@ -127,7 +127,7 @@ export function ModelPicker({ providers, value, defaultEffort, onChange, labelle
         aria-expanded={open}
         aria-labelledby={`${labelledBy} ${id}-value`}
         aria-describedby={describedBy}
-        disabled={disabled}
+        disabled={disabled && !open}
         onClick={() => (open ? close() : setOpen(true))}
         className="touch-target flex h-8 w-full items-center gap-2 rounded-md border border-border-strong bg-raised px-2 text-left text-sm hover:bg-hover disabled:opacity-50"
       >
@@ -147,7 +147,13 @@ export function ModelPicker({ providers, value, defaultEffort, onChange, labelle
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
           )}
         >
-          <div className="grid max-h-[min(440px,70vh)] grid-cols-1 overflow-y-auto sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,170px)] sm:overflow-hidden">
+          <div
+            className={cn(
+              'grid grid-cols-1',
+              placement === 'top' ? 'max-h-[min(440px,calc(100dvh-240px))]' : 'max-h-[min(440px,70vh)]',
+              ' overflow-y-auto sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,170px)] sm:overflow-hidden'
+            )}
+          >
             <fieldset className="border-b border-border p-2 sm:border-r sm:border-b-0">
               <legend className="sr-only">Provider</legend>
               <div className="flex gap-1 sm:flex-col">

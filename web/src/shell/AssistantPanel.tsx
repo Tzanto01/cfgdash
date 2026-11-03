@@ -130,6 +130,7 @@ export default function AssistantPanel() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const events = useRef<EventSource | null>(null);
   const live = useRef<Session | null>(null);
+  const clearOnClose = useRef(assistant.clearDiagnose);
   const asideRef = useRef<HTMLElement>(null);
   const dragging = useRef(false);
   const narrow = useNarrow();
@@ -171,6 +172,7 @@ export default function AssistantPanel() {
     window.addEventListener('pagehide', leave);
     return () => {
       mounted.current = false;
+      clearOnClose.current();
       window.removeEventListener('pagehide', leave);
       controller.abort();
       events.current?.close();
@@ -194,7 +196,7 @@ export default function AssistantPanel() {
     try {
       localStorage.setItem(WIDTH_KEY, String(value));
     } catch {
-      /* the width is only remembered where storage works */
+      return;
     }
   };
   const onHandleKey = (event: KeyboardEvent<HTMLElement>) => {
@@ -363,7 +365,7 @@ export default function AssistantPanel() {
   const diagnose = assistant.diagnose;
   const clearDiagnose = assistant.clearDiagnose;
   useEffect(() => {
-    if (!diagnose || !status || (available && !defaultsRead)) {
+    if (!diagnose || !status || !dir || (available && !defaultsRead)) {
       return;
     }
     clearDiagnose();

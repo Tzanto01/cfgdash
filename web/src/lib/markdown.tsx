@@ -148,7 +148,11 @@ function CodeBlock({ text }: { text: string }) {
           Copy
         </button>
       </figcaption>
-      <pre className={wrap ? 'p-2 font-mono text-[12.5px] leading-[18px] whitespace-pre-wrap wrap-anywhere' : 'overflow-x-auto p-2 font-mono text-[12.5px] leading-[18px]'}>
+      <pre
+        tabIndex={wrap ? undefined : 0}
+        aria-label={wrap ? undefined : 'Code, scrolls sideways'}
+        className={wrap ? 'p-2 font-mono text-[12.5px] leading-[18px] whitespace-pre-wrap wrap-anywhere' : 'overflow-x-auto p-2 font-mono text-[12.5px] leading-[18px]'}
+      >
         <code>{text}</code>
       </pre>
     </figure>

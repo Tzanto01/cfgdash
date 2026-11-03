@@ -371,4 +371,32 @@ describe('assistant panel', () => {
     expect(body(check)).toEqual({ findingIds: ['overridden:settings.effective:effective:model'] });
     expect(panel()?.textContent).toContain('Diagnose 1 finding');
   });
+
+  it('drops a Diagnose request when the panel closes before it ran, so reopening starts no check', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.click(h.button('Close assistant'));
+    await h.click(h.button('Assistant'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await answerWhenSent(h, '/api/v2/cfgdash-settings', settings());
+
+    expect(h.requests.some((r) => r.url.pathname === '/api/v2/assistant/sessions')).toBe(false);
+    expect(h.button('Full check').disabled).toBe(false);
+  });
+
+  it('has no resize handle below 768 px, where it covers the screen', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    await openPanel();
+
+    expect(panel()).not.toBeNull();
+    expect(screen.queryByRole('separator')).toBeNull();
+  });
 });
