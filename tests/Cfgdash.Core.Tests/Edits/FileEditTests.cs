@@ -188,7 +188,7 @@ public sealed class FileEditTests : IDisposable
     public async Task A_file_the_redactor_would_change_is_read_only_and_has_no_sha256()
     {
         var text = Register("ws/proj/CLAUDE.md", $"token {TokenLike}\n");
-        var json = Register("ws/proj/.claude/settings.json", "{ \"headers\": { \"X-Trace\": \"abc\" } }\n", "settings");
+        var json = Register("ws/proj/.claude/settings.json", "{ \"headers\": { \"X-Trace\": \"q7Zx9vLmTrace\" } }\n", "settings");
 
         var info = await Info(text);
 
@@ -374,10 +374,10 @@ public sealed class FileEditTests : IDisposable
     {
         var id = Register("ws/proj/.claude/settings.json", "{\r\n    \"model\": \"opus\"\r\n}\r\n", "settings");
 
-        var proposal = await Propose(id, "{\r\n    \"model\": \"opus\",\r\n    \"headers\": { \"X-Trace\": \"abc\" }\r\n}\r\n");
+        var proposal = await Propose(id, "{\r\n    \"model\": \"opus\",\r\n    \"headers\": { \"X-Trace\": \"q7Zx9vLmTrace\" }\r\n}\r\n");
 
         var diff = EditFixture.Text(proposal.Body["files"]![0]!["diff"]);
-        Assert.DoesNotContain("abc", diff, StringComparison.Ordinal);
+        Assert.DoesNotContain("q7Zx9vLmTrace", diff, StringComparison.Ordinal);
         Assert.Single(diff.Split('\n'), l => l.StartsWith('-') && !l.StartsWith("---", StringComparison.Ordinal));
     }
 
@@ -385,12 +385,12 @@ public sealed class FileEditTests : IDisposable
     public async Task The_revert_diff_of_a_settings_edit_redacts_secret_named_keys()
     {
         var id = Register("ws/proj/.claude/settings.json", "{\n  \"model\": \"opus\"\n}\n", "settings");
-        var applied = await Apply(await Propose(id, "{\n  \"model\": \"opus\",\n  \"headers\": { \"X-Trace\": \"abc\" }\n}\n"));
+        var applied = await Apply(await Propose(id, "{\n  \"model\": \"opus\",\n  \"headers\": { \"X-Trace\": \"q7Zx9vLmTrace\" }\n}\n"));
 
         var revert = await service.RevertAsync(EditFixture.Text(applied.Body["auditId"]), CancellationToken.None);
 
         Assert.Equal(EditStatus.Ok, revert.Status);
-        Assert.DoesNotContain("abc", EditFixture.Text(revert.Body["files"]![0]!["diff"]), StringComparison.Ordinal);
+        Assert.DoesNotContain("q7Zx9vLmTrace", EditFixture.Text(revert.Body["files"]![0]!["diff"]), StringComparison.Ordinal);
     }
 
     [Fact]
