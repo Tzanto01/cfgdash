@@ -19,7 +19,7 @@ const INVALID: Record<string, string> = {
   'bad-request': 'The request was not valid'
 };
 
-type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'budget';
+type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'budget' | 'budgetEnabled' | 'applyEnabled';
 
 /** The inline message for a failed PUT, in words. */
 function putFailure(error: unknown, field: Field): string {
@@ -206,13 +206,16 @@ export default function CfgdashSettingsPage() {
       const next = queuedPick.current;
       queuedPick.current = null;
       const patch: NonNullable<CfgdashPatch['assistant']> = {};
+      if (next.provider !== base.provider) {
+        patch.provider = next.provider;
+      }
       if (next.model !== base.model) {
         patch.model = next.model;
       }
       if (next.effort !== base.effort) {
         patch.effort = next.effort;
       }
-      if (!patch.model && !patch.effort) {
+      if (!patch.provider && !patch.model && !patch.effort) {
         continue;
       }
       const result = await save('model', { assistant: patch });
@@ -386,10 +389,10 @@ export default function CfgdashSettingsPage() {
                 describedBy={ids.descId}
                 disabled={busy !== null}
                 providers={pickerProviders(assistantStatus)}
-                value={{ provider: 'claude', model: (pick ?? values.assistant).model, effort: (pick ?? values.assistant).effort }}
+                value={pick ?? values.assistant}
                 defaultEffort="medium"
                 onChange={(next) => {
-                  const chosen = { ...values.assistant, model: next.model, effort: next.effort };
+                  const chosen = { ...values.assistant, provider: next.provider, model: next.model, effort: next.effort };
                   setPick(chosen);
                   queuedPick.current = chosen;
                   if (!picking.current) {
@@ -399,16 +402,61 @@ export default function CfgdashSettingsPage() {
               />
             )}
           </Row>
-          <Row label="Budget per session (USD)" description="The most one assistant session may spend, from 0.1 to 50." error={errors.budget}>
+          <Row
+            label="Limit cost per session"
+            description="Stop an assistant session once it has spent the budget below. The 10-minute turn limit and the other limits stay either way."
+            error={errors.budgetEnabled}
+          >
             {(ids) => (
-              <TextSetting
-                key={values.assistant.maxBudgetUsd}
-                ids={ids}
-                type="number"
-                value={String(values.assistant.maxBudgetUsd)}
-                busy={busy === 'budget'}
-                onSave={(text) => void save('budget', { assistant: { maxBudgetUsd: Number(text) } })}
-              />
+              <div className="flex items-center gap-2">
+                <Switch
+                  on={values.assistant.budgetEnabled}
+                  aria-labelledby={ids.labelId}
+                  aria-describedby={ids.descId}
+                  aria-busy={busy === 'budgetEnabled'}
+                  disabled={busy !== null}
+                  onClick={() => void save('budgetEnabled', { assistant: { budgetEnabled: !values.assistant.budgetEnabled } })}
+                />
+                <span className="text-sm text-muted">{onOff(values.assistant.budgetEnabled)}</span>
+              </div>
+            )}
+          </Row>
+          {values.assistant.budgetEnabled && (
+            <Row label="Budget per session (USD)" description="The most one assistant session may spend, from 0.1 to 50." error={errors.budget}>
+              {(ids) => (
+                <TextSetting
+                  key={values.assistant.maxBudgetUsd}
+                  ids={ids}
+                  type="number"
+                  value={String(values.assistant.maxBudgetUsd)}
+                  busy={busy === 'budget'}
+                  onSave={(text) => void save('budget', { assistant: { maxBudgetUsd: Number(text) } })}
+                />
+              )}
+            </Row>
+          )}
+          <Row
+            label="Let the assistant apply settings changes"
+            description="The assistant applies settings changes itself instead of proposing them. Each one is audited and can be undone in the change log; file edits always wait for your confirm."
+            error={errors.applyEnabled}
+          >
+            {(ids) => (
+              <>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    on={values.assistant.applyEnabled}
+                    aria-labelledby={ids.labelId}
+                    aria-describedby={`${ids.descId} ${ids.labelId}-warn`}
+                    aria-busy={busy === 'applyEnabled'}
+                    disabled={busy !== null}
+                    onClick={() => void save('applyEnabled', { assistant: { applyEnabled: !values.assistant.applyEnabled } })}
+                  />
+                  <span className="text-sm text-muted">{onOff(values.assistant.applyEnabled)}</span>
+                </div>
+                <p id={`${ids.labelId}-warn`} className="text-xs font-medium text-warn">
+                  Changes take effect without asking you first.
+                </p>
+              </>
             )}
           </Row>
         </Card>

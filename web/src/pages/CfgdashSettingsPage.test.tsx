@@ -13,7 +13,7 @@ function makeSettings(extra: Partial<CfgdashSettings> = {}): CfgdashSettings {
       defaultDir: null,
       tailnet: false,
       fleet: { enabled: false },
-      assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2 }
+      assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2, budgetEnabled: true, applyEnabled: false, provider: 'claude' }
     },
     startAtLogin: { configured: false, actual: 'off' },
     paths: { config: '/home/user/.config/cfgdash/config.json', overrides: '/home/user/.config/cfgdash/overrides.json' },
@@ -170,7 +170,7 @@ describe('theme from config.json', () => {
     await h.click(control('Model and effort'));
     expect(screen.getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Claude', 'sonnet', 'opus', 'Low', 'MediumDefault', 'High', 'Extra high', 'Max']);
     await h.click(screen.getByRole('radio', { name: 'High' }));
-    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { model: 'sonnet', effort: 'high', maxBudgetUsd: 2 } } }));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, effort: 'high' } } }));
 
     expect(put.method).toBe('PUT');
     expect(body(put)).toEqual({ assistant: { effort: 'high' } });
@@ -180,7 +180,7 @@ describe('theme from config.json', () => {
   it('keeps the latest pick made while a save runs, shows it, and saves it once the first save is done', async () => {
     const h = await openGear();
     await h.answer('/api/v2/assistant/status', { available: true, models: ['sonnet', 'opus'], sessions: [] });
-    const withEffort = (effort: 'high' | 'low') => makeSettings({ values: { ...makeSettings().values, assistant: { model: 'sonnet', effort, maxBudgetUsd: 2 } } });
+    const withEffort = (effort: 'high' | 'low') => makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, effort } } });
 
     await h.click(control('Model and effort'));
     await h.click(screen.getByRole('radio', { name: 'High' }));
@@ -196,5 +196,26 @@ describe('theme from config.json', () => {
     expect(body(second)).toEqual({ assistant: { effort: 'low' } });
     expect(h.requests.filter((r) => r.method === 'PUT')).toHaveLength(2);
     expect(control('Model and effort').textContent).toBe('sonnet · Low');
+  });
+
+  it('turns the cost limit off as a PUT of budgetEnabled and then hides the budget field', async () => {
+    const h = await openGear();
+
+    await h.click(control('Limit cost per session'));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, budgetEnabled: false } } }));
+
+    expect(body(put)).toEqual({ assistant: { budgetEnabled: false } });
+    expect(() => control('Budget per session (USD)')).toThrow();
+  });
+
+  it('turns apply mode on as a PUT of applyEnabled, with its warning', async () => {
+    const h = await openGear();
+    expect(h.text()).toContain('Changes take effect without asking you first.');
+
+    await h.click(control('Let the assistant apply settings changes'));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { ...makeSettings().values.assistant, applyEnabled: true } } }));
+
+    expect(body(put)).toEqual({ assistant: { applyEnabled: true } });
+    expect(control('Let the assistant apply settings changes').getAttribute('aria-checked')).toBe('true');
   });
 });

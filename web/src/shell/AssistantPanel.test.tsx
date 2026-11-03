@@ -14,7 +14,7 @@ const settings = (): CfgdashSettings => ({
     defaultDir: null,
     tailnet: false,
     fleet: { enabled: false },
-    assistant: { model: 'opus', effort: 'high', maxBudgetUsd: 2 }
+    assistant: { model: 'opus', effort: 'high', maxBudgetUsd: 2, budgetEnabled: true, applyEnabled: false, provider: 'claude' }
   },
   startAtLogin: { configured: false, actual: 'off' },
   paths: { config: '/home/user/.config/cfgdash/config.json', overrides: '/home/user/.config/cfgdash/overrides.json' }
@@ -398,5 +398,105 @@ describe('assistant panel', () => {
 
     expect(panel()).not.toBeNull();
     expect(screen.queryByRole('separator')).toBeNull();
+  });
+
+  it('shows per sent context item what the server did with it, in words', async () => {
+    const h = await openPanel(READY, settings(), '/hooks?dir=D%3A%2Fws%2Fapp');
+    const adds = h.buttons(/^Add Many rows \/ .* to assistant context$/);
+    await h.click(adds[0]);
+    await h.click(adds[1]);
+    await startTurn(h);
+
+    await h.answer('/api/v2/assistant/sessions/s1/messages', { context: [{ index: 0, state: 'added', title: 'Row' }, { index: 1, state: 'not-allowed' }] }, 202);
+
+    const sent = [...panel()!.querySelectorAll('ul[aria-label="Context sent"] li')].map((li) => li.textContent ?? '');
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatch(/: added$/);
+    expect(sent[1]).toMatch(/: not available to the assistant$/);
+  });
+
+  it('shows a change the assistant applied, with Undo through the audit revert', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('applied', { auditId: 'a7', files: proposal('x').files, rationale: 'Pin the model.' });
+    const card = panel()!.querySelector('section[aria-label="Applied by the assistant"]')!;
+    expect(card.textContent).toContain('Applied by the assistant');
+    expect(card.textContent).toContain('"model": "sonnet"');
+    expect(card.textContent).toContain('Audit entry a7');
+    expect(h.buttons('Apply this proposal')).toHaveLength(0);
+
+    await h.click(h.button('Undo change a7'));
+    const revert = await h.answer('/api/v2/audit/a7/revert', { id: 'u1', expiresAt: '2030-01-01T00:00:00Z', files: proposal('x').files, confirm: 'confirm-u1' });
+    expect(revert.headers['x-cfgdash-request']).toBe('1');
+    expect(card.textContent).toContain('Review undo of a7');
+    await h.click(h.button('Apply undo'));
+    const apply = await h.answer('/api/v2/proposals/u1/apply', { applied: true, auditId: 'a8' });
+
+    expect(body(apply)).toEqual({ confirm: 'confirm-u1' });
+    expect(card.textContent).toContain('Undone. Audit entry a8.');
+  });
+
+  it('shows a partly written auto-apply with its audit entry and Undo', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('error', { error: 'apply-partial', message: 'The change was only partly written. Open the change log to undo it.', auditId: 'a9' });
+
+    const card = panel()!.querySelector('section[aria-label="Applied by the assistant"]')!;
+    expect(card.textContent).toContain('The change was only partly written.');
+    expect(h.buttons('Undo change a9')).toHaveLength(1);
+    expect(panel()?.textContent).toContain('The assistant is working');
+  });
+
+  it("shows cfgdash's message for a failed turn and the raw detail only behind a toggle", async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+
+    await emit('error', { error: 'turn-failed', message: 'Claude is overloaded right now. Try again in a moment.', detail: 'API Error: 529 Overloaded' });
+
+    const details = panel()!.querySelector('details')!;
+    expect(panel()?.textContent).toContain('Claude is overloaded right now.');
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')?.textContent).toBe('Details');
+    expect(details.textContent).toContain('API Error: 529 Overloaded');
+  });
+
+  it('shows the apply badge only while the assistant may apply settings changes', async () => {
+    await openPanel(READY, { ...settings(), values: { ...settings().values, assistant: { ...settings().values.assistant, applyEnabled: true } } });
+    expect(panel()?.textContent).toContain('The assistant can apply settings changes');
+  });
+
+  it('has no apply badge while apply mode is off', async () => {
+    await openPanel();
+    expect(panel()?.textContent).not.toContain('The assistant can apply settings changes');
+  });
+
+  it('says so when none of the diagnosed findings exist anymore', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await h.answer('/api/v2/assistant/sessions', { id: 's1' });
+    await h.answer('/api/v2/assistant/sessions/s1/check', { error: 'no-findings' }, 400);
+
+    expect(panel()?.querySelector('[role="alert"]')?.textContent).toBe('None of these findings exist anymore; refresh.');
+  });
+
+  it('keeps the raw unavailable detail behind a toggle', async () => {
+    await openPanel({ available: false, reason: "Claude Code isn't logged in.", detail: 'auth status: loggedIn false', models: [], sessions: [] });
+
+    expect(panel()?.textContent).toContain("Claude Code isn't logged in.");
+    expect(panel()!.querySelector('details')?.open).toBe(false);
   });
 });

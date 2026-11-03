@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Button } from '../components/ui/button';
 import { api, ApiError, isAbort } from '../lib/api';
-import type { AssistantEffort, AssistantProposal, AssistantStatus } from '../lib/models';
+import type { AssistantEffort, AssistantProposal, AssistantStatus, Proposal, ProposalFile } from '../lib/models';
 import { Markdown } from '../lib/markdown';
 import { cn } from '../lib/utils';
 import { DiffCard } from '../pages/DiffCard';
@@ -33,11 +33,25 @@ function storedWidth(): number {
   }
 }
 
+const CONTEXT_STATE: Record<string, string> = {
+  added: 'added',
+  'not-found': 'not found in this folder',
+  'not-allowed': "not available to the assistant",
+  'too-many': 'not sent: at most 8 per message'
+};
+
+interface Undo {
+  busy?: boolean;
+  proposal?: Proposal;
+  result?: { ok: boolean; text: string };
+}
+
 type Entry =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; context?: { label: string; state: string }[] }
   | { kind: 'assistant'; text: string }
   | { kind: 'tool'; name: string; status: string }
-  | { kind: 'error'; text: string }
+  | { kind: 'error'; text: string; detail?: string }
+  | { kind: 'applied'; auditId: string; files: ProposalFile[]; rationale?: string; partial?: string; undo?: Undo }
   | { kind: 'note'; text: string }
   | { kind: 'proposal'; proposal: AssistantProposal; result?: { ok: boolean; text: string }; busy?: boolean };
 
@@ -51,6 +65,9 @@ interface Session {
 /** The inline message for a failed assistant request, in words. */
 function requestFailure(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.status === 400 && error.code === 'no-findings') {
+      return 'None of these findings exist anymore; refresh.';
+    }
     if (error.status === 400 && error.code === 'bad-context') {
       return 'Some context items are not available to the assistant. Remove them and send again.';
     }
@@ -97,6 +114,34 @@ function applyFailure(error: unknown): string {
   return "Couldn't apply the proposal.";
 }
 
+function undoFailure(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) {
+      return 'These files changed since that change; undo is no longer safe.';
+    }
+    if (error.status === 404) {
+      return "This change can't be undone: its backup is gone.";
+    }
+    if (error.status === 400 && error.code === 'confirm-mismatch') {
+      return 'This undo no longer matches. Press Undo again.';
+    }
+    if (error.status === 403) {
+      return "cfgdash refused the change (it only accepts edits from this machine's browser).";
+    }
+  }
+  return "Couldn't undo the change.";
+}
+
+/** A redacted raw text behind a cfgdash message, shown only on request. */
+function Details({ text }: { text: string }) {
+  return (
+    <details className="text-xs text-muted">
+      <summary className="touch-target cursor-pointer">Details</summary>
+      <pre className="mt-1 font-mono whitespace-pre-wrap wrap-anywhere">{text}</pre>
+    </details>
+  );
+}
+
 function parse(event: Event): Record<string, unknown> {
   try {
     const data: unknown = JSON.parse((event as MessageEvent<string>).data);
@@ -120,6 +165,7 @@ export default function AssistantPanel() {
   const [defaultEffort, setDefaultEffort] = useState<AssistantEffort>('medium');
   const [provider, setProvider] = useState('claude');
   const [defaultsRead, setDefaultsRead] = useState(false);
+  const [applyOn, setApplyOn] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [running, setRunning] = useState(false);
@@ -156,6 +202,8 @@ export default function AssistantPanel() {
         if (!settings.configError) {
           setModel((m) => m || settings.values.assistant.model);
           setDefaultEffort(settings.values.assistant.effort);
+          setProvider(settings.values.assistant.provider);
+          setApplyOn(settings.values.assistant.applyEnabled);
           if (!effortTouched.current) {
             setEffort(settings.values.assistant.effort);
           }
@@ -251,6 +299,14 @@ export default function AssistantPanel() {
         announce('The assistant proposed a change');
       }
     });
+    source.addEventListener('applied', (event) => {
+      const data = parse(event);
+      if (typeof data['auditId'] === 'string' && Array.isArray(data['files'])) {
+        push({ kind: 'applied', auditId: data['auditId'], files: data['files'] as ProposalFile[], rationale: str(data['rationale']) || undefined });
+        announce('The assistant applied a change');
+        store.refresh();
+      }
+    });
     source.addEventListener('cost', (event) => {
       const value = parse(event)['costUsd'];
       if (typeof value === 'number') {
@@ -264,7 +320,13 @@ export default function AssistantPanel() {
     source.addEventListener('error', (event) => {
       if (event instanceof MessageEvent) {
         const data = parse(event);
-        push({ kind: 'error', text: str(data['message']) || str(data['error']) || 'The assistant stopped.' });
+        const text = str(data['message']) || 'The assistant stopped.';
+        if (data['error'] === 'apply-partial' && typeof data['auditId'] === 'string') {
+          push({ kind: 'applied', auditId: data['auditId'], files: [], partial: text });
+          store.refresh();
+          return;
+        }
+        push({ kind: 'error', text, detail: str(data['detail']) || undefined });
         setRunning(false);
       } else if (source.readyState === EventSource.CLOSED) {
         if (working.current) {
@@ -326,11 +388,22 @@ export default function AssistantPanel() {
         listen(id);
         push({ kind: 'note', text: `New session: ${chosenModel}, effort ${effort}.` });
       }
-      const refs = assistant.items.map((i) => i.ref);
+      const items = assistant.items;
+      const refs = items.map((i) => i.ref);
       setRunning(true);
       push(entry);
-      await (check ? api.assistantCheck(current.id, findingIds) : api.assistantMessage(current.id, message, refs));
-      if (!check) {
+      api.cfgdashSettings().then(
+        (settings) => !settings.configError && setApplyOn(settings.values.assistant.applyEnabled),
+        () => undefined
+      );
+      if (check) {
+        await api.assistantCheck(current.id, findingIds);
+      } else {
+        const answer = await api.assistantMessage(current.id, message, refs);
+        const context = (answer?.context ?? []).filter((c) => items[c.index]).map((c) => ({ label: items[c.index].label, state: c.state }));
+        if (context.length) {
+          setEntries((prev) => prev.map((e) => (e === entry ? { ...entry, context } : e)));
+        }
         setText((t) => (t.trim() === message ? '' : t));
         assistant.drop(refs);
       }
@@ -373,6 +446,31 @@ export default function AssistantPanel() {
       void send(true, diagnose);
     }
   });
+
+  const updateUndo = (index: number, undo: Undo) =>
+    setEntries((prev) => prev.map((e, i) => (i === index && e.kind === 'applied' ? { ...e, undo } : e)));
+
+  const prepareUndo = async (index: number, auditId: string) => {
+    updateUndo(index, { busy: true });
+    try {
+      updateUndo(index, { proposal: await api.revert(auditId) });
+    } catch (error) {
+      updateUndo(index, { result: { ok: false, text: undoFailure(error) } });
+    }
+  };
+
+  const applyUndo = async (index: number, proposal: Proposal) => {
+    updateUndo(index, { proposal, busy: true });
+    try {
+      const result = await api.apply(proposal.id, proposal.confirm);
+      const done = `Undone. Audit entry ${result.auditId}.`;
+      updateUndo(index, { proposal, result: { ok: true, text: done } });
+      announce(done);
+      store.refresh();
+    } catch (error) {
+      updateUndo(index, { proposal, result: { ok: false, text: undoFailure(error) } });
+    }
+  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
@@ -444,6 +542,9 @@ export default function AssistantPanel() {
         </Button>
       </div>
 
+      {available && applyOn && (
+        <p className="tint-warn shrink-0 border-b border-warn px-4 py-1.5 text-xs font-medium text-warn">The assistant can apply settings changes</p>
+      )}
       {!status ? (
         <LoadingPanel text="Checking the assistant..." className="px-4" />
       ) : !data ? (
@@ -452,6 +553,7 @@ export default function AssistantPanel() {
         <div className="space-y-2 p-4">
           <p className="font-medium">The assistant isn't available on this machine.</p>
           <p>{data.reason ?? 'No reason given.'}</p>
+          {data.detail && <Details text={data.detail} />}
         </div>
       ) : (
         <>
@@ -465,9 +567,24 @@ export default function AssistantPanel() {
               switch (entry.kind) {
                 case 'user':
                   return (
-                    <p key={index} className="ml-8 rounded-lg bg-hover px-3 py-2 whitespace-pre-wrap">
-                      {entry.text}
-                    </p>
+                    <div key={index} className="ml-8 space-y-1">
+                      <p className="rounded-lg bg-hover px-3 py-2 whitespace-pre-wrap">{entry.text}</p>
+                      {entry.context && (
+                        <ul aria-label="Context sent" className="flex flex-wrap justify-end gap-1">
+                          {entry.context.map((c, i) => (
+                            <li
+                              key={i}
+                              className={cn(
+                                'max-w-full truncate rounded-full border px-2 text-xs leading-5',
+                                c.state === 'added' ? 'border-border-strong text-muted' : 'tint-warn border-warn text-warn'
+                              )}
+                            >
+                              {c.label}: {CONTEXT_STATE[c.state] ?? c.state}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   );
                 case 'assistant':
                   return (
@@ -484,9 +601,50 @@ export default function AssistantPanel() {
                   );
                 case 'error':
                   return (
-                    <p key={index} className="text-sm text-danger">
-                      {entry.text}
-                    </p>
+                    <div key={index} className="space-y-1">
+                      <p className="text-sm text-danger">{entry.text}</p>
+                      {entry.detail && <Details text={entry.detail} />}
+                    </div>
+                  );
+                case 'applied':
+                  return (
+                    <section
+                      key={index}
+                      aria-label="Applied by the assistant"
+                      className={cn('space-y-2 rounded-lg border p-2', entry.partial ? 'border-danger' : 'border-ok')}
+                    >
+                      <p className={cn('rounded-md px-2 py-1 text-sm font-medium', entry.partial ? 'tint-danger text-danger' : 'tint-ok text-ok')}>
+                        {entry.partial ?? 'Applied by the assistant'}
+                      </p>
+                      {entry.rationale && <p className="whitespace-pre-wrap">{entry.rationale}</p>}
+                      {entry.files.map((file) => (
+                        <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
+                      ))}
+                      <p className="mono-value text-xs text-muted">Audit entry {entry.auditId}</p>
+                      {entry.undo?.proposal && !entry.undo.result?.ok && <p className="text-sm font-semibold">Review undo of {entry.auditId}</p>}
+                      {entry.undo?.proposal &&
+                        !entry.undo.result?.ok &&
+                        entry.undo.proposal.files.map((file) => (
+                          <DiffCard key={`undo\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
+                        ))}
+                      {entry.undo?.result && (
+                        <p role={entry.undo.result.ok ? 'status' : 'alert'} className={cn('text-sm font-medium', entry.undo.result.ok ? 'text-ok' : 'text-danger')}>
+                          {entry.undo.result.text}
+                        </p>
+                      )}
+                      {!entry.undo?.result && entry.undo?.proposal ? (
+                        <Button variant="primary" aria-busy={entry.undo.busy} disabled={entry.undo.busy} onClick={() => void applyUndo(index, entry.undo!.proposal!)}>
+                          Apply undo
+                        </Button>
+                      ) : (
+                        !entry.undo?.result && (
+                          <Button aria-busy={entry.undo?.busy} disabled={entry.undo?.busy} onClick={() => void prepareUndo(index, entry.auditId)}>
+                            {entry.undo?.busy ? 'Preparing undo...' : 'Undo'}
+                            <span className="sr-only"> change {entry.auditId}</span>
+                          </Button>
+                        )
+                      )}
+                    </section>
                   );
                 case 'note':
                   return (

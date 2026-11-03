@@ -374,7 +374,16 @@ export interface CfgdashValues {
   defaultDir: string | null;
   tailnet: boolean;
   fleet: { enabled: boolean };
-  assistant: { model: string; effort: AssistantEffort; maxBudgetUsd: number };
+  assistant: {
+    model: string;
+    effort: AssistantEffort;
+    maxBudgetUsd: number;
+    /** When false there is no cost cap (assistant-v1 revision 3). */
+    budgetEnabled: boolean;
+    /** The assistant may apply settings-key changes without a confirm, never file edits. */
+    applyEnabled: boolean;
+    provider: string;
+  };
 }
 
 /** A partial `values` object for `PUT /api/v2/cfgdash-settings`. */
@@ -429,6 +438,8 @@ export interface CompareResponse {
 export interface AssistantStatus {
   available: boolean;
   reason?: string;
+  /** The redacted raw text behind `reason`, shown only on request. */
+  detail?: string;
   claudePath?: string;
   claudeVersion?: string;
   models: string[];
@@ -452,6 +463,13 @@ export type ContextRef =
   | { kind: 'row'; collectorId: string; blockId: string; itemId: string }
   | { kind: 'file'; fileId: string }
   | { kind: 'finding'; findingId: string };
+
+/** What the server did with one context reference of a message, by its index in the sent list. */
+export interface ContextResult {
+  index: number;
+  state: 'added' | 'not-found' | 'not-allowed' | 'too-many' | string;
+  title?: string;
+}
 
 /** The `proposal` event of the assistant stream: an edits-v1 proposal plus the model's rationale. */
 export interface AssistantProposal {

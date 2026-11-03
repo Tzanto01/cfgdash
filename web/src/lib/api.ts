@@ -7,6 +7,7 @@ import type {
   CfgdashSettings,
   CompareResponse,
   ContextRef,
+  ContextResult,
   DetailContent,
   DirsResponse,
   ExportsResponse,
@@ -185,7 +186,8 @@ export const api = {
   assistantStart(dir: string, model: string, effort: string): Promise<{ id: string }> {
     return post<{ id: string }>('/api/v2/assistant/sessions', { dir, model, effort });
   },
-  assistantMessage(id: string, text: string, context: ContextRef[]): Promise<unknown> {
+  /** Sends a message; the answer says per context reference what the server resolved (assistant-v1 revision 3). */
+  assistantMessage(id: string, text: string, context: ContextRef[]): Promise<{ context?: ContextResult[] } | null> {
     return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/messages`, { text, context });
   },
   /** The full check, limited to `findingIds` when given (assistant-v1 revision 3, at most 50). */
