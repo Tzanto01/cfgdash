@@ -28,6 +28,9 @@ public sealed class CfgdashConfigTests : IDisposable
         Assert.Equal(("system", "sonnet", "medium"), (settings.Theme, settings.AssistantModel, settings.AssistantEffort));
         Assert.False(settings.StartAtLogin || settings.Tailnet || settings.FleetEnabled);
         Assert.Null(settings.DefaultDir);
+        Assert.True(settings.AssistantBudgetEnabled);
+        Assert.False(settings.AssistantApplyEnabled);
+        Assert.Equal("claude", settings.AssistantProvider);
     }
 
     [Fact]
@@ -40,7 +43,7 @@ public sealed class CfgdashConfigTests : IDisposable
             ["startAtLogin"] = "yes",
             ["tailnet"] = true,
             ["defaultDir"] = missing,
-            ["assistant"] = new JsonObject { ["effort"] = "bogus", ["maxBudgetUsd"] = "x", ["model"] = "opus" },
+            ["assistant"] = new JsonObject { ["effort"] = "bogus", ["maxBudgetUsd"] = "x", ["model"] = "opus", ["applyEnabled"] = "yes", ["budgetEnabled"] = false, ["provider"] = "codex" },
         }.ToJsonString());
 
         var settings = config.Read();
@@ -52,6 +55,9 @@ public sealed class CfgdashConfigTests : IDisposable
         Assert.Equal("medium", settings.AssistantEffort);
         Assert.Equal(2.0, settings.AssistantMaxBudgetUsd);
         Assert.Equal("opus", settings.AssistantModel);
+        Assert.False(settings.AssistantApplyEnabled);
+        Assert.False(settings.AssistantBudgetEnabled);
+        Assert.Equal("claude", settings.AssistantProvider);
     }
 
     [Fact]
@@ -153,6 +159,11 @@ public sealed class CfgdashConfigTests : IDisposable
     [InlineData("""{"assistant":{"maxBudgetUsd":0.09}}""", "assistant.maxBudgetUsd", "bad-value")]
     [InlineData("""{"assistant":{"maxBudgetUsd":50.01}}""", "assistant.maxBudgetUsd", "bad-value")]
     [InlineData("""{"assistant":{"maxBudgetUsd":"2"}}""", "assistant.maxBudgetUsd", "bad-type")]
+    [InlineData("""{"assistant":{"budgetEnabled":false,"applyEnabled":true,"provider":"claude"}}""", null, null)]
+    [InlineData("""{"assistant":{"budgetEnabled":0}}""", "assistant.budgetEnabled", "bad-type")]
+    [InlineData("""{"assistant":{"applyEnabled":null}}""", "assistant.applyEnabled", "bad-type")]
+    [InlineData("""{"assistant":{"provider":"codex"}}""", "assistant.provider", "bad-value")]
+    [InlineData("""{"assistant":{"provider":1}}""", "assistant.provider", "bad-type")]
     [InlineData("""{"startAtLogin":1}""", "startAtLogin", "bad-type")]
     [InlineData("""{"defaultDir":7}""", "defaultDir", "bad-type")]
     [InlineData("""{"defaultDir":"relative/dir"}""", "defaultDir", "bad-value")]

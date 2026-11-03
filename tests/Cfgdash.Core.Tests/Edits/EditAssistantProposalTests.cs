@@ -14,6 +14,20 @@ public sealed class EditAssistantProposalTests : IDisposable
         f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(change.DeepClone()), session, false, CancellationToken.None);
 
     [Fact]
+    public async Task An_auto_proposal_whose_file_changed_before_apply_answers_stale_and_writes_nothing()
+    {
+        f.WriteProject("""{"model":"haiku"}""");
+        var proposal = await f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(EditFixture.Set("model", "project", "opus")), "session-1", true, CancellationToken.None);
+        f.WriteProject("""{"model":"sonnet"}""");
+
+        var applied = await f.Apply(proposal);
+
+        Assert.Equal(EditStatus.Stale, applied.Status);
+        Assert.Equal("""{"model":"sonnet"}""", File.ReadAllText(f.ProjectSettings));
+        Assert.False(File.Exists(f.AuditPath));
+    }
+
+    [Fact]
     public async Task The_redacted_marker_is_rejected_for_a_string_value_by_both_entry_points()
     {
         var change = EditFixture.Set("model", "project", "[redacted]");
