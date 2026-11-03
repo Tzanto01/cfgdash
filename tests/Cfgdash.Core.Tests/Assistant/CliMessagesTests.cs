@@ -10,6 +10,9 @@ public sealed class CliMessagesTests
     [InlineData("error_during_execution", "API Error: 529 Overloaded", "overloaded")]
     [InlineData("success", "Claude AI usage limit reached|1762160400", "usage limit")]
     [InlineData("success", "Prompt is too long", "too long")]
+    [InlineData("success", "prompt is too long: 215290 tokens > 200000 maximum", "too long")]
+    [InlineData("error_during_execution", "request req_4011 failed", "failed in the Claude CLI")]
+    [InlineData("error_during_execution", "API Error: 401 Unauthorized", "not logged in")]
     [InlineData("success", "Invalid API key · Please run /login", "not logged in")]
     [InlineData("error_during_execution", "something new", "failed in the Claude CLI")]
     public void A_failed_result_maps_to_a_cfgdash_message(string subtype, string? text, string expected)

@@ -907,8 +907,8 @@ internal sealed class AssistantRegistry : IAsyncDisposable
 
                     if (isError)
                     {
-                        SetFailure("the last turn failed: " + Cap(AssistantRedaction.Text(subtype ?? "error")));
                         var (message, detail) = CliMessages.ForResult(subtype, resultText);
+                        SetFailure("the last turn failed: " + message);
                         session.Emit("error", new JsonObject { ["error"] = "turn-failed", ["message"] = message, ["detail"] = detail });
                     }
                     else

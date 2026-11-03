@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Cfgdash.Core.Assistant;
 
 /// <summary>Maps a failed <c>claude</c> result to a cfgdash message for the panel (assistant-v1 rev 3); the raw text goes only to a redacted detail.</summary>
@@ -16,15 +18,17 @@ public static class CliMessages
         }
 
         bool Has(string part) => raw.Contains(part, StringComparison.OrdinalIgnoreCase);
+        bool Status(int code) => Regex.IsMatch(raw, $@"(?<![0-9]){code}(?![0-9])", RegexOptions.CultureInvariant);
         var message = subtype switch
         {
             "error_max_budget_usd" => "The session reached its cost cap. Raise or turn off the cap in cfgdash settings, then start a new session.",
             "error_max_turns" => "The assistant reached the turn limit of the Claude CLI. Send a shorter request.",
-            _ when Has("usage limit") || Has("rate limit") || Has("rate_limit") => "Claude usage limit reached. Try again later.",
-            _ when Has("overloaded") || Has("529") => "Claude is overloaded right now. Try again in a moment.",
             _ when Has("prompt is too long") || Has("context window") => "The conversation is too long for the model. End the session and start a new one.",
+            _ when Has("usage limit") || Has("rate limit") || Has("rate_limit") => "Claude usage limit reached. Try again later.",
             _ when Has("credit balance") || Has("billing") => "The Claude account has no credit left for this request.",
-            _ when Has("/login") || Has("not logged in") || Has("authentication") || Has("invalid api key") || Has("401") => "The Claude CLI is not logged in. Run claude, log in, then try again.",
+            _ when Has("/login") || Has("not logged in") || Has("authentication") || Has("invalid api key") => "The Claude CLI is not logged in. Run claude, log in, then try again.",
+            _ when Has("overloaded") || Status(529) => "Claude is overloaded right now. Try again in a moment.",
+            _ when Status(401) => "The Claude CLI is not logged in. Run claude, log in, then try again.",
             _ => "The assistant turn failed in the Claude CLI.",
         };
         return (message, detail);

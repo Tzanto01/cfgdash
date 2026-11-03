@@ -288,7 +288,7 @@ internal sealed partial class EditService(
                 }
             }
 
-            if (proposal.AssistantSession is not null && proposals.Values.Count(p => p.AssistantSession is not null) >= MaxAssistantProposals)
+            if (proposal.AssistantSession is not null && !proposal.Auto && proposals.Values.Count(p => p.AssistantSession is not null && !p.Auto) >= MaxAssistantProposals)
             {
                 return false;
             }

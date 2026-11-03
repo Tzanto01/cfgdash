@@ -11,7 +11,8 @@
  *   instead of `proposal`;
  * - context items answer per-reference states: past the 8th `too-many`; a bad kind or an id containing `missing` `not-found`;
  *   an id containing `company` or a `engram.memory`, `sessions.transcripts` or `usage.metrics` row `not-allowed`; else `added`;
- * - `check` takes `{ findingIds }` (at most 50 strings); its first delta names how many findings it was limited to.
+ * - `check` takes `{ findingIds }` (at most 50 strings; ids containing `missing` are unknown and ignored, 400 `no-findings` when none
+ *   is left); its first delta names how many findings it was limited to.
  */
 import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
@@ -173,7 +174,10 @@ function message(session, body, check) {
     if (ids !== undefined && (!Array.isArray(ids) || ids.length > MAX_FINDING_IDS || !ids.every((i) => typeof i === 'string'))) {
       return [400, { error: 'bad-request' }];
     }
-    if (ids?.length) findingIds = ids;
+    if (ids?.length) {
+      findingIds = ids.filter((i) => !i.includes('missing'));
+      if (findingIds.length === 0) return [400, { error: 'no-findings' }];
+    }
   } else {
     if (!isObject(body) || typeof body.text !== 'string' || body.text.length < 1 || body.text.length > MAX_TEXT) return [400, { error: 'bad-request' }];
     const context = body.context ?? [];

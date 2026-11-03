@@ -166,15 +166,18 @@ internal sealed partial class CfgdashServer
             text = CheckPrompt;
             if (body["findingIds"] is JsonArray { Count: > 0 } ids)
             {
-                if (await ResolveContextAsync(ctx, session, [.. ids.Select(id => (JsonNode)new JsonObject { ["kind"] = "finding", ["findingId"] = id!.DeepClone() })]) is not { } findings)
+                if (await ResolveContextAsync(ctx, session, [.. ids.Select(id => (JsonNode)new JsonObject { ["kind"] = "finding", ["findingId"] = id!.DeepClone() })], MaxFindingIds) is not { } findings)
                 {
                     return;
                 }
 
-                if (findings.Block is not null)
+                if (findings.Block is null)
                 {
-                    text += " Limit the check to these findings:\n\n" + findings.Block;
+                    await WriteJsonAsync(ctx, StatusCodes.Status400BadRequest, new { error = "no-findings" });
+                    return;
                 }
+
+                text += " Limit the check to these findings:\n\n" + findings.Block;
             }
         }
         else
@@ -193,7 +196,7 @@ internal sealed partial class CfgdashServer
             states = [];
             if (body["context"] is JsonArray { Count: > 0 } context)
             {
-                if (await ResolveContextAsync(ctx, session, context) is not { } resolved)
+                if (await ResolveContextAsync(ctx, session, context, MaxContextItems) is not { } resolved)
                 {
                     return;
                 }
@@ -223,11 +226,11 @@ internal sealed partial class CfgdashServer
 
     /// <summary>
     /// The per-reference states of assistant-v1 rev 3 and the nonce-fenced block of the <c>added</c> references only (kind, ids and
-    /// redacted title per item; null when none was added). An item past the 8th is <c>too-many</c>; one that resolves in the full
+    /// redacted title per item; null when none was added). An item past <paramref name="max"/> is <c>too-many</c>; one that resolves in the full
     /// snapshot but not in the session's assistant view is <c>not-allowed</c> (allowlist or company filter, without saying which);
     /// anything else that does not resolve is <c>not-found</c>. Null when the snapshot failed (the 500 is written).
     /// </summary>
-    private async Task<(JsonArray States, string? Block)?> ResolveContextAsync(HttpContext ctx, AssistantSession session, JsonArray context)
+    private async Task<(JsonArray States, string? Block)?> ResolveContextAsync(HttpContext ctx, AssistantSession session, JsonArray context, int max)
     {
         if (await GetSnapshotAsync(ctx, session.Dir, refresh: false) is not { } result)
         {
@@ -243,7 +246,7 @@ internal sealed partial class CfgdashServer
             var item = context[index] as JsonObject;
             var kind = item?["kind"] is JsonValue kindValue && kindValue.GetValueKind() == JsonValueKind.String ? kindValue.GetValue<string>() : null;
             var state = new JsonObject { ["index"] = index };
-            if (index >= MaxContextItems)
+            if (index >= max)
             {
                 state["state"] = "too-many";
             }
@@ -471,6 +474,16 @@ internal sealed partial class CfgdashServer
 
                     if (applied.Status != EditStatus.Ok)
                     {
+                        if (applied.Wrote)
+                        {
+                            session.Emit("error", new JsonObject
+                            {
+                                ["error"] = "apply-partial",
+                                ["message"] = "The change was only partly written. Open the change log to undo it.",
+                                ["auditId"] = applied.Body["auditId"]?.DeepClone(),
+                            });
+                        }
+
                         return (new JsonObject { ["error"] = applied.Body["error"]?.DeepClone() ?? "apply-failed" }, false);
                     }
 

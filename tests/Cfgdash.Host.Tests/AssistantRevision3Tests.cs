@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cfgdash.Core.Snapshot;
@@ -79,6 +80,34 @@ public sealed class AssistantApplyModeTests
         Assert.False(File.Exists(SettingsFile(host)));
         Assert.DoesNotContain("applied", events.Names);
         Assert.DoesNotContain((await host.GetAsync("/api/v2/audit")).Json.GetProperty("entries").EnumerateArray(), e => e.TryGetProperty("origin", out _));
+    }
+
+    [LinuxFact]
+    [UnsupportedOSPlatform("windows")]
+    public async Task With_apply_on_an_apply_that_cannot_write_answers_the_error_emits_no_applied_and_keeps_the_file()
+    {
+        await using var host = await AssistantHost.StartAsync();
+        await SetApplyAsync(host, true);
+        var claudeDir = Directory.CreateDirectory(Path.Combine(host.Project, ".claude")).FullName;
+        await File.WriteAllTextAsync(SettingsFile(host), "{}\n");
+        var (_, events, run) = await StartTurnAsync(host);
+        using var sse = events;
+        File.SetUnixFileMode(claudeDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var tool = await host.InternalAsync("propose_change", run.Capability, Propose("model", "opus"));
+
+            Assert.Equal("write-failed", tool.Json.GetProperty("error").GetString());
+            Assert.False(tool.Json.TryGetProperty("applied", out _));
+        }
+        finally
+        {
+            File.SetUnixFileMode(claudeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        Assert.Equal("{}\n", await File.ReadAllTextAsync(SettingsFile(host)));
+        Assert.DoesNotContain("applied", events.Names);
+        Assert.DoesNotContain("proposal", events.Names);
     }
 
     [LinuxFact]
@@ -176,6 +205,24 @@ public sealed class AssistantContextResultsTests
     }
 
     [LinuxFact]
+    public async Task Check_passes_all_of_up_to_50_known_finding_ids_to_the_model()
+    {
+        var rows = Enumerable.Range(0, 20).Select(i => new TableRow($"SessionStart-{i}-0", new Dictionary<string, JsonNode?> { ["event"] = "SessionStart", ["script"] = $"/home/user/start{i}.ps1" }, ["missing-script"])).ToList();
+        Section hooks = new("hooks.registered", "hooks", "Hooks", [new TableBlock("hooks.registered/hooks", "Hooks", [new TableColumn("event", "Event"), new TableColumn("script", "Script")], rows)]);
+        await using var host = await AssistantHost.StartAsync(new AssistantHostOptions { Sections = [hooks] });
+        host.Claude.Configure(turn: FakeTurn.Stall);
+        var id = await host.CreateSessionAsync();
+        var ids = Enumerable.Range(0, 20).Select(i => $"missing-script:hooks.registered:hooks.registered/hooks:SessionStart-{i}-0").ToList();
+
+        var response = await host.UiAsync(HttpMethod.Post, $"/api/v2/assistant/sessions/{id}/check", JsonSerializer.Serialize(new { findingIds = ids }));
+
+        Assert.Equal(202, response.Status);
+        var run = await host.Claude.WaitRunAsync(1);
+        Assert.True(await Poll.UntilAsync(() => run.Stdin.Count > 0));
+        Assert.All(ids, findingId => Assert.Contains(findingId, run.Stdin[0]));
+    }
+
+    [LinuxFact]
     public async Task Check_limits_the_prompt_to_known_finding_ids_and_ignores_unknown_ones()
     {
         await using var host = await AssistantHost.StartAsync(new AssistantHostOptions { Sections = Sections });
@@ -192,6 +239,21 @@ public sealed class AssistantContextResultsTests
         Assert.DoesNotContain("unknown:finding", run.Stdin[0]);
     }
 
+    [LinuxFact]
+    public async Task Check_with_only_unknown_finding_ids_answers_400_no_findings_and_starts_no_full_check()
+    {
+        await using var host = await AssistantHost.StartAsync(new AssistantHostOptions { Sections = Sections });
+        host.Claude.Configure(turn: FakeTurn.Stall);
+        var id = await host.CreateSessionAsync();
+
+        var response = await host.UiAsync(HttpMethod.Post, $"/api/v2/assistant/sessions/{id}/check", JsonSerializer.Serialize(new { findingIds = new[] { "unknown:finding" } }));
+
+        Assert.Equal(400, response.Status);
+        Assert.Equal("no-findings", response.Error);
+        var run = await host.Claude.WaitRunAsync(1);
+        Assert.False(await Poll.UntilAsync(() => run.Stdin.Count > 0, 1000));
+    }
+
     [LinuxTheory]
     [InlineData("""{"findingIds":"x"}""")]
     [InlineData("""{"findingIds":[1]}""")]
@@ -205,7 +267,8 @@ public sealed class AssistantContextResultsTests
         var response = await host.UiAsync(HttpMethod.Post, $"/api/v2/assistant/sessions/{id}/check", body);
 
         Assert.Equal(400, response.Status);
-        Assert.Empty((await host.Claude.WaitRunAsync(1)).Stdin);
+        var run = await host.Claude.WaitRunAsync(1);
+        Assert.False(await Poll.UntilAsync(() => run.Stdin.Count > 0, 1000));
     }
 
     [LinuxFact]
