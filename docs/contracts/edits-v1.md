@@ -13,7 +13,7 @@ Writable targets, nothing else:
 | Claude Code settings, scope `local` | `.claude/settings.local.json` at the layer-3 location for the target dir | Layer 3; created on first write |
 | Config auto-pull | `<configRepo>/.claude/machine.json` key `configAutoPull` (bool) | Gitignored in the config repo; created on first write. `CC_CONFIG_AUTOPULL` still wins and the UI says so |
 
-Never written: managed settings (files, registry, remote cache), `.claude.json`, credential files (security-v1 never-read list), instruction, agent, skill, hook-script and job files, cfgdash's own `overrides.json`, git state. cfgdash never commits; when a written file is tracked by git the UI flags that the repo is now dirty.
+Never written: managed settings (files, registry, remote cache), `.claude.json`, credential files (security-v1 never-read list), hook-script and job files, instruction, agent, skill and command files except through [edits-v2](edits-v2.md), cfgdash's own `overrides.json`, git state. cfgdash never commits; when a written file is tracked by git the UI flags that the repo is now dirty.
 
 ## Settings catalog
 
