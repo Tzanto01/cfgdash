@@ -23,6 +23,9 @@ import type {
 } from './models';
 
 /** A non-2xx answer (`status` > 0) or a network failure (`status` 0). */
+/** The window event the cfgdash settings screen dispatches with the saved settings (`CustomEvent<CfgdashSettings>`). */
+export const SETTINGS_SAVED = 'cfgdash-settings-saved';
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;

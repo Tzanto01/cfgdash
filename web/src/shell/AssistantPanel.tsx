@@ -1,9 +1,9 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Button } from '../components/ui/button';
-import { api, ApiError, isAbort } from '../lib/api';
-import type { AssistantEffort, AssistantProposal, AssistantStatus, Proposal, ProposalFile } from '../lib/models';
-import { Markdown } from '../lib/markdown';
+import { api, ApiError, isAbort, SETTINGS_SAVED } from '../lib/api';
+import type { AssistantEffort, AssistantProposal, AssistantStatus, CfgdashSettings, Proposal, ProposalFile } from '../lib/models';
+import { Markdown, showHidden } from '../lib/markdown';
 import { cn } from '../lib/utils';
 import { DiffCard } from '../pages/DiffCard';
 import { SCOPE_LABEL } from '../pages/SettingRow';
@@ -137,7 +137,7 @@ function Details({ text }: { text: string }) {
   return (
     <details className="text-xs text-muted">
       <summary className="touch-target cursor-pointer">Details</summary>
-      <pre className="mt-1 font-mono whitespace-pre-wrap wrap-anywhere">{text}</pre>
+      <pre className="mt-1 font-mono whitespace-pre-wrap wrap-anywhere">{showHidden(text)}</pre>
     </details>
   );
 }
@@ -218,7 +218,10 @@ export default function AssistantPanel() {
       }
     };
     window.addEventListener('pagehide', leave);
+    const onSaved = (event: Event) => setApplyOn((event as CustomEvent<CfgdashSettings>).detail.values.assistant.applyEnabled);
+    window.addEventListener(SETTINGS_SAVED, onSaved);
     return () => {
+      window.removeEventListener(SETTINGS_SAVED, onSaved);
       mounted.current = false;
       clearOnClose.current();
       window.removeEventListener('pagehide', leave);
@@ -303,6 +306,7 @@ export default function AssistantPanel() {
       const data = parse(event);
       if (typeof data['auditId'] === 'string' && Array.isArray(data['files'])) {
         push({ kind: 'applied', auditId: data['auditId'], files: data['files'] as ProposalFile[], rationale: str(data['rationale']) || undefined });
+        setApplyOn(true);
         announce('The assistant applied a change');
         store.refresh();
       }
@@ -323,10 +327,12 @@ export default function AssistantPanel() {
         const text = str(data['message']) || 'The assistant stopped.';
         if (data['error'] === 'apply-partial' && typeof data['auditId'] === 'string') {
           push({ kind: 'applied', auditId: data['auditId'], files: [], partial: text });
+          announce(text);
           store.refresh();
           return;
         }
         push({ kind: 'error', text, detail: str(data['detail']) || undefined });
+        announce(text);
         setRunning(false);
       } else if (source.readyState === EventSource.CLOSED) {
         if (working.current) {
@@ -616,7 +622,7 @@ export default function AssistantPanel() {
                       <p className={cn('rounded-md px-2 py-1 text-sm font-medium', entry.partial ? 'tint-danger text-danger' : 'tint-ok text-ok')}>
                         {entry.partial ?? 'Applied by the assistant'}
                       </p>
-                      {entry.rationale && <p className="whitespace-pre-wrap">{entry.rationale}</p>}
+                      {entry.rationale && <p className="whitespace-pre-wrap">{showHidden(entry.rationale)}</p>}
                       {entry.files.map((file) => (
                         <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
                       ))}
@@ -637,7 +643,7 @@ export default function AssistantPanel() {
                           Apply undo
                         </Button>
                       ) : (
-                        !entry.undo?.result && (
+                        !entry.undo?.result?.ok && (
                           <Button aria-busy={entry.undo?.busy} disabled={entry.undo?.busy} onClick={() => void prepareUndo(index, entry.auditId)}>
                             {entry.undo?.busy ? 'Preparing undo...' : 'Undo'}
                             <span className="sr-only"> change {entry.auditId}</span>
@@ -656,7 +662,7 @@ export default function AssistantPanel() {
                   return (
                     <section key={index} aria-label="Assistant proposal" className="space-y-2 rounded-lg border border-accent p-2">
                       <p className="tint-accent rounded-md px-2 py-1 text-sm font-medium text-accent">{BANNER}</p>
-                      {entry.proposal.rationale && <p className="whitespace-pre-wrap">{entry.proposal.rationale}</p>}
+                      {entry.proposal.rationale && <p className="whitespace-pre-wrap">{showHidden(entry.proposal.rationale)}</p>}
                       {entry.proposal.files.map((file) => (
                         <DiffCard key={`${file.scope}\n${file.path}`} file={file} scopeLabel={SCOPE_LABEL[file.scope] ?? file.scope} gitTracked={tracked.includes(file.path)} />
                       ))}

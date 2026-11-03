@@ -122,4 +122,29 @@ describe('file edit mode', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Edit CLAUDE.md' })).not.toBeNull();
   });
+
+  it('offers no Edit for a file that mixes line endings, since saving would change them', async () => {
+    const h = await openFile({ editable: true, sha256: SHA }, true, '# App\r\nKeep changes small.\nTest first.\r\n');
+
+    expect(h.buttons('Edit')).toHaveLength(0);
+    expect(h.text()).toContain('Read-only: This file mixes line endings');
+  });
+
+  it('keeps the sheet open on Escape while a reviewed edit is not applied, and says when the review expired', async () => {
+    const h = await openFile({ editable: true, sha256: SHA });
+    await h.click(h.button('Edit'));
+    await screen.findByRole('textbox', { name: 'Edit CLAUDE.md' });
+    await typeText('# App\n');
+    await h.click(h.button('Review changes'));
+    await h.answer(PROPOSE_URL, proposal('p1'));
+
+    await act(async () => {
+      fireEvent.keyDown(h.button('Apply change'), { key: 'Escape' });
+    });
+    expect(h.buttons('Apply change')).toHaveLength(1);
+
+    await h.click(h.button('Apply change'));
+    await h.answer('/api/v2/proposals/p1/apply', { error: 'not-found' }, 404);
+    expect(screen.getByRole('alert').textContent).toContain('This review expired.');
+  });
 });

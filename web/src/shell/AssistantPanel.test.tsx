@@ -146,6 +146,7 @@ describe('assistant panel', () => {
 
     await emit('proposal', proposal('p1'));
     await emit('proposal', proposal('p2'));
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply'))).toBe(false);
 
     const cards = [...panel()!.querySelectorAll('section[aria-label="Assistant proposal"]')];
     expect(cards).toHaveLength(2);
@@ -420,8 +421,11 @@ describe('assistant panel', () => {
     await startTurn(h);
     await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
 
-    await emit('applied', { auditId: 'a7', files: proposal('x').files, rationale: 'Pin the model.' });
+    await emit('applied', { auditId: 'a7', files: proposal('x').files, rationale: '<b>Pin</b> the model.' });
     const card = panel()!.querySelector('section[aria-label="Applied by the assistant"]')!;
+    expect(card.textContent).toContain('<b>Pin</b> the model.');
+    expect(card.querySelector('b')).toBeNull();
+    expect(h.requests.some((r) => r.url.pathname.endsWith('/apply') || r.url.pathname.endsWith('/revert'))).toBe(false);
     expect(card.textContent).toContain('Applied by the assistant');
     expect(card.textContent).toContain('"model": "sonnet"');
     expect(card.textContent).toContain('Audit entry a7');
@@ -498,5 +502,32 @@ describe('assistant panel', () => {
 
     expect(panel()?.textContent).toContain("Claude Code isn't logged in.");
     expect(panel()!.querySelector('details')?.open).toBe(false);
+  });
+
+  it('lets Undo be tried again after it failed', async () => {
+    const h = await openPanel();
+    await startTurn(h);
+    await h.answer('/api/v2/assistant/sessions/s1/messages', null, 202);
+    await emit('applied', { auditId: 'a7', files: proposal('x').files });
+
+    await h.click(h.button('Undo change a7'));
+    await h.answer('/api/v2/audit/a7/revert', { error: 'stale' }, 409);
+    expect(panel()?.querySelector('[role="alert"]')?.textContent).toBe('These files changed since that change; undo is no longer safe.');
+
+    await h.click(h.button('Undo change a7'));
+    expect(h.pending((r) => r.url.pathname === '/api/v2/audit/a7/revert')).toBeDefined();
+  });
+
+  it('shows the apply badge as soon as apply mode is turned on in cfgdash settings while the panel is open', async () => {
+    const h = await openPanel();
+    await h.navigate('/cfgdash?dir=D%3A%2Fws%2Fapp');
+    await answerWhenSent(h, '/api/v2/cfgdash-settings', settings());
+    expect(panel()?.textContent).not.toContain('The assistant can apply settings changes');
+
+    const span = [...document.querySelectorAll('main span[id$="-label"]')].find((x) => x.textContent === 'Let the assistant apply settings changes')!;
+    await h.click(document.querySelector(`main [aria-labelledby~="${span.id}"]`)!);
+    await h.answer('/api/v2/cfgdash-settings', { ...settings(), values: { ...settings().values, assistant: { ...settings().values.assistant, applyEnabled: true } } });
+
+    expect(panel()?.textContent).toContain('The assistant can apply settings changes');
   });
 });

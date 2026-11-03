@@ -22,7 +22,7 @@ const INVALID: Record<string, string> = {
 
 const STALE = 'This file changed since you opened it. Reload it and make your edit again.';
 
-function failure(error: unknown, undoing: boolean): { text: string; stale?: boolean } {
+function failure(error: unknown, undoing: boolean, preparing: boolean): { text: string; stale?: boolean } {
   if (error instanceof ApiError) {
     if (error.status === 400 && error.code === 'invalid-change') {
       return { text: (error.reason && (INVALID[error.reason] ?? NOT_EDITABLE[error.reason])) || `The change was refused (${error.reason ?? 'not valid'}).` };
@@ -34,7 +34,7 @@ function failure(error: unknown, undoing: boolean): { text: string; stale?: bool
       return { text: 'This review no longer matches. Review the change again.' };
     }
     if (error.status === 404) {
-      return { text: undoing ? "This change can't be undone: its backup is gone." : 'This review expired. Review the change again.' };
+      return { text: preparing ? "This change can't be undone: its backup is gone." : 'This review expired. Review the change again.' };
     }
     if (error.status === 403) {
       return { text: "cfgdash refused the change (it only accepts edits from this machine's browser)." };
@@ -72,18 +72,25 @@ export default function FileEditor({ file, dir, onDone, onDirty }: FileEditorPro
   const area = useRef<HTMLTextAreaElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
   const changed = useRef(false);
-  const dirty = phase === 'edit' && text !== original;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const result = useRef<HTMLDivElement>(null);
+  const dirty = (phase === 'edit' || phase === 'review') && text !== original;
 
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
-  useEffect(() => area.current?.focus(), []);
+  useEffect(() => () => onDirty(false), [onDirty]);
+  useEffect(() => {
+    (phase === 'edit' ? area.current : phase === 'review' || phase === 'undo-review' ? heading.current : result.current)?.focus();
+  }, [phase]);
 
-  const run = async (work: () => Promise<void>, undoing: boolean) => {
+  const run = async (work: () => Promise<void>, undoing: boolean, preparing = false) => {
     setBusy(true);
     setMessage(null);
     try {
       await work();
     } catch (error) {
-      setMessage({ ok: false, ...failure(error, undoing) });
+      const shown = failure(error, undoing, preparing);
+      setMessage({ ok: false, ...shown });
+      announce(shown.text);
     } finally {
       setBusy(false);
     }
@@ -117,7 +124,7 @@ export default function FileEditor({ file, dir, onDone, onDirty }: FileEditorPro
       const next = await api.revert(auditId!);
       setProposal(next);
       setPhase('undo-review');
-    }, true);
+    }, true, true);
 
   const lines = text.split('\n').length;
   const reviewing = phase === 'review' || phase === 'undo-review';
@@ -178,7 +185,7 @@ export default function FileEditor({ file, dir, onDone, onDirty }: FileEditorPro
 
       {reviewing && proposal && (
         <>
-          <h3 className="font-semibold">{phase === 'undo-review' ? `Review undo of ${auditId}` : 'Review changes'}</h3>
+          <h3 ref={heading} tabIndex={-1} className="font-semibold">{phase === 'undo-review' ? `Review undo of ${auditId}` : 'Review changes'}</h3>
           {proposal.files.map((f) => (
             <DiffCard key={f.path} file={f} scopeLabel="File" gitTracked={file.edit.gitTracked === true} />
           ))}
@@ -200,7 +207,7 @@ export default function FileEditor({ file, dir, onDone, onDirty }: FileEditorPro
       )}
 
       {(phase === 'applied' || phase === 'undone') && (
-        <div className="flex flex-wrap gap-2">
+        <div ref={result} tabIndex={-1} aria-label={message?.text} className="flex flex-wrap gap-2 outline-none">
           {phase === 'applied' && (
             <Button disabled={busy} aria-busy={busy} onClick={() => void undo()}>
               {busy ? 'Preparing undo...' : 'Undo'}

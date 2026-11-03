@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
-import { api, ApiError, isAbort } from '../lib/api';
+import { api, ApiError, isAbort, SETTINGS_SAVED } from '../lib/api';
 import type { AssistantStatus, CfgdashPatch, CfgdashSettings, CfgdashValues } from '../lib/models';
 import { cn } from '../lib/utils';
 import { ModelPicker, pickerProviders } from '../shell/ModelPicker';
@@ -184,6 +184,7 @@ export default function CfgdashSettingsPage() {
     try {
       const data = await api.putCfgdashSettings(patch);
       setLoaded({ data });
+      window.dispatchEvent(new CustomEvent(SETTINGS_SAVED, { detail: data }));
       if (patch.theme) {
         setTheme(patch.theme);
       }

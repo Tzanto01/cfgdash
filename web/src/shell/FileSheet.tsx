@@ -12,7 +12,7 @@ import { useSnapshotStore, type RequestState } from '../state/snapshot';
 import { useUi } from '../state/ui';
 import { LoadingPanel } from './Shell';
 import { AddToContext } from './AddToContext';
-import { NOT_EDITABLE } from './fileEdit';
+import { mixedLineEndings, NOT_EDITABLE } from './fileEdit';
 import { useReturnFocus } from './surface';
 
 const FileEditor = lazy(() => import('./FileEditor'));
@@ -76,7 +76,8 @@ export default function FileSheet() {
 
   const value = state.phase === 'content' ? state.value : undefined;
   const editDir = dir ?? store.snapshot?.context.targetDir;
-  const edit = ui.edits && fileId && editDir && value && 'path' in value ? value.edit : undefined;
+  const served = ui.edits && fileId && editDir && value && 'path' in value ? value.edit : undefined;
+  const edit = served?.editable && value && mixedLineEndings(value.content) ? { editable: false, reason: 'mixed-line-endings' } : served;
   const lines = value ? splitLines(value.content) : [];
   const ref = store.file(fileId);
   const path = value && 'path' in value ? value.path : (ref?.path ?? '');

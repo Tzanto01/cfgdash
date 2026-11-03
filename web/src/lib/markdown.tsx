@@ -15,6 +15,9 @@ const ITEM = /^\s*([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const INLINE = /(`[^`\n]{1,2000}`)|(!\[([^\]\n]{0,500})\]\(([^)\n]{0,2048})\))|(\[([^\]\n]{1,500})\]\(([^)\n]{0,2048})\))|(\*\*([^*\n]{1,500})\*\*)|(<(https?:\/\/[^>\s]{1,2048})>)/g;
 const HIDDEN = /[\u00AD\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
+/** `text` with bidi and zero-width characters shown as U+FFFD, so what is displayed is what is written. */
+export const showHidden = (text: string) => text.replace(HIDDEN, '\uFFFD');
+
 /** A URL for display: normalized (punycode host) when it parses, else as written. */
 function shownUrl(raw: string): string {
   const url = raw.trim().split(/\s/)[0] ?? '';
