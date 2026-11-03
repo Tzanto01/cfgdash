@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { Markdown, SUGGESTED_LABEL } from './markdown';
 
 function show(text: string) {
@@ -24,7 +24,7 @@ describe('assistant markdown', () => {
   it('labels code blocks as model output and keeps their text verbatim', () => {
     const el = show('Paste this:\n\n```md\n# Rules\n<b>keep</b>\n```\n');
 
-    expect(el.querySelector('figcaption')?.textContent).toBe(SUGGESTED_LABEL);
+    expect(el.querySelector('figcaption')?.textContent).toContain(SUGGESTED_LABEL);
     expect(el.querySelector('pre')?.textContent).toBe('# Rules\n<b>keep</b>');
     expect(el.querySelector('b')).toBeNull();
   });
@@ -64,5 +64,29 @@ describe('assistant markdown', () => {
     expect(el.querySelector('ol code')?.textContent).toBe('model');
     expect([...el.querySelectorAll('ul li')].map((li) => li.textContent)).toEqual(['a', 'b']);
     expect(el.querySelector('p')?.textContent).toBe('Findings');
+  });
+
+  it('copies only the code block text, never the caption or the rest of the answer', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const el = show('Set this:\n\n```yaml\ndescription: \'Use when building, reviewing or styling any UI\'\n```\nThen reload.');
+
+    await act(async () => {
+      fireEvent.click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Copy')!);
+    });
+
+    expect(writeText).toHaveBeenCalledWith("description: 'Use when building, reviewing or styling any UI'");
+    expect(el.querySelector('[role="status"]')?.textContent).toBe('Copied');
+  });
+
+  it('wraps code blocks by default and lets each block turn wrapping off on its own', async () => {
+    const el = show('```\none\n```\n\n```\ntwo\n```');
+    const wraps = () => [...el.querySelectorAll('button')].filter((b) => b.textContent === 'Wrap');
+
+    expect(wraps().map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
+    await act(async () => {
+      fireEvent.click(wraps()[0]);
+    });
+    expect(wraps().map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
   });
 });

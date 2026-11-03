@@ -429,7 +429,19 @@ export interface AssistantStatus {
   claudePath?: string;
   claudeVersion?: string;
   models: string[];
+  /** The assistant runtimes (assistant-v1 revision 3); older servers send only `models`. */
+  providers?: AssistantProvider[];
   sessions: { id: string; dir: string; model: string; effort: string; live: boolean; costUsd: number }[];
+}
+
+/** One assistant runtime of `GET /api/v2/assistant/status` (assistant-v1 revision 3). */
+export interface AssistantProvider {
+  id: string;
+  label: string;
+  available: boolean;
+  reason?: string;
+  models: { id: string; label: string }[];
+  efforts: AssistantEffort[];
 }
 
 /** A context reference sent with an assistant message: ids only, never content. */

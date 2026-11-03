@@ -184,8 +184,9 @@ export const api = {
   assistantMessage(id: string, text: string, context: ContextRef[]): Promise<unknown> {
     return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/messages`, { text, context });
   },
-  assistantCheck(id: string): Promise<unknown> {
-    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/check`, {});
+  /** The full check, limited to `findingIds` when given (assistant-v1 revision 3, at most 50). */
+  assistantCheck(id: string, findingIds?: string[]): Promise<unknown> {
+    return post(`/api/v2/assistant/sessions/${encodeURIComponent(id)}/check`, findingIds ? { findingIds } : {});
   },
   /** Ends a session; `keepalive` lets the request finish while the page unloads. */
   assistantEnd(id: string, keepalive = false): Promise<unknown> {

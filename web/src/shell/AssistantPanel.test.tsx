@@ -1,6 +1,6 @@
-import { act, fireEvent } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import type { AssistantStatus, CfgdashSettings } from '../lib/models';
-import { makeSnapshot } from '../test/fixtures';
+import { makeFindings, makeSnapshot } from '../test/fixtures';
 import { startApp, type AppHarness, type RequestRecord } from '../test/harness';
 import { answerWhenSent } from '../test/lazy';
 
@@ -45,6 +45,7 @@ const proposal = (id: string) => ({
 
 const panel = () => document.querySelector<HTMLElement>('aside[aria-labelledby="assistant-title"]');
 const body = (r: RequestRecord) => JSON.parse(r.body ?? 'null') as unknown;
+const picker = () => panel()!.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
 
 async function emit(name: string, data: unknown, source = FakeEventSource.all[FakeEventSource.all.length - 1]): Promise<void> {
   await act(async () => {
@@ -104,8 +105,7 @@ describe('assistant panel', () => {
 
   it('starts a session with the defaults from cfgdash settings, sends row context as ids and streams the answer', async () => {
     const h = await openPanel();
-    const selects = [...panel()!.querySelectorAll('select')].map((s) => s.value);
-    expect(selects).toEqual(['opus', 'high']);
+    expect(picker().textContent).toBe('opus · High');
 
     await h.click(h.button('Add Effective settings / model to assistant context'));
     expect(panel()?.textContent).toContain('Context 1 of 8');
@@ -206,7 +206,7 @@ describe('assistant panel', () => {
 
   it('falls back to the first model when cfgdash settings give none', async () => {
     const h = await openPanel(READY, { ...settings(), configError: 'bad JSON' });
-    expect(panel()!.querySelector('select')!.value).toBe('sonnet');
+    expect(picker().textContent).toBe('sonnet · Medium');
 
     const start = await startTurn(h);
 
@@ -288,5 +288,87 @@ describe('assistant panel', () => {
 
     const end = h.pending((r) => r.method === 'DELETE' && r.url.pathname === '/api/v2/assistant/sessions/s1');
     expect(end?.headers['x-cfgdash-request']).toBe('1');
+  });
+
+  it('resizes from its handle with the arrow keys between 320 px and the window limit, and remembers the width', async () => {
+    const h = await openPanel();
+    const handle = () => screen.getByRole('separator', { name: 'Resize assistant panel' });
+    const key = async (k: string) => {
+      await act(async () => {
+        fireEvent.keyDown(handle(), { key: k });
+      });
+    };
+    expect(handle().getAttribute('aria-valuenow')).toBe('400');
+
+    await key('End');
+    expect(handle().getAttribute('aria-valuenow')).toBe(String(Math.min(Math.floor(window.innerWidth * 0.6), window.innerWidth - 480)));
+    await key('Home');
+    await key('ArrowRight');
+    expect(handle().getAttribute('aria-valuenow')).toBe('320');
+    await key('ArrowLeft');
+    expect(panel()!.style.getPropertyValue('--assistant-width')).toBe('336px');
+
+    await h.click(h.button('Close assistant'));
+    await h.click(h.button('Assistant'));
+    expect(handle().getAttribute('aria-valuenow')).toBe('336');
+  });
+
+  it('picks the model and effort in the popover, labels the default effort and starts the session with them', async () => {
+    const h = await openPanel();
+    await h.click(picker());
+    const popover = screen.getByRole('dialog', { name: 'Model and effort' });
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search models' }));
+    expect(screen.getByRole('radio', { name: /^High/ }).closest('label')?.textContent).toContain('Default');
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hai' } });
+    });
+    expect(screen.getAllByRole('radio', { name: /^(sonnet|opus|haiku)/ }).map((r) => r.closest('label')?.textContent)).toEqual(['haiku']);
+    await h.click(screen.getByRole('radio', { name: 'haiku' }));
+    await h.click(screen.getByRole('radio', { name: 'Low' }));
+    expect(picker().textContent).toBe('haiku · Low');
+
+    await act(async () => {
+      fireEvent.keyDown(popover, { key: 'Escape' });
+    });
+    expect(screen.queryByRole('dialog', { name: 'Model and effort' })).toBeNull();
+    expect(panel()).not.toBeNull();
+    expect(document.activeElement).toBe(picker());
+
+    const start = await startTurn(h);
+    expect(body(start)).toMatchObject({ model: 'haiku', effort: 'low' });
+  });
+
+  it('accepts a full model id typed into the search', async () => {
+    const h = await openPanel();
+    await h.click(picker());
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'claude-sonnet-9-9' } });
+    });
+
+    await h.click(h.button('Use model id claude-sonnet-9-9'));
+
+    expect(picker().textContent).toBe('claude-sonnet-9-9 · High');
+  });
+
+  it('runs Diagnose all from Health as a check limited to the visible findings', async () => {
+    FakeEventSource.all = [];
+    const h = await startApp('/health?dir=D%3A%2Fws%2Fapp');
+    vi.stubGlobal('EventSource', FakeEventSource);
+    await h.answer('/api/v1/health', HEALTH_EDITS);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    await answerWhenSent(h, '/api/v1/findings', makeFindings());
+    await screen.findByRole('table', { name: 'Findings' });
+    await h.click(h.button('Warning'));
+
+    await h.click(h.button('Diagnose all'));
+    await answerWhenSent(h, '/api/v2/assistant/status', READY);
+    await h.answer('/api/v2/cfgdash-settings', settings());
+    const start = await h.answer('/api/v2/assistant/sessions', { id: 's1' });
+    const check = await h.answer('/api/v2/assistant/sessions/s1/check', null, 202);
+
+    expect(body(start)).toMatchObject({ model: 'opus', effort: 'high' });
+    expect(body(check)).toEqual({ findingIds: ['overridden:settings.effective:effective:model'] });
+    expect(panel()?.textContent).toContain('Diagnose 1 finding');
   });
 });

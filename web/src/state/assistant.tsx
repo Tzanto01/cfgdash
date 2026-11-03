@@ -20,6 +20,11 @@ export interface AssistantState {
   remove(index: number): void;
   /** Removes these references (the ones a message just sent). */
   drop(refs: ContextRef[]): void;
+  /** A pending "Diagnose all" from the Health view: the finding ids the panel runs `check` with, once. */
+  diagnose: string[] | null;
+  /** Opens the panel and asks it to run `check` with these finding ids. */
+  requestDiagnose(findingIds: string[]): void;
+  clearDiagnose(): void;
 }
 
 const AssistantContext = createContext<AssistantState | null>(null);
@@ -29,6 +34,7 @@ const same = (a: ContextRef, b: ContextRef) => JSON.stringify(a) === JSON.string
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const dir = useSnapshotStore().snapshot?.context.targetDir;
   const [open, setOpen] = useState(false);
+  const [diagnose, setDiagnose] = useState<string[] | null>(null);
   const [held, setHeld] = useState<{ dir?: string; items: ContextItem[] }>({ items: [] });
   const items = useMemo(() => (held.dir === dir ? held.items : []), [held, dir]);
   const add = useCallback(
@@ -49,7 +55,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     (refs: ContextRef[]) => setHeld((prev) => ({ ...prev, items: prev.items.filter((i) => !refs.some((r) => same(r, i.ref))) })),
     []
   );
-  const value = useMemo(() => ({ open, setOpen, items, add, remove, drop }), [open, items, add, remove, drop]);
+  const requestDiagnose = useCallback((findingIds: string[]) => {
+    setDiagnose(findingIds);
+    setOpen(true);
+  }, []);
+  const clearDiagnose = useCallback(() => setDiagnose(null), []);
+  const value = useMemo(
+    () => ({ open, setOpen, items, add, remove, drop, diagnose, requestDiagnose, clearDiagnose }),
+    [open, items, add, remove, drop, diagnose, requestDiagnose, clearDiagnose]
+  );
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
 }
 

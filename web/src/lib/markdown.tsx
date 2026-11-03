@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** The label on every code block of model output (assistant-v1 UI rules). */
 export const SUGGESTED_LABEL = 'model output derived from your files; review before pasting';
@@ -114,6 +114,47 @@ function inline(text: string): ReactNode[] {
   return out;
 }
 
+/** A code block of model output with Copy (the block text only) and a Wrap toggle, wrapped by default. */
+function CodeBlock({ text }: { text: string }) {
+  const [wrap, setWrap] = useState(true);
+  const [copied, setCopied] = useState('');
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const feedback = (value: string) => {
+    setCopied(value);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(''), 2000);
+  };
+  const copy = () => {
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(text))
+      .then(
+        () => feedback('Copied'),
+        () => feedback("Couldn't copy")
+      );
+  };
+  const tool = 'touch-target h-6 rounded px-1.5 text-xs font-medium text-text hover:bg-hover';
+  return (
+    <figure className="rounded-md border border-border bg-raised">
+      <figcaption className="flex flex-wrap items-center gap-x-2 border-b border-border px-2 py-1">
+        <span className="min-w-0 flex-1 text-xs text-warn">{SUGGESTED_LABEL}</span>
+        <span role="status" className="text-xs text-muted">
+          {copied}
+        </span>
+        <button type="button" aria-pressed={wrap} onClick={() => setWrap(!wrap)} className={tool}>
+          Wrap
+        </button>
+        <button type="button" onClick={copy} className={tool}>
+          Copy
+        </button>
+      </figcaption>
+      <pre className={wrap ? 'p-2 font-mono text-[12.5px] leading-[18px] whitespace-pre-wrap wrap-anywhere' : 'overflow-x-auto p-2 font-mono text-[12.5px] leading-[18px]'}>
+        <code>{text}</code>
+      </pre>
+    </figure>
+  );
+}
+
 /**
  * Model text as markdown, built from React text nodes only: raw HTML stays literal text, images become their alt text,
  * links show their full URL as text, bidi and zero-width characters become U+FFFD, and code blocks carry
@@ -125,14 +166,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       {parse(text).map((block, index) => {
         switch (block.type) {
           case 'code':
-            return (
-              <figure key={index} className="rounded-md border border-border bg-raised">
-                <figcaption className="border-b border-border px-2 py-1 text-xs text-warn">{SUGGESTED_LABEL}</figcaption>
-                <pre className="overflow-x-auto p-2 font-mono text-[12.5px] leading-[18px]">
-                  <code>{block.text}</code>
-                </pre>
-              </figure>
-            );
+            return <CodeBlock key={index} text={block.text} />;
           case 'heading':
             return (
               <p key={index} className="font-semibold">

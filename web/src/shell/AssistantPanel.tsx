@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Button } from '../components/ui/button';
 import { api, ApiError, isAbort } from '../lib/api';
 import type { AssistantEffort, AssistantProposal, AssistantStatus } from '../lib/models';
@@ -9,13 +9,29 @@ import { DiffCard } from '../pages/DiffCard';
 import { SCOPE_LABEL } from '../pages/SettingRow';
 import { useAnnounce } from '../state/announcer';
 import { MAX_CONTEXT, useAssistant } from '../state/assistant';
+import { useNarrow } from '../state/hooks';
 import { useSnapshotStore } from '../state/snapshot';
+import { ModelPicker, pickerProviders } from './ModelPicker';
 import { LoadingPanel } from './Shell';
 
-const EFFORTS: AssistantEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const BANNER = 'Proposed by the assistant from your config files';
 const MODEL_OUTPUT = 'Assistant · model output derived from your files; review before pasting';
-const FIELD = 'touch-target h-8 w-full rounded-md border border-border-strong bg-raised px-2 text-sm';
+const WIDTH_KEY = 'cfgdash-assistant-width';
+const MIN_WIDTH = 320;
+const DEFAULT_WIDTH = 400;
+const WIDTH_STEP = 16;
+
+/** The widest the panel may be: 60 % of the window or the window minus 480 px for the main view, never below the minimum. */
+const maxWidth = (windowWidth: number) => Math.max(MIN_WIDTH, Math.min(Math.floor(windowWidth * 0.6), windowWidth - 480));
+
+function storedWidth(): number {
+  try {
+    const value = Number(localStorage.getItem(WIDTH_KEY));
+    return value > 0 ? value : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
 
 type Entry =
   | { kind: 'user'; text: string }
@@ -101,6 +117,9 @@ export default function AssistantPanel() {
   const [status, setStatus] = useState<{ data?: AssistantStatus; failed?: boolean } | null>(null);
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState<AssistantEffort>('medium');
+  const [defaultEffort, setDefaultEffort] = useState<AssistantEffort>('medium');
+  const [provider, setProvider] = useState('claude');
+  const [defaultsRead, setDefaultsRead] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [running, setRunning] = useState(false);
@@ -111,6 +130,11 @@ export default function AssistantPanel() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const events = useRef<EventSource | null>(null);
   const live = useRef<Session | null>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  const dragging = useRef(false);
+  const narrow = useNarrow();
+  const [width, setWidth] = useState(storedWidth);
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const pending = useRef(false);
   const mounted = useRef(true);
   const effortTouched = useRef(false);
@@ -130,12 +154,14 @@ export default function AssistantPanel() {
       (settings) => {
         if (!settings.configError) {
           setModel((m) => m || settings.values.assistant.model);
+          setDefaultEffort(settings.values.assistant.effort);
           if (!effortTouched.current) {
             setEffort(settings.values.assistant.effort);
           }
         }
+        setDefaultsRead(true);
       },
-      () => undefined
+      () => setDefaultsRead(true)
     );
     const leave = () => {
       if (live.current) {
@@ -153,6 +179,31 @@ export default function AssistantPanel() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const widest = maxWidth(windowWidth);
+  const shownWidth = Math.min(Math.max(width, MIN_WIDTH), widest);
+  const resize = (next: number) => {
+    const value = Math.round(Math.min(Math.max(next, MIN_WIDTH), widest));
+    setWidth(value);
+    try {
+      localStorage.setItem(WIDTH_KEY, String(value));
+    } catch {
+      /* the width is only remembered where storage works */
+    }
+  };
+  const onHandleKey = (event: KeyboardEvent<HTMLElement>) => {
+    const next = { ArrowLeft: shownWidth + WIDTH_STEP, ArrowRight: shownWidth - WIDTH_STEP, Home: MIN_WIDTH, End: widest }[event.key];
+    if (next !== undefined) {
+      event.preventDefault();
+      resize(next);
+    }
+  };
 
   const available = status?.data?.available === true;
   useEffect(() => {
@@ -237,8 +288,11 @@ export default function AssistantPanel() {
     }
   };
 
-  const send = async (check: boolean) => {
+  const send = async (check: boolean, findingIds?: string[]) => {
     const message = text.trim();
+    if ((pending.current || running) && findingIds) {
+      setNotice('The assistant is still answering. Wait for it to finish.');
+    }
     if (pending.current || running || !dir || (!check && !message)) {
       return;
     }
@@ -248,7 +302,10 @@ export default function AssistantPanel() {
     }
     pending.current = true;
     setNotice(null);
-    const entry: Entry = { kind: 'user', text: check ? 'Full check' : message };
+    const entry: Entry = {
+      kind: 'user',
+      text: findingIds ? `Diagnose ${findingIds.length} ${findingIds.length === 1 ? 'finding' : 'findings'}` : check ? 'Full check' : message
+    };
     try {
       let current = live.current;
       if (current && (current.dir !== dir || current.model !== chosenModel || current.effort !== effort)) {
@@ -270,7 +327,7 @@ export default function AssistantPanel() {
       const refs = assistant.items.map((i) => i.ref);
       setRunning(true);
       push(entry);
-      await (check ? api.assistantCheck(current.id) : api.assistantMessage(current.id, message, refs));
+      await (check ? api.assistantCheck(current.id, findingIds) : api.assistantMessage(current.id, message, refs));
       if (!check) {
         setText((t) => (t.trim() === message ? '' : t));
         assistant.drop(refs);
@@ -303,6 +360,18 @@ export default function AssistantPanel() {
     }
   };
 
+  const diagnose = assistant.diagnose;
+  const clearDiagnose = assistant.clearDiagnose;
+  useEffect(() => {
+    if (!diagnose || !status || (available && !defaultsRead)) {
+      return;
+    }
+    clearDiagnose();
+    if (available) {
+      void send(true, diagnose);
+    }
+  });
+
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.stopPropagation();
@@ -312,16 +381,48 @@ export default function AssistantPanel() {
   };
 
   const data = status?.data;
-  const models = data?.models ?? [];
-  const chosenModel = model || models[0] || '';
-  const modelOptions = chosenModel && !models.includes(chosenModel) ? [chosenModel, ...models] : models;
+  const providers = pickerProviders(data);
+  const chosenModel = model || (providers.find((p) => p.id === provider) ?? providers[0])?.models[0]?.id || '';
 
   return (
     <aside
+      ref={asideRef}
       aria-labelledby="assistant-title"
       onKeyDown={onKeyDown}
-      className="fixed inset-0 z-40 flex flex-col bg-surface md:sticky md:top-0 md:z-auto md:h-screen md:w-[400px] md:shrink-0 md:border-l md:border-border"
+      style={{ '--assistant-width': `${shownWidth}px` } as CSSProperties}
+      className="fixed inset-0 z-40 flex flex-col bg-surface md:sticky md:top-0 md:z-auto md:h-screen md:w-(--assistant-width) md:shrink-0 md:border-l md:border-border"
     >
+      {!narrow && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize assistant panel"
+          aria-valuemin={MIN_WIDTH}
+          aria-valuemax={widest}
+          aria-valuenow={shownWidth}
+          aria-valuetext={`${shownWidth} pixels wide`}
+          tabIndex={0}
+          onKeyDown={onHandleKey}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragging.current = true;
+          }}
+          onPointerMove={(event) => {
+            const right = asideRef.current?.getBoundingClientRect().right;
+            if (dragging.current && right !== undefined) {
+              resize(right - event.clientX);
+            }
+          }}
+          onPointerUp={() => (dragging.current = false)}
+          onPointerCancel={() => (dragging.current = false)}
+          className="group absolute inset-y-0 -left-1.5 z-10 w-3 cursor-col-resize touch-none outline-none"
+        >
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 left-1/2 h-10 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border-strong transition-colors duration-100 group-hover:bg-accent group-focus-visible:bg-focus group-focus-visible:outline-2 group-focus-visible:outline-offset-1 group-focus-visible:outline-focus"
+          />
+        </div>
+      )}
       <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4">
         <h2 id="assistant-title" ref={headingRef} tabIndex={-1} className="font-semibold">
           Assistant
@@ -421,30 +522,27 @@ export default function AssistantPanel() {
                 {notice}
               </p>
             )}
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs font-medium text-muted">
+            <div>
+              <span id="assistant-model-label" className="text-xs font-medium text-muted">
                 Model
-                <select value={chosenModel} onChange={(event) => setModel(event.target.value)} className={cn(FIELD, 'mt-1 text-text')}>
-                  {modelOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-medium text-muted">
-                Effort
-                <select value={effort} onChange={(event) => {
-                    effortTouched.current = true;
-                    setEffort(event.target.value as AssistantEffort);
-                  }} className={cn(FIELD, 'mt-1 text-text')}>
-                  {EFFORTS.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              </span>
+              <div className="mt-1">
+                <ModelPicker
+                  labelledBy="assistant-model-label"
+                  placement="top"
+                  providers={providers}
+                  value={{ provider, model: chosenModel, effort }}
+                  defaultEffort={defaultEffort}
+                  onChange={(next) => {
+                    setProvider(next.provider);
+                    setModel(next.model);
+                    if (next.effort !== effort) {
+                      effortTouched.current = true;
+                      setEffort(next.effort);
+                    }
+                  }}
+                />
+              </div>
             </div>
             {assistant.items.length > 0 && (
               <div>

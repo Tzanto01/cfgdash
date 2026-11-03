@@ -1,4 +1,4 @@
-import { act, fireEvent } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import type { CfgdashSettings } from '../lib/models';
 import { startApp, type AppHarness, type RequestRecord } from '../test/harness';
 import { answerWhenSent } from '../test/lazy';
@@ -29,7 +29,7 @@ async function openGear(settings: CfgdashSettings = makeSettings()): Promise<App
 
 function control(label: string): HTMLElement {
   const span = [...document.querySelectorAll('main span[id$="-label"]')].find((s) => s.textContent === label);
-  const el = span && document.querySelector<HTMLElement>(`main [aria-labelledby="${span.id}"]`);
+  const el = span && document.querySelector<HTMLElement>(`main [aria-labelledby~="${span.id}"]`);
   if (!el) {
     throw new Error(`No control for ${label}`);
   }
@@ -44,7 +44,7 @@ describe('cfgdash settings (gear)', () => {
     const h = await openGear(makeSettings({ startAtLogin: { configured: true, actual: 'off' } }));
 
     expect(h.el.querySelector('main h1')?.textContent).toBe('cfgdash settings');
-    for (const label of ['Start at login', 'Default folder', 'Publish on the tailnet', 'Theme', 'Answer fleet peers', 'Model', 'Effort', 'Budget per session (USD)']) {
+    for (const label of ['Start at login', 'Default folder', 'Publish on the tailnet', 'Theme', 'Answer fleet peers', 'Model and effort', 'Budget per session (USD)']) {
       expect(() => control(label)).not.toThrow();
     }
     expect(h.text()).toContain('Configured: On · Actual: Off');
@@ -161,5 +161,19 @@ describe('theme from config.json', () => {
     await h.click(h.button('Theme: system. Switch to light'));
 
     expect(h.requests.some((r) => r.url.pathname === '/api/v2/cfgdash-settings')).toBe(false);
+  });
+
+  it('sets the default effort in the model picker as a PUT of only the effort, with the models from the assistant status', async () => {
+    const h = await openGear();
+    await h.answer('/api/v2/assistant/status', { available: true, models: ['sonnet', 'opus'], sessions: [] });
+
+    await h.click(control('Model and effort'));
+    expect(screen.getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Claude', 'sonnet', 'opus', 'Low', 'MediumDefault', 'High', 'Extra high', 'Max']);
+    await h.click(screen.getByRole('radio', { name: 'High' }));
+    const put = await h.answer('/api/v2/cfgdash-settings', makeSettings({ values: { ...makeSettings().values, assistant: { model: 'sonnet', effort: 'high', maxBudgetUsd: 2 } } }));
+
+    expect(put.method).toBe('PUT');
+    expect(body(put)).toEqual({ assistant: { effort: 'high' } });
+    expect(control('Model and effort').textContent).toBe('sonnet · High');
   });
 });

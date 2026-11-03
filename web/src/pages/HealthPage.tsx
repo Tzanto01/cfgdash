@@ -1,3 +1,4 @@
+import { Stethoscope } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { findingLocation } from '../lib/findings';
@@ -7,8 +8,10 @@ import { cn } from '../lib/utils';
 import { VIEW_DEFINITIONS } from '../lib/views';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
 import { useAnnounce } from '../state/announcer';
+import { useAssistant } from '../state/assistant';
 import { useFindings } from '../state/findings';
 import { useSnapshotStore } from '../state/snapshot';
+import { useUi } from '../state/ui';
 import { FindingSheet } from './FindingSheet';
 import { SEVERITIES, SeverityBar, SeverityLabel } from './SeverityBar';
 
@@ -17,12 +20,15 @@ type Chip = Severity | 'all';
 const CHIPS: readonly { id: Chip; label: string }[] = [{ id: 'all', label: 'All' }, ...SEVERITIES];
 const DESCRIPTION = VIEW_DEFINITIONS.find((v) => v.id === 'health')?.description;
 const HEAD = 'font-sans text-xs font-medium text-muted';
+const MAX_DIAGNOSE = 50;
 
 /** Health page: severity bar, severity filter and the findings table; a finding opens in the side sheet. */
 export default function HealthPage() {
   const health = useFindings();
   const store = useSnapshotStore();
   const announce = useAnnounce();
+  const ui = useUi();
+  const assistant = useAssistant();
   const [chip, setChip] = useState<Chip>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -59,6 +65,12 @@ export default function HealthPage() {
           )}
         </div>
         {DESCRIPTION && <p className="mt-1 text-muted">{DESCRIPTION}</p>}
+        {ui.edits && shown.length > 0 && (
+          <Button className="mt-3" onClick={() => assistant.requestDiagnose(shown.slice(0, MAX_DIAGNOSE).map((f) => f.id))}>
+            <Stethoscope strokeWidth={1.75} aria-hidden="true" />
+            Diagnose all
+          </Button>
+        )}
       </header>
 
       {health.request.phase === 'error' ? (

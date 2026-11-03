@@ -2,8 +2,9 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Button } from '../components/ui/button';
 import { Switch } from '../components/ui/switch';
 import { api, ApiError, isAbort } from '../lib/api';
-import type { AssistantEffort, CfgdashPatch, CfgdashSettings } from '../lib/models';
+import type { AssistantStatus, CfgdashPatch, CfgdashSettings } from '../lib/models';
 import { cn } from '../lib/utils';
+import { ModelPicker, pickerProviders } from '../shell/ModelPicker';
 import { focusPendingHeading, LoadingPanel } from '../shell/Shell';
 import { useAnnounce } from '../state/announcer';
 import { useSnapshotStore } from '../state/snapshot';
@@ -11,7 +12,6 @@ import { setTheme, useTheme } from '../state/theme';
 
 const LOCAL_ONLY = "cfgdash settings are only available from this machine's browser (localhost).";
 const FIELD = 'touch-target h-8 w-full rounded-md border border-border-strong bg-raised px-2 text-sm placeholder:text-muted';
-const EFFORTS: AssistantEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const INVALID: Record<string, string> = {
   'bad-type': 'Wrong type',
   'bad-value': 'Not an allowed value',
@@ -19,7 +19,7 @@ const INVALID: Record<string, string> = {
   'bad-request': 'The request was not valid'
 };
 
-type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'effort' | 'budget';
+type Field = 'startAtLogin' | 'theme' | 'defaultDir' | 'tailnet' | 'fleet' | 'model' | 'budget';
 
 /** The inline message for a failed PUT, in words. */
 function putFailure(error: unknown, field: Field): string {
@@ -147,6 +147,7 @@ export default function CfgdashSettingsPage() {
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState<Field | null>(null);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>();
 
   useEffect(() => {
     focusPendingHeading();
@@ -164,6 +165,12 @@ export default function CfgdashSettingsPage() {
     );
     return () => controller.abort();
   }, [reloads]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.assistantStatus(controller.signal).then(setAssistantStatus, () => undefined);
+    return () => controller.abort();
+  }, []);
 
   const save = async (field: Field, patch: CfgdashPatch) => {
     if (busy) {
@@ -340,33 +347,28 @@ export default function CfgdashSettingsPage() {
         </Card>
 
         <Card title="Assistant">
-          <Row label="Model" description="Default model alias for the config assistant, for example sonnet or opus." error={errors.model}>
+          <Row label="Model and effort" description="Default model and reasoning effort for the config assistant." error={errors.model}>
             {(ids) => (
-              <TextSetting
-                key={values.assistant.model}
-                ids={ids}
-                value={values.assistant.model}
-                busy={busy === 'model'}
-                onSave={(text) => void save('model', { assistant: { model: text } })}
-              />
-            )}
-          </Row>
-          <Row label="Effort" description="Default effort for the config assistant." error={errors.effort}>
-            {(ids) => (
-              <select
-                aria-labelledby={ids.labelId}
-                aria-describedby={ids.descId}
+              <ModelPicker
+                labelledBy={ids.labelId}
+                describedBy={ids.descId}
                 disabled={busy !== null}
-                value={values.assistant.effort}
-                onChange={(event) => void save('effort', { assistant: { effort: event.target.value as AssistantEffort } })}
-                className={FIELD}
-              >
-                {EFFORTS.map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effort}
-                  </option>
-                ))}
-              </select>
+                providers={pickerProviders(assistantStatus)}
+                value={{ provider: 'claude', model: values.assistant.model, effort: values.assistant.effort }}
+                defaultEffort="medium"
+                onChange={(next) => {
+                  const patch: NonNullable<CfgdashPatch['assistant']> = {};
+                  if (next.model !== values.assistant.model) {
+                    patch.model = next.model;
+                  }
+                  if (next.effort !== values.assistant.effort) {
+                    patch.effort = next.effort;
+                  }
+                  if (patch.model || patch.effort) {
+                    void save('model', { assistant: patch });
+                  }
+                }}
+              />
             )}
           </Row>
           <Row label="Budget per session (USD)" description="The most one assistant session may spend, from 0.1 to 50." error={errors.budget}>
