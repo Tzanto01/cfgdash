@@ -4,7 +4,11 @@ using Cfgdash.Core.Infrastructure;
 namespace Cfgdash.Core.Edits;
 
 /// <summary>A confined write target: <see cref="Real"/> is the resolved path that is written (a symlinked settings file keeps its link).</summary>
-internal sealed record EditTarget(string Scope, string Real);
+internal sealed record EditTarget(string Scope, string Real)
+{
+    /// <summary>Set for an edits-v2 file target (scope <c>file</c>).</summary>
+    public FileTarget? File { get; init; }
+}
 
 /// <summary>Maps scopes to their settings files and confines writes (edits-v1 "Scope", plan resolution 3).</summary>
 internal sealed class EditTargets(MachineEnvironment environment, PlatformLocations locations)
@@ -63,9 +67,9 @@ internal sealed class EditTargets(MachineEnvironment environment, PlatformLocati
         return new EditTarget(scope, real);
     }
 
-    private bool IsManaged(string path) =>
+    internal bool IsManaged(string path) =>
         new[] { locations.ManagedDir, locations.IgnoredManagedDir }.Any(dir => dir is not null && (PathUtil.IsUnder(path, dir) || PathUtil.IsUnder(path, PathUtil.RealPath(dir))));
 
-    private static bool HasGitSegment(string path) =>
+    internal static bool HasGitSegment(string path) =>
         path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(s => s.Equals(".git", StringComparison.OrdinalIgnoreCase));
 }

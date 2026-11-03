@@ -43,7 +43,7 @@ internal sealed partial class EditService
 
             var name = Path.GetFileName(path);
             var scope = Text(file["scope"]) ?? EditTargets.Scopes.FirstOrDefault(s => File.Exists(Path.Combine(backups, $"{i}-{s}-{name}")));
-            if (scope is null || !EditTargets.Scopes.Contains(scope, StringComparer.Ordinal))
+            if (scope is null || !(EditTargets.Scopes.Contains(scope, StringComparer.Ordinal) || scope == FileScope))
             {
                 return notFound;
             }
@@ -56,9 +56,22 @@ internal sealed partial class EditService
             }
 
             var full = PathUtil.Full(path);
-            if (Path.GetDirectoryName(Path.GetDirectoryName(full)) is not { } dir
-                || targets.Resolve(scope, dir, out _) is not { } target
-                || !PathUtil.PathEquals(target.Real, full))
+            string? dir;
+            EditTarget? target;
+            if (scope == FileScope)
+            {
+                dir = Path.GetDirectoryName(full);
+                target = dir is not null && FileTargets.Resolve(dir, full, "instruction", out _) is { } fileTarget && sha256Before is not null
+                    ? new EditTarget(FileScope, fileTarget.Real) { File = fileTarget }
+                    : null;
+            }
+            else
+            {
+                dir = Path.GetDirectoryName(Path.GetDirectoryName(full));
+                target = dir is null ? null : targets.Resolve(scope, dir, out _);
+            }
+
+            if (dir is null || target is null || !PathUtil.PathEquals(target.Real, full))
             {
                 return notFound;
             }
@@ -80,7 +93,7 @@ internal sealed partial class EditService
                 continue;
             }
 
-            if (!TryRedacted(current, out var redactedBefore) || !TryRedacted(backup, out var redactedAfter))
+            if (!TryRedacted(target, current, out var redactedBefore) || !TryRedacted(target, backup, out var redactedAfter))
             {
                 return notFound;
             }
@@ -106,9 +119,10 @@ internal sealed partial class EditService
 
         var changes = entry["changes"] is JsonArray list
             ? list.OfType<JsonObject>()
-                .Select(c => (Key: Text(c["key"]), Scope: Text(c["scope"])))
-                .Where(c => c.Key is not null && c.Scope is not null)
-                .Select(c => new Change(c.Key!, c.Scope!, null, false))
+                .Select(c => Text(c["file"]) is { } fileId
+                    ? new Change(fileId, FileScope, null, false) { File = fileId }
+                    : Text(c["key"]) is { } key && Text(c["scope"]) is { } changeScope ? new Change(key, changeScope, null, false) : null)
+                .OfType<Change>()
                 .ToList()
             : [];
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -155,11 +169,17 @@ internal sealed partial class EditService
         return node is null || hash is not null;
     }
 
-    private bool TryRedacted(byte[]? bytes, out string? redacted)
+    private bool TryRedacted(EditTarget target, byte[]? bytes, out string? redacted)
     {
         redacted = null;
         if (bytes is null)
         {
+            return true;
+        }
+
+        if (target.File is not null)
+        {
+            redacted = redactor.RedactText(new UTF8Encoding(false).GetString(bytes).TrimStart('\uFEFF'));
             return true;
         }
 
