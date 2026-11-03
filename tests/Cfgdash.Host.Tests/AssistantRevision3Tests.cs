@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Cfgdash.Core;
 using Cfgdash.Core.Snapshot;
 
 namespace Cfgdash.Host.Tests;
@@ -326,5 +327,126 @@ public sealed class AssistantProvidersAndErrorsTests
         Assert.Contains("529 Overloaded", detail);
         Assert.Contains("[redacted]", detail);
         Assert.DoesNotContain("GHIJKLMNOP", detail);
+    }
+}
+
+public sealed class AssistantFileEditTests
+{
+    private static async Task<(AssistantHost Host, string ClaudeMd, string Settings, SseCapture Events, FakeRun Run)> StartAsync(bool applyEnabled = false)
+    {
+        var host = await AssistantHost.StartAsync();
+        var claudeMd = Path.Combine(host.Project, "CLAUDE.md");
+        var settings = Path.Combine(Directory.CreateDirectory(Path.Combine(host.Project, ".claude")).FullName, "settings.json");
+        File.WriteAllText(claudeMd, "# App\n");
+        File.WriteAllText(settings, "{}\n");
+        host.Snapshots.Files = new FakeCatalog(
+            new RegisteredFile(new FileRef("md", claudeMd, "instruction", 6, 1, false), claudeMd),
+            new RegisteredFile(new FileRef("settings", settings, "settings", 3, 1, false), settings));
+        host.Snapshots.Sections =
+        [
+            new("settings.effective", "settings", "Settings", [new KvBlock("settings.effective/kv", "Effective", [new KvRow("a", "x", new SourceRef("CLAUDE.md", "md")), new KvRow("b", "y", new SourceRef("settings.json", "settings"))])]),
+        ];
+        Assert.Equal(200, (await host.GetAsync("/api/v1/snapshot?refresh=true&dir=" + Uri.EscapeDataString(host.Project))).Status);
+        if (applyEnabled)
+        {
+            Assert.Equal(200, (await host.UiAsync(HttpMethod.Put, "/api/v2/cfgdash-settings", """{"assistant":{"applyEnabled":true}}""")).Status);
+        }
+
+        host.Claude.Configure(turn: FakeTurn.Stall);
+        var id = await host.CreateSessionAsync();
+        var events = await host.EventsAsync(id);
+        await host.MessageAsync(id);
+        Assert.True(await events.WaitForAsync("delta"));
+        return (host, claudeMd, settings, events, await host.Claude.WaitRunAsync(1));
+    }
+
+    private static string Edit(string fileId, string content) => JsonSerializer.Serialize(new { fileId, content, rationale = "r" });
+
+    [LinuxFact]
+    public async Task A_file_edit_is_always_a_proposal_even_with_apply_on_and_the_model_never_sees_confirm()
+    {
+        var (host, claudeMd, _, events, run) = await StartAsync(applyEnabled: true);
+        await using var _h = host;
+        using var _e = events;
+
+        var tool = await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", "# App\n\nKeep changes small.\n"));
+
+        Assert.True(tool.Json.TryGetProperty("proposalId", out _), tool.Body);
+        Assert.False(tool.Json.TryGetProperty("confirm", out _));
+        Assert.False(tool.Json.TryGetProperty("applied", out _));
+        Assert.Contains("+Keep changes small.", tool.Json.GetProperty("files")[0].GetProperty("diff").GetString());
+        Assert.True(await events.WaitForAsync("proposal"));
+        Assert.DoesNotContain("applied", events.Names);
+        Assert.Equal("# App\n", await File.ReadAllTextAsync(claudeMd));
+
+        var proposal = events.First("proposal");
+        var applied = await host.UiAsync(HttpMethod.Post, $"/api/v2/proposals/{proposal.GetProperty("proposalId").GetString()}/apply", JsonSerializer.Serialize(new { confirm = proposal.GetProperty("confirm").GetString() }));
+        Assert.Equal(200, applied.Status);
+        Assert.Equal("# App\n\nKeep changes small.\n", await File.ReadAllTextAsync(claudeMd));
+        var audit = (await host.GetAsync("/api/v2/audit")).Json.GetProperty("entries")[0];
+        Assert.Equal("assistant", audit.GetProperty("origin").GetString());
+        Assert.False(audit.TryGetProperty("mode", out _));
+    }
+
+    [LinuxFact]
+    public async Task A_settings_file_is_denied_and_content_the_redactor_would_change_is_rejected()
+    {
+        var (host, claudeMd, settings, events, run) = await StartAsync();
+        await using var _h = host;
+        using var _e = events;
+
+        var denied = await host.InternalAsync("propose_file_edit", run.Capability, Edit("settings", """{"model":"opus"}""" + "\n"));
+        var hidden = await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", "# App\ntoken ghp_" + new string('z', 36) + "\n"));
+        var unknown = await host.InternalAsync("propose_file_edit", run.Capability, Edit("nope", "x"));
+
+        Assert.Equal("settings", denied.Json.GetProperty("denied").GetString());
+        Assert.Equal("assistant-policy", denied.Reason);
+        Assert.Equal("would-hide", hidden.Reason);
+        Assert.Equal("not-found", unknown.Json.GetProperty("error").GetString());
+        Assert.DoesNotContain("proposal", events.Names);
+        Assert.Equal("{}\n", await File.ReadAllTextAsync(settings));
+        Assert.Equal("# App\n", await File.ReadAllTextAsync(claudeMd));
+    }
+
+    [LinuxFact]
+    public async Task File_edits_count_toward_the_quota_of_8_open_assistant_proposals()
+    {
+        var (host, _, _, events, run) = await StartAsync();
+        await using var _h = host;
+        using var _e = events;
+
+        for (var i = 0; i < 8; i++)
+        {
+            Assert.True((await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", $"# App {i}\n"))).Json.TryGetProperty("proposalId", out _));
+        }
+
+        var ninth = await host.InternalAsync("propose_file_edit", run.Capability, Edit("md", "# App 9\n"));
+        var change = await host.InternalAsync("propose_change", run.Capability, JsonSerializer.Serialize(new { changes = new[] { new { key = "model", scope = "project", value = "opus" } }, rationale = "r" }));
+
+        Assert.Equal("quota", ninth.Reason);
+        Assert.Equal("quota", change.Reason);
+    }
+}
+
+public sealed class AssistantStartFailureTests
+{
+    [LinuxFact]
+    public async Task A_cli_that_exits_before_init_gives_a_cfgdash_status_reason_and_the_redacted_stderr_only_as_detail()
+    {
+        await using var host = await AssistantHost.StartAsync();
+        host.Claude.Configure(init: FakeInit.Exit);
+        var id = await host.CreateSessionAsync();
+        using var events = await host.EventsAsync(id);
+
+        await host.MessageAsync(id);
+        Assert.True(await events.WaitForAsync("error"));
+
+        var status = (await host.GetAsync("/api/v2/assistant/status")).Json;
+        Assert.Equal("Claude Code could not start; run `claude` once in a terminal to check it", status.GetProperty("reason").GetString());
+        var detail = status.GetProperty("detail").GetString()!;
+        Assert.Contains("fatal: bad config", detail);
+        Assert.Contains("[redacted]", detail);
+        Assert.DoesNotContain("GHIJKLMNOP", status.ToString());
+        Assert.Equal(detail, status.GetProperty("providers")[0].GetProperty("detail").GetString());
     }
 }

@@ -39,6 +39,7 @@ internal sealed class AssistantProcess
     private const int SigKill = 9;
 
     private readonly Process process;
+    private readonly int pid;
     private readonly string[] files;
     private readonly bool ownGroup;
     private readonly Channel<string> lines = Channel.CreateBounded<string>(new BoundedChannelOptions(256) { SingleReader = true, SingleWriter = true });
@@ -54,6 +55,7 @@ internal sealed class AssistantProcess
     private AssistantProcess(Process process, string[] files, bool ownGroup, string capability)
     {
         this.process = process;
+        pid = process.Id;
         this.files = files;
         this.ownGroup = ownGroup;
         Capability = capability;
@@ -153,7 +155,7 @@ internal sealed class AssistantProcess
         {
             if (process is not null)
             {
-                KillTree(process, start.Setsid is not null);
+                KillTree(process, process.Id, start.Setsid is not null);
                 process.Dispose();
             }
 
@@ -194,7 +196,7 @@ internal sealed class AssistantProcess
         try
         {
             stopReading.Cancel();
-            KillTree(process, ownGroup);
+            KillTree(process, pid, ownGroup);
         }
         finally
         {
@@ -204,11 +206,11 @@ internal sealed class AssistantProcess
     }
 
     /// <summary>Signals the process group first, so members orphaned by an exited leader die too (a pgid is not reused while any member lives), then kills the tree.</summary>
-    private static void KillTree(Process process, bool ownGroup)
+    private static void KillTree(Process process, int pid, bool ownGroup)
     {
         if (ownGroup && !OperatingSystem.IsWindows())
         {
-            _ = SignalGroup(-process.Id, SigKill);
+            _ = SignalGroup(-pid, SigKill);
         }
 
         try

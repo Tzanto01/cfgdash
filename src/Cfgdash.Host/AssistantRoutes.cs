@@ -18,7 +18,6 @@ internal sealed partial class CfgdashServer
     private const int MaxMessageChars = 16000;
     private const int MaxRationaleChars = 2000;
     private const int MaxToolBodyBytes = 64 * 1024;
-    private const int MaxFileEditBodyBytes = 320 * 1024;
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(15);
     private static readonly string[] AssistantToolNames = ["get_snapshot", "get_findings", "get_file", "search", "propose_change", "propose_file_edit"];
     private static readonly string[] UnsafeTargetParts = ["..", "%2F", "%2f", "%5C", "%5c", "%2E", "%2e", "\\"];
@@ -65,6 +64,11 @@ internal sealed partial class CfgdashServer
             body["reason"] = probe.Reason;
         }
 
+        if (probe.Detail is not null)
+        {
+            body["detail"] = probe.Detail;
+        }
+
         if (probe.ClaudePath is not null)
         {
             body["claudePath"] = Slash(probe.ClaudePath);
@@ -80,6 +84,11 @@ internal sealed partial class CfgdashServer
         if (probe.Reason is not null)
         {
             claude["reason"] = probe.Reason;
+        }
+
+        if (probe.Detail is not null)
+        {
+            claude["detail"] = probe.Detail;
         }
 
         claude["models"] = new JsonArray([.. AssistantRegistry.ClaudeModels.Select(m => (JsonNode)new JsonObject { ["id"] = m.Id, ["label"] = m.Label })]);

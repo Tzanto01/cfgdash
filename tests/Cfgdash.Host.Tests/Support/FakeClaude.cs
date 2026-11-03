@@ -11,6 +11,7 @@ internal enum FakeInit
     BadTool,
     BadPlugin,
     None,
+    Exit,
 }
 
 /// <summary>What the fake CLI does for each user line once init is out.</summary>
@@ -237,6 +238,7 @@ internal sealed class FakeClaude : IDisposable
           if [ "$first" = 1 ]; then
             first=0
             if [ "$INIT" = none ]; then sleep 300; exit 0; fi
+            if [ "$INIT" = exit ]; then printf 'fatal: bad config key %s%s\n' AKIAABCDEF GHIJKLMNOP >&2; exit 1; fi
             init
             if [ "$DELTA_AFTER_INIT" = 1 ]; then delta 'leaked text\n'; fi
           fi
