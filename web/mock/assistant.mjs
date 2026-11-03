@@ -4,20 +4,25 @@
  * through `POST /api/v2/proposals/{id}/apply` with its `confirm`.
  *
  * Triggers:
- * - `GET /api/v2/assistant/status?variant=unavailable` answers `available: false`;
+ * - `GET /api/v2/assistant/status?variant=unavailable` answers `available: false`; `?variant=start-failed` answers available with the
+ *   mapped `reason` and a redacted `detail` (on the body and on the provider);
  * - a session created with model `"unavailable"` answers 503 `unavailable`;
  * - a message whose text contains `fail` ends its turn with a mapped `error` event (`message` plus redacted `detail`) instead of `done`;
  * - with `assistant.applyEnabled` on in the platform mock, the turn applies its change and emits `applied` (audited `mode: "auto"`)
  *   instead of `proposal`;
  * - context items answer per-reference states: past the 8th `too-many`; a bad kind or an id containing `missing` `not-found`;
  *   an id containing `company` or a `engram.memory`, `sessions.transcripts` or `usage.metrics` row `not-allowed`; else `added`;
+ * - a message whose text contains `file edit` makes the turn call `propose_file_edit` on the target dir's CLAUDE.md: a `proposal`
+ *   event with scope `file` that the files-edit mock applies, never `applied`, whatever `assistant.applyEnabled` says;
  * - `check` takes `{ findingIds }` (at most 50 strings; ids containing `missing` are unknown and ignored, 400 `no-findings` when none
  *   is left); its first delta names how many findings it was limited to.
  */
 import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { resolveDir } from './dirs.mjs';
+import { buildSnapshot } from './data.mjs';
 import { audit, editsApi } from './edits.mjs';
+import { filesEditApi, withEdit } from './files-edit.mjs';
 import { assistantSettings } from './platform.mjs';
 
 const MAX_BODY = 64 * 1024;
@@ -40,17 +45,21 @@ const sessions = new Map();
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const liveCount = () => [...sessions.values()].filter((s) => s.live).length;
 
-const provider = (available, reason) => ({
-  id: 'claude', label: 'Claude', available, ...(reason ? { reason } : {}), models: CLAUDE_MODELS, efforts: EFFORTS,
+const provider = (available, reason, detail) => ({
+  id: 'claude', label: 'Claude', available, ...(reason ? { reason } : {}), ...(detail ? { detail } : {}), models: CLAUDE_MODELS, efforts: EFFORTS,
 });
+const START_FAILED = 'Claude Code could not start; run `claude` once in a terminal to check it';
+const START_DETAIL = 'Error: settings file is not valid JSON (token [redacted])';
 
 function status(url) {
   if (url.searchParams.get('variant') === 'unavailable') {
     return [200, { available: false, reason: 'claude not found on PATH', models: [], providers: [provider(false, 'claude not found on PATH')], sessions: [] }];
   }
+  const failed = url.searchParams.get('variant') === 'start-failed';
   return [200, {
     available: true,
-    providers: [provider(true)],
+    ...(failed ? { reason: START_FAILED, detail: START_DETAIL } : {}),
+    providers: [failed ? provider(true, START_FAILED, START_DETAIL) : provider(true)],
     claudePath: '/home/user/.local/bin/claude',
     claudeVersion: '2.1.316 (Claude Code)',
     models: MODELS,
@@ -82,13 +91,22 @@ function emit(session, event, data) {
   for (const res of session.listeners) res.write(frame);
 }
 
-async function post(path, json) {
+async function post(path, json, api = editsApi) {
   const payload = Buffer.from(JSON.stringify(json));
   const req = Object.assign(Readable.from([payload]), {
     method: 'POST',
     headers: { 'x-cfgdash-request': '1', 'content-length': String(payload.length) },
   });
-  return editsApi(req, new URL(`http://127.0.0.1${path}`));
+  return api(req, new URL(`http://127.0.0.1${path}`));
+}
+
+async function proposeFileEdit(dir) {
+  const file = [...buildSnapshot(dir).files.values()].find((f) => /(^|\/)CLAUDE\.md$/.test(f.ref.path) && !f.ref.company);
+  const view = file && withEdit(file, {});
+  if (!view?.edit.editable) return null;
+  const content = `${view.content.replace(/\n?$/, '\n')}\n- Keep changes small and reviewed.\n`;
+  const [code, body] = await post(`/api/v2/files/${encodeURIComponent(file.ref.id)}/proposals?dir=${encodeURIComponent(dir)}`, { content, sha256Before: view.edit.sha256 }, filesEditApi);
+  return code === 200 ? body : null;
 }
 
 async function proposeModel(dir) {
@@ -133,6 +151,22 @@ async function turn(session, text, check, findingIds) {
         message: 'Claude is overloaded right now. Try again in a moment.',
         detail: 'error_during_execution: API Error: 529 Overloaded',
       });
+      return;
+    }
+    if (!check && /file edit/i.test(text)) {
+      emit(session, 'tool', { name: 'propose_file_edit', status: 'started' });
+      const fileProposal = await proposeFileEdit(session.dir);
+      emit(session, 'tool', { name: 'propose_file_edit', status: fileProposal ? 'done' : 'error' });
+      if (fileProposal) {
+        emit(session, 'proposal', {
+          proposalId: fileProposal.id,
+          expiresAt: fileProposal.expiresAt,
+          files: fileProposal.files,
+          confirm: fileProposal.confirm,
+          rationale: 'State the review rule in the folder instructions.',
+        });
+      }
+      emit(session, 'done', {});
       return;
     }
     emit(session, 'tool', { name: 'propose_change', status: 'started' });
