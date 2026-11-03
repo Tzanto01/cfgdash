@@ -203,7 +203,7 @@ internal sealed class FakeSnapshots(string hostname = "host.example") : ISnapsho
 {
     private readonly ConcurrentDictionary<string, int> counts = new(StringComparer.OrdinalIgnoreCase);
 
-    public IFileCatalog Files { get; } = new FakeCatalog(
+    public IFileCatalog Files { get; set; } = new FakeCatalog(
         new RegisteredFile(new FileRef("f1", "memory/notes.md", "memory", 10, 3, false), "unused"),
         new RegisteredFile(new FileRef("gone", "memory/gone.md", "memory", 10, 3, false), "unused"));
 
