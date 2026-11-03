@@ -285,7 +285,7 @@ public sealed class FileEditTests : IDisposable
     }
 
     [Fact]
-    public async Task The_assistant_cannot_propose_settings_file_edits()
+    public async Task The_assistant_cannot_propose_settings_file_edits_but_the_user_can()
     {
         var id = Register("ws/proj/.claude/settings.json", "{}\n", "settings");
 
@@ -293,6 +293,8 @@ public sealed class FileEditTests : IDisposable
 
         Assert.Equal(EditStatus.Denied, result.Status);
         Assert.Equal("assistant-policy", (string?)result.Body["reason"]);
+        Assert.Equal(EditStatus.Ok, (await Apply(await Propose(id, "{ \"model\": \"opus\" }\n"))).Status);
+        Assert.Equal("{ \"model\": \"opus\" }\n", File.ReadAllText(tree.Path("ws/proj/.claude/settings.json")));
     }
 
     [Fact]
