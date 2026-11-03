@@ -78,7 +78,7 @@ internal sealed class FileTargets(MachineEnvironment environment, EditTargets ta
                 || (environment.GetPath(PathKeys.ClaudeConfigDir) is { } config && (PathUtil.PathEquals(parent, config) || PathUtil.PathEquals(parent, PathUtil.RealPath(config))));
         }
 
-        if (kind == "hookScript" || !name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        if (!name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
