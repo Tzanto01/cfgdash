@@ -15,7 +15,8 @@ public sealed class InitCheckTests
                 "mcp__cfgdash__get_findings",
                 "mcp__cfgdash__get_file",
                 "mcp__cfgdash__search",
-                "mcp__cfgdash__propose_change"
+                "mcp__cfgdash__propose_change",
+                "mcp__cfgdash__propose_file_edit"
               ],
               "mcp_servers": [ { "name": "cfgdash", "status": "connected" } ],
               "agents": [],

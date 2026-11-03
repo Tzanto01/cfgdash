@@ -218,12 +218,12 @@ internal sealed class FakeClaude : IDisposable
         fi
         touch "$d/ready"
         T='"mcp__cfgdash__'
-        TOOLS="[${T}get_snapshot\",${T}get_findings\",${T}get_file\",${T}search\",${T}propose_change\"]"
+        TOOLS="[${T}get_snapshot\",${T}get_findings\",${T}get_file\",${T}search\",${T}propose_change\",${T}propose_file_edit\"]"
         SERVERS='[{"name":"cfgdash","status":"connected"}]'
         init() {
           local tools="$TOOLS" plugins='[]'
           case "$INIT" in
-            badtool) tools="[${T}get_snapshot\",${T}get_findings\",${T}get_file\",${T}search\",${T}propose_change\",\"Bash\"]";;
+            badtool) tools="[${T}get_snapshot\",${T}get_findings\",${T}get_file\",${T}search\",${T}propose_change\",${T}propose_file_edit\",\"Bash\"]";;
             badplugin) if [ "$n" -le "$PLUGIN_FAILS" ]; then plugins='[{"name":"x","path":"/x","source":"p@m"}]'; fi;;
           esac
           printf '{"type":"system","subtype":"init","tools":%s,"mcp_servers":%s,"agents":[],"skills":[],"slash_commands":[],"plugins":%s}\n' "$tools" "$SERVERS" "$plugins"

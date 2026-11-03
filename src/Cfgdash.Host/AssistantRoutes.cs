@@ -18,8 +18,9 @@ internal sealed partial class CfgdashServer
     private const int MaxMessageChars = 16000;
     private const int MaxRationaleChars = 2000;
     private const int MaxToolBodyBytes = 64 * 1024;
+    private const int MaxFileEditBodyBytes = 320 * 1024;
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(15);
-    private static readonly string[] AssistantToolNames = ["get_snapshot", "get_findings", "get_file", "search", "propose_change"];
+    private static readonly string[] AssistantToolNames = ["get_snapshot", "get_findings", "get_file", "search", "propose_change", "propose_file_edit"];
     private static readonly string[] UnsafeTargetParts = ["..", "%2F", "%2f", "%5C", "%5c", "%2E", "%2e", "\\"];
 
     private const string CheckPrompt =
@@ -379,7 +380,7 @@ internal sealed partial class CfgdashServer
         }
 
         var watch = Stopwatch.StartNew();
-        var args = await ReadToolArgsAsync(ctx);
+        var args = await ReadToolArgsAsync(ctx, tool == "propose_file_edit" ? MaxFileEditBodyBytes : MaxToolBodyBytes);
         JsonObject answer;
         var ok = false;
         if (limited)
@@ -446,6 +447,8 @@ internal sealed partial class CfgdashServer
 
                 var hits = await Task.Run(() => AssistantTools.Search(view, core.Search, core.FileReader, q, cancellationToken), cancellationToken);
                 return (hits, !hits.ContainsKey("error"));
+            case "propose_file_edit":
+                return await ProposeFileForAssistantAsync(session, view, args, cancellationToken);
             default:
                 return await ProposeForAssistantAsync(session, view, args, cancellationToken);
         }
@@ -458,11 +461,7 @@ internal sealed partial class CfgdashServer
         switch (result.Status)
         {
             case EditStatus.Ok:
-                var rationale = AssistantRedaction.Text(StringArg(args, "rationale") ?? string.Empty);
-                if (rationale.Length > MaxRationaleChars)
-                {
-                    rationale = rationale[..(char.IsHighSurrogate(rationale[MaxRationaleChars - 1]) ? MaxRationaleChars - 1 : MaxRationaleChars)];
-                }
+                var rationale = Rationale(args);
 
                 if (auto)
                 {
@@ -514,16 +513,51 @@ internal sealed partial class CfgdashServer
         }
     }
 
-    /// <summary>The JSON object body (empty body: empty object); null when not an object or over 64 KiB.</summary>
-    private static async Task<JsonObject?> ReadToolArgsAsync(HttpContext ctx)
+    /// <summary>edits-v2 <c>propose_file_edit</c>: always a proposal for the user to confirm, whatever <c>assistant.applyEnabled</c> says.</summary>
+    private async Task<(JsonObject Answer, bool Ok)> ProposeFileForAssistantAsync(AssistantSession session, AssistantView view, JsonObject args, CancellationToken cancellationToken)
+    {
+        if (StringArg(args, "fileId") is not { } fileId || StringArg(args, "content") is not { } content)
+        {
+            return (new JsonObject { ["error"] = "bad-request" }, false);
+        }
+
+        var result = await editService!.Value.ProposeFileAsync(session.Dir, view.Files, fileId, content, null, session.Id, cancellationToken);
+        if (result.Status != EditStatus.Ok)
+        {
+            return result.Status is EditStatus.Denied or EditStatus.InvalidChange or EditStatus.NotFound
+                ? (AssistantTools.ProposalForModel(result, view), false)
+                : (new JsonObject { ["error"] = "propose-failed" }, false);
+        }
+
+        session.Emit("proposal", new JsonObject
+        {
+            ["proposalId"] = result.Body["id"]?.DeepClone(),
+            ["expiresAt"] = result.Body["expiresAt"]?.DeepClone(),
+            ["files"] = result.Body["files"]?.DeepClone(),
+            ["confirm"] = result.Body["confirm"]?.DeepClone(),
+            ["rationale"] = Rationale(args),
+        });
+        return (AssistantTools.ProposalForModel(result, view), true);
+    }
+
+    private static string Rationale(JsonObject args)
+    {
+        var rationale = AssistantRedaction.Text(StringArg(args, "rationale") ?? string.Empty);
+        return rationale.Length > MaxRationaleChars
+            ? rationale[..(char.IsHighSurrogate(rationale[MaxRationaleChars - 1]) ? MaxRationaleChars - 1 : MaxRationaleChars)]
+            : rationale;
+    }
+
+    /// <summary>The JSON object body (empty body: empty object); null when not an object or over <paramref name="max"/> bytes.</summary>
+    private static async Task<JsonObject?> ReadToolArgsAsync(HttpContext ctx, int max)
     {
         var request = ctx.Request;
-        if (request.ContentLength > MaxToolBodyBytes)
+        if (request.ContentLength > max)
         {
             return null;
         }
 
-        var buffer = new byte[MaxToolBodyBytes + 1];
+        var buffer = new byte[max + 1];
         var total = 0;
         try
         {
@@ -531,7 +565,7 @@ internal sealed partial class CfgdashServer
             while ((read = await request.Body.ReadAsync(buffer.AsMemory(total), ctx.RequestAborted)) > 0)
             {
                 total += read;
-                if (total > MaxToolBodyBytes)
+                if (total > max)
                 {
                     return null;
                 }

@@ -59,7 +59,7 @@ public sealed class AssistantMcpTests
         Assert.Equal(2, replies.Count);
         Assert.Equal("cfgdash", replies[0]["result"]!["serverInfo"]!["name"]!.GetValue<string>());
         var names = replies[1]["result"]!["tools"]!.AsArray().Select(t => t!["name"]!.GetValue<string>()).Order().ToList();
-        Assert.Equal(new[] { "get_file", "get_findings", "get_snapshot", "propose_change", "search" }, names);
+        Assert.Equal(new[] { "get_file", "get_findings", "get_snapshot", "propose_change", "propose_file_edit", "search" }, names);
         Assert.Empty(handler.Requests);
     }
 

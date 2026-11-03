@@ -220,6 +220,19 @@ internal static class McpServer
                 ["required"] = new JsonArray("changes", "rationale"),
                 ["additionalProperties"] = false,
             }),
+        Tool("propose_file_edit", "Proposes the complete new content of an instruction, agent, skill or command file (a fileId from the snapshot) as a dry run the user always reviews and applies. Settings files answer { denied, reason }.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["fileId"] = StringSchema(),
+                    ["content"] = StringSchema(),
+                    ["rationale"] = StringSchema(),
+                },
+                ["required"] = new JsonArray("fileId", "content", "rationale"),
+                ["additionalProperties"] = false,
+            }),
     ];
 
     private static JsonObject Tool(string name, string description, JsonNode schema) =>
