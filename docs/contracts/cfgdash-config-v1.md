@@ -16,6 +16,9 @@ Owner: department lead. Producer: team `platform` (core, host, `web/mock`). Cons
 | `assistant.model` | string | `sonnet` | Default model alias for the assistant ([assistant-v1](assistant-v1.md)) |
 | `assistant.effort` | `low` \| `medium` \| `high` \| `xhigh` \| `max` | `medium` | Default effort |
 | `assistant.maxBudgetUsd` | number 0.1 to 50 | 2.0 | Per-session cost cap (`--max-budget-usd`) |
+| `assistant.budgetEnabled` | bool | true | When false there is no cost cap ([assistant-v1](assistant-v1.md) revision 3) |
+| `assistant.applyEnabled` | bool | false | The assistant may apply settings-key changes without a confirm (never files) |
+| `assistant.provider` | `claude` | `claude` | Assistant runtime; more providers only after their own containment review |
 
 CLI flags win over the file for one run.
 

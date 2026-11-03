@@ -8,6 +8,8 @@ Decided by Nico on 2026-11-02:
 - the edits-v1 catalog, narrowed by the assistant policy below, through proposals only;
 - explanations and suggested text for every other file.
 
+Revision 3 (2026-11-03, v0.6) adds the sections "Revision 3" at the end: an optional budget, apply mode for settings keys, per-reference context results, the Health diagnose entry, the provider list and `propose_file_edit` ([edits-v2](edits-v2.md)). Where they conflict with earlier text, revision 3 wins.
+
 Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M1–M7, lows). Revision 2.1 (2026-11-02): `--verbose`, no built-in agents, and a one-retry plugin disable, as measured against CLI 2.1.316.
 
 ## Runtime
@@ -121,3 +123,35 @@ Revision 2 applies the pre-implementation security review (FIX FIRST: H1–H3, M
 ## Write exceptions
 
 The CLI runs with `--no-session-persistence`, so it writes no transcript. Claude Code may still update its own bookkeeping in `~/.claude.json` (startup counters and similar). That file is Claude Code's own file, not a cfgdash write; it is recorded here as an accepted residual (Nico, 2026-11-02, by choosing the live-session runtime). Everything cfgdash itself writes for the assistant stays under `<cache>/assistant/`.
+
+## Revision 3 (Nico, 2026-11-03)
+
+### Budget
+
+- `assistant.budgetEnabled` (cfgdash-config-v1, default true). When false, cfgdash passes no `--max-budget-usd` and does not enforce a session budget. The 10-minute turn limit, the 40-tool-call limit, the two-process limit and the idle end stay. `cost` events still report the spend.
+
+### Apply mode (settings keys only)
+
+- `assistant.applyEnabled` (cfgdash-config-v1, default false) is read at every `propose_change` call, so turning it off takes effect at once.
+- When it is on, `propose_change` applies the change directly through the edits-v1 apply path after the same validation and assistant policy (`deny` keys stay denied; `tighten-only` stays tighten-only), with the stale check against the current file. The tool answers `{ "applied": true, "auditId", "files[].diff" }` and the SSE stream emits `applied` (`auditId`, diffs). The audit entry carries `origin: assistant`, the session id and `mode: "auto"`. Undo is the normal revert.
+- File edits (`propose_file_edit`) are never applied by the assistant, whatever this setting says.
+- The panel shows a persistent "The assistant can apply settings changes" badge while the setting is on.
+
+### Context results
+
+- `POST /api/v2/assistant/sessions/{id}/messages` answers `202 { "context": [ { "index", "state": "added" | "not-found" | "not-allowed" | "too-many", "title"? } ] }`. `not-allowed` covers the collector allowlist and the company filter, without saying which. Only `added` references reach the model.
+- Every CLI `system` or error message that reaches the panel is mapped to a cfgdash message, with the raw text shown only in a details toggle after it passes the redactor.
+
+### Diagnose from Health
+
+- `POST /api/v2/assistant/sessions/{id}/check` takes an optional body `{ "findingIds": [ ... ] }` (at most 50) that limits the check to those findings. The Health view's "Diagnose all" button opens the panel, creates a session when none is live, and calls `check` with the visible findings.
+
+### Providers
+
+- `assistant.provider` (cfgdash-config-v1, default `claude`). Only `claude` is valid in v0.6.
+- `GET /api/v2/assistant/status` adds `"providers": [ { "id": "claude", "label": "Claude", "available", "reason"?, "models": [ { "id", "label" } ], "efforts": [ ... ] } ]`.
+- Claude models are the aliases the installed CLI accepts (verified by the team against the CLI, for example `opus`, `sonnet`, `haiku`), plus any full model id that matches the existing `model` pattern. A new provider needs its own containment section and a security review before it is listed.
+
+### Tools
+
+- The init check expects exactly six `mcp__cfgdash__*` tools: the five above plus `propose_file_edit` ([edits-v2](edits-v2.md)).
