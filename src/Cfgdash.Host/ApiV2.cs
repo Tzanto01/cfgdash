@@ -110,8 +110,8 @@ internal sealed partial class CfgdashServer
         return WriteJsonAsync(ctx, StatusCodes.Status200OK, edits.Value.ReadAudit(limit));
     }
 
-    /// <summary>The request body when the edits-v1 POST rules hold (one UI-listener <c>Origin</c>, one <c>X-Cfgdash-Request: 1</c>, at most 64 KiB read into a bounded buffer); null otherwise.</summary>
-    private async Task<byte[]?> ReadEditBodyAsync(HttpContext ctx)
+    /// <summary>The request body when the edits-v1 POST rules hold (one UI-listener <c>Origin</c>, one <c>X-Cfgdash-Request: 1</c>, at most <paramref name="maxBytes"/> (default 64 KiB) read into a bounded buffer); null otherwise.</summary>
+    private async Task<byte[]?> ReadEditBodyAsync(HttpContext ctx, int maxBytes = MaxEditBodyBytes)
     {
         var request = ctx.Request;
         var uiPort = Volatile.Read(ref listeners).UiPort;
@@ -121,12 +121,12 @@ internal sealed partial class CfgdashServer
             || !(string.Equals(origin[0], $"http://127.0.0.1:{uiPort}", StringComparison.OrdinalIgnoreCase) || string.Equals(origin[0], $"http://localhost:{uiPort}", StringComparison.OrdinalIgnoreCase))
             || marker.Count != 1
             || !string.Equals(marker[0], "1", StringComparison.Ordinal)
-            || request.ContentLength > MaxEditBodyBytes)
+            || request.ContentLength > maxBytes)
         {
             return null;
         }
 
-        var buffer = new byte[MaxEditBodyBytes + 1];
+        var buffer = new byte[maxBytes + 1];
         var total = 0;
         try
         {
@@ -134,7 +134,7 @@ internal sealed partial class CfgdashServer
             while ((read = await request.Body.ReadAsync(buffer.AsMemory(total), ctx.RequestAborted)) > 0)
             {
                 total += read;
-                if (total > MaxEditBodyBytes)
+                if (total > maxBytes)
                 {
                     return null;
                 }
