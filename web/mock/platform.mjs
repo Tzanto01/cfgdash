@@ -31,6 +31,7 @@ const values = {
   assistant: { model: 'sonnet', effort: 'medium', maxBudgetUsd: 2.0, budgetEnabled: true, applyEnabled: false, provider: 'claude' },
 };
 let configText = null;
+export const assistantSettings = () => values.assistant;
 
 const bool = (v) => (typeof v === 'boolean' ? null : 'bad-type');
 const oneOf = (options) => (v) => (typeof v !== 'string' ? 'bad-type' : options.includes(v) ? null : 'bad-value');
