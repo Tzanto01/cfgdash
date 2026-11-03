@@ -86,6 +86,11 @@ public sealed class AssistantApplyModeTests
     [UnsupportedOSPlatform("windows")]
     public async Task With_apply_on_an_apply_that_cannot_write_answers_the_error_emits_no_applied_and_keeps_the_file()
     {
+        if (Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
         await using var host = await AssistantHost.StartAsync();
         await SetApplyAsync(host, true);
         var claudeDir = Directory.CreateDirectory(Path.Combine(host.Project, ".claude")).FullName;

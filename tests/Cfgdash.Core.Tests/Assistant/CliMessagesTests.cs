@@ -12,6 +12,7 @@ public sealed class CliMessagesTests
     [InlineData("success", "Prompt is too long", "too long")]
     [InlineData("success", "prompt is too long: 215290 tokens > 200000 maximum", "too long")]
     [InlineData("error_during_execution", "request req_4011 failed", "failed in the Claude CLI")]
+    [InlineData("error_during_execution", "request req_011CT529xyz failed", "failed in the Claude CLI")]
     [InlineData("error_during_execution", "API Error: 401 Unauthorized", "not logged in")]
     [InlineData("success", "Invalid API key · Please run /login", "not logged in")]
     [InlineData("error_during_execution", "something new", "failed in the Claude CLI")]

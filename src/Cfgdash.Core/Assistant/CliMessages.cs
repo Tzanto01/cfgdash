@@ -18,7 +18,7 @@ public static class CliMessages
         }
 
         bool Has(string part) => raw.Contains(part, StringComparison.OrdinalIgnoreCase);
-        bool Status(int code) => Regex.IsMatch(raw, $@"(?<![0-9]){code}(?![0-9])", RegexOptions.CultureInvariant);
+        bool Status(int code) => Regex.IsMatch(raw, $@"\b{code}\b", RegexOptions.CultureInvariant);
         var message = subtype switch
         {
             "error_max_budget_usd" => "The session reached its cost cap. Raise or turn off the cap in cfgdash settings, then start a new session.",
