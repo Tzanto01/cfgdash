@@ -18,7 +18,10 @@ public sealed record CfgdashSettings(
     bool FleetEnabled,
     string AssistantModel,
     string AssistantEffort,
-    double AssistantMaxBudgetUsd)
+    double AssistantMaxBudgetUsd,
+    bool AssistantBudgetEnabled = true,
+    bool AssistantApplyEnabled = false,
+    string AssistantProvider = "claude")
 {
     /// <summary>The values a missing file or key reads as.</summary>
     public static CfgdashSettings Defaults { get; } = new(false, "system", null, false, false, "sonnet", "medium", 2.0);
@@ -31,7 +34,15 @@ public sealed record CfgdashSettings(
         ["defaultDir"] = DefaultDir,
         ["tailnet"] = Tailnet,
         ["fleet"] = new JsonObject { ["enabled"] = FleetEnabled },
-        ["assistant"] = new JsonObject { ["model"] = AssistantModel, ["effort"] = AssistantEffort, ["maxBudgetUsd"] = AssistantMaxBudgetUsd },
+        ["assistant"] = new JsonObject
+        {
+            ["model"] = AssistantModel,
+            ["effort"] = AssistantEffort,
+            ["maxBudgetUsd"] = AssistantMaxBudgetUsd,
+            ["budgetEnabled"] = AssistantBudgetEnabled,
+            ["applyEnabled"] = AssistantApplyEnabled,
+            ["provider"] = AssistantProvider,
+        },
     };
 }
 
@@ -44,7 +55,7 @@ public sealed partial class CfgdashConfig(string configDir, string cacheDir, Tim
     private const UnixFileMode PrivateDirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
     private const UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
     private static readonly string[] TopLeaves = ["startAtLogin", "theme", "defaultDir", "tailnet"];
-    private static readonly string[] NestedLeaves = ["fleet.enabled", "assistant.model", "assistant.effort", "assistant.maxBudgetUsd"];
+    private static readonly string[] NestedLeaves = ["fleet.enabled", "assistant.model", "assistant.effort", "assistant.maxBudgetUsd", "assistant.budgetEnabled", "assistant.applyEnabled", "assistant.provider"];
 
     /// <summary>The settings file, <c>&lt;configDir&gt;/config.json</c>.</summary>
     public string FilePath => Path.Combine(configDir, "config.json");
@@ -79,7 +90,10 @@ public sealed partial class CfgdashConfig(string configDir, string cacheDir, Tim
             TryLeaf(root, "fleet.enabled", out var fleet) ? fleet!.GetValue<bool>() : defaults.FleetEnabled,
             TryLeaf(root, "assistant.model", out var model) ? model!.GetValue<string>() : defaults.AssistantModel,
             TryLeaf(root, "assistant.effort", out var effort) ? effort!.GetValue<string>() : defaults.AssistantEffort,
-            TryLeaf(root, "assistant.maxBudgetUsd", out var budget) && budget!.AsValue().TryGetValue<double>(out var usd) ? usd : defaults.AssistantMaxBudgetUsd);
+            TryLeaf(root, "assistant.maxBudgetUsd", out var budget) && budget!.AsValue().TryGetValue<double>(out var usd) ? usd : defaults.AssistantMaxBudgetUsd,
+            TryLeaf(root, "assistant.budgetEnabled", out var budgetEnabled) ? budgetEnabled!.GetValue<bool>() : defaults.AssistantBudgetEnabled,
+            TryLeaf(root, "assistant.applyEnabled", out var applyEnabled) ? applyEnabled!.GetValue<bool>() : defaults.AssistantApplyEnabled,
+            TryLeaf(root, "assistant.provider", out var provider) ? provider!.GetValue<string>() : defaults.AssistantProvider);
     }
 
     /// <summary>
@@ -305,12 +319,14 @@ public sealed partial class CfgdashConfig(string configDir, string cacheDir, Tim
         var kind = value?.GetValueKind() ?? JsonValueKind.Null;
         switch (key)
         {
-            case "startAtLogin" or "tailnet" or "fleet.enabled":
+            case "startAtLogin" or "tailnet" or "fleet.enabled" or "assistant.budgetEnabled" or "assistant.applyEnabled":
                 return kind is JsonValueKind.True or JsonValueKind.False ? null : "bad-type";
             case "theme":
                 return kind != JsonValueKind.String ? "bad-type" : value!.GetValue<string>() is "system" or "light" or "dark" ? null : "bad-value";
             case "assistant.effort":
                 return kind != JsonValueKind.String ? "bad-type" : value!.GetValue<string>() is "low" or "medium" or "high" or "xhigh" or "max" ? null : "bad-value";
+            case "assistant.provider":
+                return kind != JsonValueKind.String ? "bad-type" : value!.GetValue<string>() is "claude" ? null : "bad-value";
             case "assistant.model":
                 return kind != JsonValueKind.String ? "bad-type" : ModelPattern().IsMatch(value!.GetValue<string>()) ? null : "bad-value";
             case "assistant.maxBudgetUsd":

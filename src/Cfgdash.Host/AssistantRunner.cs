@@ -20,7 +20,7 @@ internal sealed record AssistantStart(
     string FilePrefix,
     string Model,
     string Effort,
-    decimal MaxBudgetUsd,
+    decimal? MaxBudgetUsd,
     string SystemPrompt,
     IReadOnlyCollection<string> DisabledPlugins,
     string ExePath,

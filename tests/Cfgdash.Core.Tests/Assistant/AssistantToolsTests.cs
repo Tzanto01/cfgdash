@@ -172,7 +172,7 @@ public sealed class AssistantToolsTests : IDisposable
     public async Task ProposalForModel_never_contains_confirm_and_keeps_id_expiry_path_scope_and_diff()
     {
         using var edits = new EditFixture();
-        var proposal = await edits.Service.ProposeForAssistantAsync(edits.Project, EditFixture.Changes(EditFixture.Set("model", "project", "opus")), "s1", CancellationToken.None);
+        var proposal = await edits.Service.ProposeForAssistantAsync(edits.Project, EditFixture.Changes(EditFixture.Set("model", "project", "opus")), "s1", false, CancellationToken.None);
 
         var shown = AssistantTools.ProposalForModel(proposal, f.View(false));
 

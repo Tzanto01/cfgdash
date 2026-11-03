@@ -11,7 +11,7 @@ public sealed class EditAssistantProposalTests : IDisposable
     public void Dispose() => f.Dispose();
 
     private Task<EditResult> Assistant(JsonNode change, string session = "session-1") =>
-        f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(change.DeepClone()), session, CancellationToken.None);
+        f.Service.ProposeForAssistantAsync(f.Project, EditFixture.Changes(change.DeepClone()), session, false, CancellationToken.None);
 
     [Fact]
     public async Task The_redacted_marker_is_rejected_for_a_string_value_by_both_entry_points()
