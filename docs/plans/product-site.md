@@ -9,7 +9,7 @@ A static, English, single-page site that advertises cfgdash in cfgdash's own loo
 ## Hard rules
 
 - Plain HTML, CSS and JavaScript. No framework, no build step, no package added to the repo. Everything self-hosted: no CDN, no remote fonts, no analytics, no third-party request of any kind.
-- Works without JavaScript: all copy, all screenshots and the demo's first state are readable; JS only enhances (tabs, filter, expand, copy, theme toggle, menu).
+- Works without JavaScript: all copy, all screenshots and every demo row are readable and their ARIA states are true to what is shown; JS only enhances (tabs, filter, expand, copy, theme toggle, menu). If `site.js` fails to load, the page falls back to the no-JS presentation instead of hiding content behind dead controls.
 - CSP-clean under `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`: no inline `<script>` (JSON-LD data block excepted), no `<style>` element, no `style=""` attribute, no inline event handlers. Sizes that vary (bar segments) come from classes or SVG attributes.
 - Tokens only, copied verbatim from `web/src/styles.css` (light, dark, and the `prefers-color-scheme` fallback while `data-theme` is unset). Never a raw hex outside the token block.
 - Truthful copy. Every product claim on the page is in this file; do not invent features, numbers, platforms, prices or dates. The repo and releases are private, so the page offers no download and no repo link.
@@ -83,7 +83,7 @@ Hero demo, full content width, directly below: a working replica of the Settings
 | `permissions.disableBypassPermissionsMode` | `disable` | M applied | managed | Managed `managed-settings.json` `disable` applied |
 | `env.OTEL_EXPORTER_OTLP_HEADERS` | eye-off icon, `[redacted]` (screen-reader "value redacted") | U applied | user, plus a `redacted` badge | User `~/.claude/settings.json`, value redacted (never print a value) |
 
-The first row starts expanded in the HTML so the no-JS page shows the idea. Each lineage strip is `role="img"` with a label such as "Effective from local; overridden: user". Under the demo, one muted line: "This is the Settings view. Select a row to see every layer that set it."
+With JS the first row starts expanded and the others collapsed, with no flash on load; without JS every row is expanded. Each lineage strip is `role="img"` with a label such as "Effective from local; overridden: user". Under the demo, one muted line: "This is the Settings view. Select a row to see every layer that set it."
 
 ### The problem (`#why`, h2: One harness, many files)
 
@@ -97,11 +97,13 @@ Three ruled rows (not cards), each a short title and one sentence:
 
 ### Features (`#features`, h2: What it shows)
 
+Intro, muted: "The examples in these tiles use made-up data." Tile visuals may show illustrative values (session rows, chart columns, search results) as long as they are plainly demo data and consistent with the screenshots.
+
 A bento grid as on the product's Overview (4 columns, 12px gap; 2 columns from 640px; 1 column below). Each tile: icon, title (14/20 600), one or two sentences, and a small live-looking visual built in HTML/CSS/SVG from the product's components. Tiles:
 
 1. **Layer lineage** (2 wide). "Every setting carries its route through the four layers: managed, local, project, user." Visual: a legend of the four strip states with words: applied (filled), overridden (outlined, struck glyph), merged (half filled), not set (dotted).
 2. **Instruction chain** (2 wide). "What loads for a folder, in order, with a token estimate per file." Visual: "Loaded for ~/ws/app", total `4,600` plus "tok est.", the segmented bar, then `~/.claude/CLAUDE.md` 1,900, `~/ws/CLAUDE.md` 1,200, `~/ws/app/CLAUDE.md` 900, `@AGENTS.md` 600, and the line "4 files · 18.0 KB · about 4,600 tokens (estimate)".
-3. **Health** (2 wide). "Deterministic rules over the snapshot, no AI involved. `cfgdash doctor` prints the same findings and exits with code 3 on a critical one, so a hook or CI job can use it." Visual: the severity bar with "1 critical · 7 warning · 4 info" and two rows: Critical "Hook script not found", Warning "Duplicate entry" (icon plus word).
+3. **Health** (2 wide). "Deterministic rules over the snapshot, no AI involved. `cfgdash doctor` prints the same findings and exits with code 3 on a critical one, so a hook or CI job can use it." Visual: the severity bar with "1 critical · 7 warning · 7 info" (the counts the mock shows in the screenshots) and two rows: Critical "Hook script not found", Warning "Duplicate entry" (icon plus word).
 4. **Search everything** (1 wide). "Keys, values, labels and file contents, from the command palette." Visual: a search field with a `Ctrl K` kbd.
 5. **Fleet** (1 wide). "Compare this machine with another one on your tailnet, or with an earlier export of itself." Visual: "devbox compared with laptop", "3 changed · 1 only on devbox · 2 only on laptop".
 6. **Guarded edits** (2 wide). "Settings and text config files can be changed from localhost. Every change is a dry-run diff first, applied only after you confirm, written to an audit log and undoable." Visual: a diff card header (`~/.claude/settings.json`, pill "user", "dry run", "+1 −1") with a removed line `"model": "sonnet",` and an added line `"model": "opus",` (danger and ok tints, plus the +/- column and screen-reader "removed"/"added").
@@ -114,7 +116,7 @@ A bento grid as on the product's Overview (4 columns, 12px gap; 2 columns from 6
 
 Intro: Screenshots of the real UI, running on its built-in demo data.
 
-A tab list (WAI-ARIA tabs: `role="tablist"`, arrow keys, Home and End, roving tabindex, each `tabpanel` labelled by its tab) over real screenshots: Overview, Settings, Instructions, Health, plus one or two more that look good on the mock (candidates: the settings editor's diff review, Fleet compare, Usage). Each panel: the caption from `web/src/lib/views.ts` for that view and the screenshot inside a frame (12px radius, 1px border, a slim bar showing `127.0.0.1:7820` in mono). Screenshots follow the page theme: a light and a dark capture per view, switched in CSS by `data-theme` and the system fallback. Each `img` has `width`, `height`, a real `alt` describing what the view shows, `loading="lazy"` and `decoding="async"`, WebP with a `srcset` (about 1280 and 2560 wide). Without JS all panels show stacked.
+A tab list (WAI-ARIA tabs: `role="tablist"`, arrow keys, Home and End, roving tabindex, each `tabpanel` labelled by its tab) over real screenshots: Overview, Settings, Instructions, Health, plus one or two more that look good on the mock (candidates: the settings editor's diff review, Fleet compare, Usage). Each panel: the caption from `web/src/lib/views.ts` for that view and the screenshot inside a frame (12px radius, 1px border, a slim bar showing `127.0.0.1:7820` in mono). Screenshots follow the page theme: a light and a dark capture per view, switched in CSS by `data-theme` and the system fallback. Each `img` has `width`, `height`, a real `alt` describing what the view shows, `loading="lazy"` and `decoding="async"`, WebP with a `srcset` (about 1280 and 2560 wide). Below 640px each view shows a phone capture of the same view instead (the product has its own narrow layout), through `picture` with a `media` source that carries its own `width` and `height`. Without JS all panels show stacked.
 
 ### Security (`#security`, h2: Local by design)
 
@@ -190,6 +192,6 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 ## Deploy (Nico's call, not part of the build)
 
 1. The subdomain `cfgdash.nicowoellnitz.de` exists (FTP path `/cfgdash`, inside the portfolio's document root). It needs an A record only (IPv6 is broken on this hosting) and its own Let's Encrypt certificate (domain → Services → SSL Manager → Install Certificate next to the subdomain). konsoleH's "HTTPS redirect" toggle stays off.
-2. Upload from the portfolio repo: `FTP_DIST=<repo>/site/public FTP_ROOT=/cfgdash python3 tools/deploy-ftp.py`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
+2. Upload with the hosting repo's tool (`personal/hosting/tools/deploy-ftp.py`): `FTP_DIST=<repo>/site/public FTP_ROOT=/cfgdash`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
 3. After the first upload: `curl -sI https://cfgdash.nicowoellnitz.de/` must show exactly one `Content-Security-Policy` header, and the http and `www` forms must 301 to the canonical host.
 4. The portfolio's Datenschutz page gets one sentence covering the subdomain and its `cfgdash-site-theme` storage key before the page goes live.
