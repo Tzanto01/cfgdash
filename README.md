@@ -28,3 +28,7 @@ cd web && npm ci && npm test && npm run build
 ```
 
 Design: [architecture](docs/architecture.md), [contracts](docs/contracts/), [roadmap](ROADMAP.md).
+
+## License
+
+Source available for personal, educational and non-commercial use with attribution. Commercial use needs written permission. See [LICENSE](LICENSE).
