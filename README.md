@@ -2,6 +2,18 @@
 
 A read-only dashboard of the Claude Code harness on the machine it runs on: which settings are set where, which instructions load where, agents, skills, hooks, MCP servers, permissions, environment and scheduled jobs. One command on Windows and Linux; it shows only what the machine actually has.
 
+![Overview](docs/screenshots/overview.png)
+
+| Settings, with where each value comes from | Instruction files in load order |
+| --- | --- |
+| ![Settings](docs/screenshots/settings.png) | ![Instructions](docs/screenshots/instructions.png) |
+
+| Health findings |
+| --- |
+| ![Health](docs/screenshots/health.png) |
+
+Screenshots use the synthetic data of the web mock (`cd web && npm run build && npm run preview`).
+
 ## Use
 
 ```
