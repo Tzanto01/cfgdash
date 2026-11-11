@@ -429,6 +429,10 @@ dd code {
 }
 
 @media (max-width: 767px) {
+  .js .head-bar {
+    flex-wrap: nowrap;
+  }
+
   html:not(.js) .site-nav {
     order: 3;
     flex-basis: 100%;
@@ -539,7 +543,6 @@ h2 {
   color: var(--muted);
   font-size: 18px;
   line-height: 28px;
-  text-wrap: pretty;
 }
 
 .lead {
@@ -807,12 +810,14 @@ html:not(.js) .cmd-chip {
   transition: background-color 100ms;
 }
 
-.kv-row:hover,
-.kv-row:has([aria-expanded='true']) {
+.js .kv-row:hover,
+.js:not(.js-ready) .kv:first-child .kv-row,
+.js-ready .kv-row:has([aria-expanded='true']) {
   background: var(--hover);
 }
 
-.kv-row:has([aria-expanded='true'])::before {
+.js:not(.js-ready) .kv:first-child .kv-row::before,
+.js-ready .kv-row:has([aria-expanded='true'])::before {
   content: '';
   position: absolute;
   top: 0;
@@ -830,6 +835,8 @@ html:not(.js) .cmd-chip {
 .kv-val {
   grid-area: value;
   min-width: 0;
+  font-size: 12.5px;
+  line-height: 18px;
 }
 
 .kv-lin {
@@ -874,8 +881,12 @@ html:not(.js) .cmd-chip {
   outline-offset: -2px;
 }
 
-.kv-row:hover .kv-btn {
+.js .kv-row:hover .kv-btn {
   color: var(--accent);
+}
+
+html:not(.js) .kv-btn {
+  cursor: default;
 }
 
 .kv-val .mono,
@@ -1048,7 +1059,8 @@ html:not(.js) .cmd-chip {
   background: var(--raised);
 }
 
-.js .kv:has(.kv-btn[aria-expanded='false']) .kv-panel {
+.js .kv:has(.kv-btn[aria-expanded='false']) .kv-panel,
+.js:not(.js-ready) .kv + .kv .kv-panel {
   display: none;
 }
 
@@ -1084,6 +1096,11 @@ html:not(.js) .cmd-chip {
   color: var(--warn);
 }
 
+.c-val {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .c-path {
   grid-column: 2 / -1;
   color: var(--muted);
@@ -1109,8 +1126,26 @@ html:not(.js) .cmd-chip {
     align-items: flex-start;
   }
 
+  .kv-row {
+    padding-inline: 12px;
+  }
+
   .kv-panel {
-    padding-left: 16px;
+    padding-inline: 12px;
+  }
+
+  .contribs li {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .contribs .node,
+  .layer,
+  .status {
+    grid-row: 1;
+  }
+
+  .c-val {
+    grid-column: 2 / -1;
   }
 
   .c-path {
@@ -1464,6 +1499,15 @@ kbd {
   overflow-wrap: anywhere;
 }
 
+.hints {
+  margin-top: 8px;
+  padding: 6px 10px 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .hit {
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1707,6 +1751,13 @@ html:not(.js) .panel + .panel {
   background: var(--surface);
 }
 
+@media (max-width: 639px) {
+  .frame {
+    max-width: 300px;
+    margin-inline: auto;
+  }
+}
+
 .frame-bar {
   display: flex;
   align-items: center;
@@ -1716,6 +1767,10 @@ html:not(.js) .panel + .panel {
   color: var(--muted);
   font-size: 12px;
   line-height: 16px;
+}
+
+.shot {
+  display: block;
 }
 
 .shot.dark,
@@ -1979,6 +2034,17 @@ html:not(.js) .panel + .panel {
 
   .demo {
     margin-top: 40px;
+  }
+}
+
+@media (max-width: 359px) {
+  .head-bar,
+  .head-actions {
+    gap: 4px;
+  }
+
+  .btn.small {
+    padding-inline: 10px;
   }
 }
 

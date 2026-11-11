@@ -70,6 +70,7 @@
   <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></symbol>
   <symbol id="i-critical" viewBox="0 0 24 24"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/></symbol>
   <symbol id="i-warning" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-mail" viewBox="0 0 24 24"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></symbol>
 </svg>
 <a class="skip" href="#content">Skip to content</a>
@@ -99,7 +100,7 @@
     <div class="wrap">
       <div class="hero-text">
         <p class="pill mono">v0.6 · Windows and Linux</p>
-        <h1 id="hero-title">See what your Claude Code harness actually loads.</h1>
+        <h1 id="hero-title">See what your Claude Code harness actually loads.</h1>
         <p class="lead">cfgdash reads the settings, instructions, agents, skills, hooks and MCP servers on your machine and shows which file set each value and which layer won. One executable, local only, read-only by default.</p>
         <div class="actions">
           <a class="btn primary" href="#access">Get access</a>
@@ -148,14 +149,14 @@
                   <div class="kv-panel" id="kv-model">
                     <span class="route" role="img" aria-label="Route: managed not set, local applied, project not set, user overridden"><span class="node m"></span><span class="link"></span><span class="node l applied"></span><span class="link"></span><span class="node p"></span><span class="link dashed"></span><span class="node u over"></span></span>
                     <ol class="contribs">
-                      <li><span aria-hidden="true" class="node l applied"></span><span class="layer">Local</span><span class="mono c-val">opus</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/settings.local.json</span></li>
+                      <li><span aria-hidden="true" class="node l applied"></span><span class="layer">Local</span><span class="mono c-val">opus</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/<wbr>settings.local.json</span></li>
                       <li><span aria-hidden="true" class="node u over"></span><span class="layer">User</span><span class="mono c-val struck">sonnet</span><span class="status warn">overridden</span><span class="mono c-path">~/.claude/settings.json</span></li>
                     </ol>
                   </div>
                 </li>
                 <li class="kv" data-flags="overridden">
                   <div class="kv-row">
-                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-mode">permissions.defaultMode</button></div>
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="true" aria-controls="kv-mode">permissions.defaultMode</button></div>
                     <div class="kv-val"><span class="mono">acceptEdits</span><p class="ovr">Overrides <s class="mono">default</s> from user</p></div>
                     <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from project; overridden: user"><span class="node m"></span><span class="node l"></span><span class="node p applied"></span><span class="node u over"></span></span></div>
                     <div class="kv-meta"><span class="src">project</span></div>
@@ -163,14 +164,14 @@
                   <div class="kv-panel" id="kv-mode">
                     <span class="route" role="img" aria-label="Route: managed not set, local not set, project applied, user overridden"><span class="node m"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p applied"></span><span class="link dashed"></span><span class="node u over"></span></span>
                     <ol class="contribs">
-                      <li><span aria-hidden="true" class="node p applied"></span><span class="layer">Project</span><span class="mono c-val">acceptEdits</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/settings.json</span></li>
+                      <li><span aria-hidden="true" class="node p applied"></span><span class="layer">Project</span><span class="mono c-val">acceptEdits</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/<wbr>settings.json</span></li>
                       <li><span aria-hidden="true" class="node u over"></span><span class="layer">User</span><span class="mono c-val struck">default</span><span class="status warn">overridden</span><span class="mono c-path">~/.claude/settings.json</span></li>
                     </ol>
                   </div>
                 </li>
                 <li class="kv" data-flags="">
                   <div class="kv-row">
-                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-allow">permissions.allow</button></div>
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="true" aria-controls="kv-allow">permissions.allow</button></div>
                     <div class="kv-val"><ul class="mono"><li>Bash(npm test *)</li><li>Bash(npm run build)</li><li>Read(./tests/**)</li></ul></div>
                     <div class="kv-lin"><span class="lin" role="img" aria-label="Merged from project, user"><span class="node m"></span><span class="node l"></span><span class="node p merged"></span><span class="node u merged"></span></span></div>
                     <div class="kv-meta"><span class="src">2 layers</span></div>
@@ -178,14 +179,14 @@
                   <div class="kv-panel" id="kv-allow">
                     <span class="route" role="img" aria-label="Route: managed not set, local not set, project merged, user merged"><span class="node m"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p merged"></span><span class="link"></span><span class="node u merged"></span></span>
                     <ol class="contribs">
-                      <li><span aria-hidden="true" class="node p merged"></span><span class="layer">Project</span><span class="mono c-val"><span class="vline">Bash(npm test *)</span> <span class="vline">Bash(npm run build)</span></span><span class="status">merged</span><span class="mono c-path">~/ws/app/.claude/settings.json</span></li>
+                      <li><span aria-hidden="true" class="node p merged"></span><span class="layer">Project</span><span class="mono c-val"><span class="vline">Bash(npm test *)</span> <span class="vline">Bash(npm run build)</span></span><span class="status">merged</span><span class="mono c-path">~/ws/app/.claude/<wbr>settings.json</span></li>
                       <li><span aria-hidden="true" class="node u merged"></span><span class="layer">User</span><span class="mono c-val">Read(./tests/**)</span><span class="status">merged</span><span class="mono c-path">~/.claude/settings.json</span></li>
                     </ol>
                   </div>
                 </li>
                 <li class="kv" data-flags="">
                   <div class="kv-row">
-                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-bypass">permissions.<wbr>disableBypassPermissionsMode</button></div>
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="true" aria-controls="kv-bypass">permissions.<wbr>disableBypassPermissionsMode</button></div>
                     <div class="kv-val"><span class="mono">disable</span></div>
                     <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from managed"><span class="node m applied"></span><span class="node l"></span><span class="node p"></span><span class="node u"></span></span></div>
                     <div class="kv-meta"><span class="src">managed</span></div>
@@ -199,7 +200,7 @@
                 </li>
                 <li class="kv" data-flags="redacted">
                   <div class="kv-row">
-                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-otel">env.<wbr>OTEL_EXPORTER_OTLP_HEADERS</button></div>
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="true" aria-controls="kv-otel">env.<wbr>OTEL_EXPORTER_OTLP_HEADERS</button></div>
                     <div class="kv-val"><span class="redacted mono"><svg class="i" aria-hidden="true"><use href="#i-eye-off"/></svg><span aria-hidden="true">[redacted]</span><span class="sr-only">value redacted</span></span></div>
                     <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from user"><span class="node m"></span><span class="node l"></span><span class="node p"></span><span class="node u applied"></span></span></div>
                     <div class="kv-meta"><span class="src">user</span><span class="badge"><svg class="i" aria-hidden="true"><use href="#i-eye-off"/></svg>redacted</span></div>
@@ -239,6 +240,7 @@
     <div class="wrap">
       <div class="sec-head">
         <h2 id="features-title">What it shows</h2>
+        <p class="intro">The examples in these tiles use made-up data.</p>
       </div>
       <ul class="bento">
         <li class="tile w2">
@@ -278,11 +280,12 @@
           <h3><svg class="i" aria-hidden="true"><use href="#i-heart-pulse"/></svg>Health</h3>
           <p>Deterministic rules over the snapshot, no AI involved. <code>cfgdash doctor</code> prints the same findings and exits with code 3 on a critical one, so a hook or CI job can use it.</p>
           <div class="vis">
-            <div class="sevbar" aria-hidden="true"><span class="sev-c g1"></span><span class="sev-w g7"></span><span class="sev-i g4"></span></div>
-            <p class="small sevcounts tabular"><span class="t-danger">1 critical</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-warn">7 warning</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-muted">4 info</span></p>
+            <div class="sevbar" aria-hidden="true"><span class="sev-c g1"></span><span class="sev-w g7"></span><span class="sev-i g7"></span></div>
+            <p class="small sevcounts tabular"><span class="t-danger">1 critical</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-warn">7 warning</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-muted">7 info</span></p>
             <ul class="findings">
               <li><span class="sev t-danger"><svg class="i" aria-hidden="true"><use href="#i-critical"/></svg>Critical</span><span>Hook script not found</span></li>
               <li><span class="sev t-warn"><svg class="i" aria-hidden="true"><use href="#i-warning"/></svg>Warning</span><span>Duplicate entry</span></li>
+              <li><span class="sev t-muted"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg>Info</span><span>Setting overridden</span></li>
             </ul>
           </div>
         </li>
@@ -295,6 +298,7 @@
               <li class="sel"><span class="mono">permissions.<span class="hit">allow</span></span><span class="small muted">Settings</span></li>
               <li><span class="mono">settings.json</span><span class="small muted">File contents</span></li>
             </ul>
+            <p class="hints mono" aria-hidden="true">↑↓ move, ↵ open, esc close</p>
           </div>
         </li>
         <li class="tile">
@@ -386,8 +390,8 @@
           <p class="caption">What this machine is, what is active and where to look next.</p>
           <div class="frame">
             <p class="frame-bar mono">127.0.0.1:7820</p>
-            <img class="shot light" src="/assets/img/overview-light-1280.webp" srcset="/assets/img/overview-light-1280.webp 1280w, /assets/img/overview-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views.">
-            <img class="shot dark" src="/assets/img/overview-dark-1280.webp" srcset="/assets/img/overview-dark-1280.webp 1280w, /assets/img/overview-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views.">
+            <picture class="shot light"><source media="(max-width: 639px)" srcset="/assets/img/overview-light-phone.webp" width="780" height="1688"><img src="/assets/img/overview-light-1280.webp" srcset="/assets/img/overview-light-1280.webp 1280w, /assets/img/overview-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views."></picture>
+            <picture class="shot dark"><source media="(max-width: 639px)" srcset="/assets/img/overview-dark-phone.webp" width="780" height="1688"><img src="/assets/img/overview-dark-1280.webp" srcset="/assets/img/overview-dark-1280.webp 1280w, /assets/img/overview-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views."></picture>
           </div>
         </div>
         <div class="panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" tabindex="0">
@@ -395,8 +399,8 @@
           <p class="caption">Effective Claude Code settings for the folder and where each value comes from.</p>
           <div class="frame">
             <p class="frame-bar mono">127.0.0.1:7820</p>
-            <img class="shot light" src="/assets/img/settings-light-1280.webp" srcset="/assets/img/settings-light-1280.webp 1280w, /assets/img/settings-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view for D:/ws/app: effective settings as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user.">
-            <img class="shot dark" src="/assets/img/settings-dark-1280.webp" srcset="/assets/img/settings-dark-1280.webp 1280w, /assets/img/settings-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view for D:/ws/app: effective settings as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user.">
+            <picture class="shot light"><source media="(max-width: 639px)" srcset="/assets/img/settings-light-phone.webp" width="780" height="1688"><img src="/assets/img/settings-light-1280.webp" srcset="/assets/img/settings-light-1280.webp 1280w, /assets/img/settings-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view: effective settings for the selected folder as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user."></picture>
+            <picture class="shot dark"><source media="(max-width: 639px)" srcset="/assets/img/settings-dark-phone.webp" width="780" height="1688"><img src="/assets/img/settings-dark-1280.webp" srcset="/assets/img/settings-dark-1280.webp 1280w, /assets/img/settings-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view: effective settings for the selected folder as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user."></picture>
           </div>
         </div>
         <div class="panel" role="tabpanel" id="panel-instructions" aria-labelledby="tab-instructions" tabindex="0">
@@ -404,8 +408,8 @@
           <p class="caption">Instruction files loaded for the folder, in load order.</p>
           <div class="frame">
             <p class="frame-bar mono">127.0.0.1:7820</p>
-            <img class="shot light" src="/assets/img/instructions-light-1280.webp" srcset="/assets/img/instructions-light-1280.webp 1280w, /assets/img/instructions-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view for D:/ws/app: an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts.">
-            <img class="shot dark" src="/assets/img/instructions-dark-1280.webp" srcset="/assets/img/instructions-dark-1280.webp 1280w, /assets/img/instructions-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view for D:/ws/app: an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts.">
+            <picture class="shot light"><source media="(max-width: 639px)" srcset="/assets/img/instructions-light-phone.webp" width="780" height="1688"><img src="/assets/img/instructions-light-1280.webp" srcset="/assets/img/instructions-light-1280.webp 1280w, /assets/img/instructions-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view: the instruction chain for the selected folder, an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts."></picture>
+            <picture class="shot dark"><source media="(max-width: 639px)" srcset="/assets/img/instructions-dark-phone.webp" width="780" height="1688"><img src="/assets/img/instructions-dark-1280.webp" srcset="/assets/img/instructions-dark-1280.webp 1280w, /assets/img/instructions-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view: the instruction chain for the selected folder, an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts."></picture>
           </div>
         </div>
         <div class="panel" role="tabpanel" id="panel-health" aria-labelledby="tab-health" tabindex="0">
@@ -413,8 +417,8 @@
           <p class="caption">Problems found in this harness: missing scripts and commands, errors, duplicates and overrides.</p>
           <div class="frame">
             <p class="frame-bar mono">127.0.0.1:7820</p>
-            <img class="shot light" src="/assets/img/health-light-1280.webp" srcset="/assets/img/health-light-1280.webp 1280w, /assets/img/health-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found.">
-            <img class="shot dark" src="/assets/img/health-dark-1280.webp" srcset="/assets/img/health-dark-1280.webp 1280w, /assets/img/health-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found.">
+            <picture class="shot light"><source media="(max-width: 639px)" srcset="/assets/img/health-light-phone.webp" width="780" height="1688"><img src="/assets/img/health-light-1280.webp" srcset="/assets/img/health-light-1280.webp 1280w, /assets/img/health-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found."></picture>
+            <picture class="shot dark"><source media="(max-width: 639px)" srcset="/assets/img/health-dark-phone.webp" width="780" height="1688"><img src="/assets/img/health-dark-1280.webp" srcset="/assets/img/health-dark-1280.webp 1280w, /assets/img/health-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found."></picture>
           </div>
         </div>
         <div class="panel" role="tabpanel" id="panel-usage" aria-labelledby="tab-usage" tabindex="0">
@@ -422,8 +426,8 @@
           <p class="caption">Claude Code cost, tokens and sessions from the OpenTelemetry metrics store.</p>
           <div class="frame">
             <p class="frame-bar mono">127.0.0.1:7820</p>
-            <img class="shot light" src="/assets/img/usage-light-1280.webp" srcset="/assets/img/usage-light-1280.webp 1280w, /assets/img/usage-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days.">
-            <img class="shot dark" src="/assets/img/usage-dark-1280.webp" srcset="/assets/img/usage-dark-1280.webp 1280w, /assets/img/usage-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days.">
+            <picture class="shot light"><source media="(max-width: 639px)" srcset="/assets/img/usage-light-phone.webp" width="780" height="1688"><img src="/assets/img/usage-light-1280.webp" srcset="/assets/img/usage-light-1280.webp 1280w, /assets/img/usage-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days."></picture>
+            <picture class="shot dark"><source media="(max-width: 639px)" srcset="/assets/img/usage-dark-phone.webp" width="780" height="1688"><img src="/assets/img/usage-dark-1280.webp" srcset="/assets/img/usage-dark-1280.webp 1280w, /assets/img/usage-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days."></picture>
           </div>
         </div>
       </div>

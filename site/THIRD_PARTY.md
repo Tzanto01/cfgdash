@@ -7,9 +7,11 @@ Copied unmodified from the `@fontsource-variable` packages (v5.3.0) into `public
 - Instrument Sans: `instrument-sans-latin-wght-normal.woff2`, `instrument-sans-latin-ext-wght-normal.woff2`. Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans).
 - JetBrains Mono: `jetbrains-mono-latin-wght-normal.woff2`, `jetbrains-mono-latin-ext-wght-normal.woff2`. Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono).
 
+The licence text with both copyright lines ships beside the files as `public/assets/fonts/OFL.txt`.
+
 ## Icons (ISC)
 
-The SVG path data of the inline icons in `public/index.html` and `public/404.html` (folder, chevron-down, monitor, search, eye-off, sun, moon, sun-moon, menu, x, copy, check, route, file-text, heart-pulse, network, pencil, bot, chart-column, boxes, database, octagon-alert, triangle-alert, mail) is taken from Lucide (`lucide-react` v1.66.0).
+The SVG path data of the inline icons in `public/index.html` and `public/404.html` (folder, chevron-down, monitor, search, eye-off, sun, moon, sun-moon, menu, x, copy, check, route, file-text, heart-pulse, network, pencil, bot, chart-column, boxes, database, octagon-alert, triangle-alert, info, mail) is taken from Lucide (`lucide-react` v1.66.0).
 
 ```
 ISC License

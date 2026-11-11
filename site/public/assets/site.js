@@ -87,7 +87,8 @@
         apply();
       });
     }
-    for (const button of demo.querySelectorAll('.kv-btn')) {
+    for (const [index, button] of [...demo.querySelectorAll('.kv-btn')].entries()) {
+      button.setAttribute('aria-expanded', String(index === 0));
       button.addEventListener('click', () => button.setAttribute('aria-expanded', String(button.getAttribute('aria-expanded') !== 'true')));
     }
   }
@@ -146,4 +147,6 @@
       }, 2000);
     });
   }
+
+  root.classList.add('js-ready');
 })();

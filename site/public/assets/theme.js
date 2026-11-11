@@ -7,4 +7,9 @@
       root.setAttribute('data-theme', theme);
     }
   } catch (e) {}
+  window.addEventListener('load', function () {
+    if (!root.classList.contains('js-ready')) {
+      root.classList.remove('js');
+    }
+  });
 })();

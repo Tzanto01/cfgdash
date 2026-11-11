@@ -68,6 +68,10 @@ for (const f of htmlFiles) {
   check(`${f}: no spaced hyphen`, !/ - /.test(html));
 }
 
+const htaccess = readFileSync(path.join(pub, '.htaccess'), 'utf8');
+const shippedCsp = /Header always set Content-Security-Policy "([^"]*)"/.exec(htaccess)?.[1];
+check('.htaccess: shipped CSP equals the tested CSP', shippedCsp === CSP, shippedCsp ?? 'missing');
+
 const watch = (page) => {
   const problems = [];
   page.on('console', (msg) => {
@@ -88,7 +92,13 @@ const watch = (page) => {
 const pageChecks = async (page, label) => {
   const result = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    badImgs: [...document.images].filter((img) => !img.hasAttribute('alt') || !img.getAttribute('width') || !img.getAttribute('height')).map((img) => img.src),
+    badImgs: [...document.images, ...document.querySelectorAll('picture source')]
+      .filter((el) => (el.tagName === 'IMG' && !el.hasAttribute('alt')) || !el.getAttribute('width') || !el.getAttribute('height'))
+      .map((el) => el.src || el.srcset),
+    dupIds: [...document.querySelectorAll('[id]')].map((el) => el.id).filter((id, i, all) => all.indexOf(id) !== i),
+    deadRefs: [...document.querySelectorAll('[aria-controls], [aria-labelledby], [aria-describedby]')]
+      .flatMap((el) => ['aria-controls', 'aria-labelledby', 'aria-describedby'].flatMap((a) => (el.getAttribute(a) ?? '').split(/\s+/).filter(Boolean)))
+      .filter((id) => !document.getElementById(id)),
     deadLinks: [...document.querySelectorAll('a[href^="#"]')].map((a) => a.getAttribute('href')).filter((href) => href.length < 2 || !document.getElementById(href.slice(1))),
     csp: window.cspViolations
   }));
@@ -96,7 +106,54 @@ const pageChecks = async (page, label) => {
   check(`${label}: images have alt, width, height`, !result.badImgs.length, result.badImgs.join(', '));
   check(`${label}: in-page links have targets`, !result.deadLinks.length, result.deadLinks.join(', '));
   check(`${label}: no CSP violation`, !result.csp.length, result.csp.join(', '));
+  check(`${label}: ids are unique`, !result.dupIds.length, result.dupIds.join(', '));
+  check(`${label}: ARIA references have targets`, !result.deadRefs.length, result.deadRefs.join(', '));
 };
+
+const demoLayout = (page) =>
+  page.evaluate(() => {
+    const textBox = (el) => {
+      const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.textContent.trim() || node.parentElement.closest('.sr-only')) {
+          continue;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const r = range.getBoundingClientRect();
+        box.left = Math.min(box.left, r.left);
+        box.top = Math.min(box.top, r.top);
+        box.right = Math.max(box.right, r.right);
+        box.bottom = Math.max(box.bottom, r.bottom);
+      }
+      return box;
+    };
+    const overlaps = [];
+    for (const li of document.querySelectorAll('.contribs li')) {
+      const a = textBox(li.querySelector('.c-val'));
+      const b = textBox(li.querySelector('.status'));
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
+        overlaps.push(li.textContent.trim().slice(0, 40));
+      }
+    }
+    const clipped = [];
+    const card = document.querySelector('.demo .card').getBoundingClientRect();
+    for (const el of document.querySelectorAll('.demo-body *')) {
+      const style = getComputedStyle(el);
+      if (!el.closest('.sr-only') && style.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) {
+        clipped.push(`${el.className}: overflow`);
+      }
+      if (!el.children.length && el.textContent.trim() && el.checkVisibility()) {
+        const r = textBox(el);
+        if (el.closest('.card') && (r.right > card.right + 0.5 || r.left < card.left - 0.5)) {
+          clipped.push(`${el.textContent.trim().slice(0, 30)}: outside card`);
+        }
+      }
+    }
+    return { overlaps, clipped };
+  });
 
 const fullShot = async (page, file) => {
   await page.evaluate(async () => {
@@ -134,6 +191,55 @@ try {
       check(`${width} ${theme}: no console error or foreign request`, !problems.length, problems.join('; '));
       await context.close();
     }
+  }
+
+  for (const width of [320, 360, 375]) {
+    const context = await newContext({ viewport: { width, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(`${base}/`);
+    await page.evaluate(() => document.fonts.ready);
+    const collapsed = page.locator('.kv-btn[aria-expanded="false"]');
+    while (await collapsed.count()) {
+      await collapsed.first().click();
+    }
+    check(`${width} expanded: all rows open`, (await page.locator('.kv-panel:visible').count()) === 5);
+    const layout = await demoLayout(page);
+    check(`${width} expanded: values clear of status words`, !layout.overlaps.length, layout.overlaps.join('; '));
+    check(`${width} expanded: no demo text clipped`, !layout.clipped.length, layout.clipped.join('; '));
+    if (width === 320) {
+      await fullShot(page, 'page-320-expanded.png');
+    }
+    await context.close();
+  }
+
+  {
+    const context = await newContext({ viewport: { width: 375, height: 900 } });
+    let release;
+    const gate = new Promise((resolve) => (release = resolve));
+    await context.route('**/assets/site.js', async (route) => {
+      await gate;
+      await route.continue();
+    });
+    const page = await context.newPage();
+    await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.locator('.kv-panel').first().waitFor();
+    check('site.js pending: only the first row panel shows', (await page.locator('.kv-panel:visible').count()) === 1);
+    release();
+    await page.waitForFunction(() => document.documentElement.classList.contains('js-ready'));
+    check('site.js ready: first row open, others collapsed', (await page.locator('.kv-panel:visible').count()) === 1 && (await page.locator('.kv-btn[aria-expanded="true"]').count()) === 1);
+    await context.close();
+  }
+
+  {
+    const context = await newContext({ viewport: { width: 375, height: 900 } });
+    await context.route('**/assets/site.js', (route) => route.abort());
+    const page = await context.newPage();
+    await page.goto(`${base}/`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !document.documentElement.classList.contains('js'));
+    check('site.js blocked: all view panels visible', (await page.locator('[role="tabpanel"]:visible').count()) === 5);
+    check('site.js blocked: all row panels visible', (await page.locator('.kv-panel:visible').count()) === 5);
+    check('site.js blocked: nav links visible', await page.locator('#site-nav a').first().isVisible());
+    await context.close();
   }
 
   {
@@ -229,6 +335,7 @@ try {
     check('no JS: nav links visible', await page.locator('#site-nav a').first().isVisible());
     check('no JS: all view panels visible', (await page.locator('[role="tabpanel"]:visible').count()) === 5);
     check('no JS: all row panels visible', (await page.locator('.kv-panel:visible').count()) === 5);
+    check('no JS: every row says expanded', (await page.locator('.kv-btn[aria-expanded="true"]').count()) === 5);
     const shot = await page.screenshot({ path: path.join(out, 'page-320-nojs.png'), fullPage: true });
     check('no JS: no horizontal scroll', shot.readUInt32BE(16) === 320, `${shot.readUInt32BE(16)}px wide`);
     await context.close();
