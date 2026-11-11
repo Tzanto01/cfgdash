@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfgdash: see what your Claude Code harness loads</title>
+<meta name="description" content="A local, read-only dashboard for the Claude Code harness on your machine: effective settings with the file that set each value, the instruction load chain, agents, skills, hooks, MCP servers and health findings.">
+<link rel="canonical" href="https://cfgdash.nicowoellnitz.de/">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#eef0f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0e18" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="cfgdash">
+<meta property="og:url" content="https://cfgdash.nicowoellnitz.de/">
+<meta property="og:title" content="cfgdash: see what your Claude Code harness loads">
+<meta property="og:description" content="A local, read-only dashboard for the Claude Code harness on your machine: effective settings with the file that set each value, the instruction load chain, agents, skills, hooks, MCP servers and health findings.">
+<meta property="og:image" content="https://cfgdash.nicowoellnitz.de/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="cfgdash: See what your Claude Code harness actually loads.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="cfgdash: see what your Claude Code harness loads">
+<meta name="twitter:description" content="A local, read-only dashboard for the Claude Code harness on your machine: effective settings with the file that set each value, the instruction load chain, agents, skills, hooks, MCP servers and health findings.">
+<meta name="twitter:image" content="https://cfgdash.nicowoellnitz.de/og.png">
+<meta name="twitter:image:alt" content="cfgdash: See what your Claude Code harness actually loads.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/jetbrains-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script src="/assets/theme.js"></script>
+<script src="/assets/site.js" defer></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "cfgdash",
+  "description": "A local, read-only dashboard for the Claude Code harness on your machine: effective settings with the file that set each value, the instruction load chain, agents, skills, hooks, MCP servers and health findings.",
+  "url": "https://cfgdash.nicowoellnitz.de/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows, Linux",
+  "softwareVersion": "0.6.0",
+  "author": { "@type": "Person", "name": "Nico Wöllnitz", "url": "https://nicowoellnitz.de/" }
+}
+</script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+  <symbol id="i-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-heart-pulse" viewBox="0 0 24 24"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+  <symbol id="i-boxes" viewBox="0 0 24 24"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></symbol>
+  <symbol id="i-critical" viewBox="0 0 24 24"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></symbol>
+</svg>
+<a class="skip" href="#content">Skip to content</a>
+<header class="site-head">
+  <div class="wrap head-bar">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" rx="7"/><path d="M16 6 6 11l10 5 10-5z"/><path d="m6 16 10 5 10-5"/><path d="m6 21 10 5 10-5"/></svg>
+      <span>cfgdash</span>
+    </a>
+    <button type="button" class="icon-btn menu-btn" aria-expanded="false" aria-controls="site-nav" aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#views">Views</a>
+      <a href="#security">Security</a>
+      <a href="#commands">Commands</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="head-actions">
+      <button type="button" class="icon-btn theme-btn" aria-label="Theme: system. Switch to light"><svg class="i" aria-hidden="true"><use href="#i-sun-moon"/></svg></button>
+      <a class="btn primary small" href="#access">Get access</a>
+    </div>
+  </div>
+</header>
+
+<main id="content" tabindex="-1">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div class="hero-text">
+        <p class="pill mono">v0.6 · Windows and Linux</p>
+        <h1 id="hero-title">See what your Claude Code harness actually loads.</h1>
+        <p class="lead">cfgdash reads the settings, instructions, agents, skills, hooks and MCP servers on your machine and shows which file set each value and which layer won. One executable, local only, read-only by default.</p>
+        <div class="actions">
+          <a class="btn primary" href="#access">Get access</a>
+          <a class="btn" href="#views">See the views</a>
+        </div>
+        <div class="run">
+          <span class="cmd-chip"><code>cfgdash</code><button type="button" class="copy copy-text" data-copy="cfgdash" aria-label="Copy cfgdash"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span class="copy-label">Copy</span></button></span>
+          <p class="run-note">Serves on <span class="mono">http://127.0.0.1:7820</span> and opens your browser.</p>
+        </div>
+      </div>
+
+      <figure class="demo">
+        <div class="demo-shell">
+          <div class="demo-bar">
+            <span class="folder-pill"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">~/ws/app</span><svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></span>
+            <span class="machine"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg>devbox</span>
+            <span class="demo-note">Live demo with made-up data</span>
+          </div>
+          <div class="demo-body">
+            <div class="toolbar">
+              <div class="filter">
+                <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                <input type="search" class="filter-input" aria-label="Filter rows" placeholder="Filter" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="chips" role="group" aria-label="Show rows">
+                <button type="button" class="chip" data-chip="all" aria-pressed="true">All</button>
+                <button type="button" class="chip" data-chip="overridden" aria-pressed="false">Overridden</button>
+                <button type="button" class="chip" data-chip="redacted" aria-pressed="false">Redacted</button>
+              </div>
+              <p class="count" role="status"></p>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">Effective settings</h2>
+                <p class="card-sub">Merged from 4 layers for <span class="mono">~/ws/app</span></p>
+              </div>
+              <ul class="kv-list">
+                <li class="kv" data-flags="overridden">
+                  <div class="kv-row">
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="true" aria-controls="kv-model">model</button></div>
+                    <div class="kv-val"><span class="mono">opus</span><p class="ovr">Overrides <s class="mono">sonnet</s> from user</p></div>
+                    <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from local; overridden: user"><span class="node m"></span><span class="node l applied"></span><span class="node p"></span><span class="node u over"></span></span></div>
+                    <div class="kv-meta"><span class="src">project (local)</span></div>
+                  </div>
+                  <div class="kv-panel" id="kv-model">
+                    <span class="route" role="img" aria-label="Route: managed not set, local applied, project not set, user overridden"><span class="node m"></span><span class="link"></span><span class="node l applied"></span><span class="link"></span><span class="node p"></span><span class="link dashed"></span><span class="node u over"></span></span>
+                    <ol class="contribs">
+                      <li><span aria-hidden="true" class="node l applied"></span><span class="layer">Local</span><span class="mono c-val">opus</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/settings.local.json</span></li>
+                      <li><span aria-hidden="true" class="node u over"></span><span class="layer">User</span><span class="mono c-val struck">sonnet</span><span class="status warn">overridden</span><span class="mono c-path">~/.claude/settings.json</span></li>
+                    </ol>
+                  </div>
+                </li>
+                <li class="kv" data-flags="overridden">
+                  <div class="kv-row">
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-mode">permissions.defaultMode</button></div>
+                    <div class="kv-val"><span class="mono">acceptEdits</span><p class="ovr">Overrides <s class="mono">default</s> from user</p></div>
+                    <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from project; overridden: user"><span class="node m"></span><span class="node l"></span><span class="node p applied"></span><span class="node u over"></span></span></div>
+                    <div class="kv-meta"><span class="src">project</span></div>
+                  </div>
+                  <div class="kv-panel" id="kv-mode">
+                    <span class="route" role="img" aria-label="Route: managed not set, local not set, project applied, user overridden"><span class="node m"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p applied"></span><span class="link dashed"></span><span class="node u over"></span></span>
+                    <ol class="contribs">
+                      <li><span aria-hidden="true" class="node p applied"></span><span class="layer">Project</span><span class="mono c-val">acceptEdits</span><span class="status ok">applied</span><span class="mono c-path">~/ws/app/.claude/settings.json</span></li>
+                      <li><span aria-hidden="true" class="node u over"></span><span class="layer">User</span><span class="mono c-val struck">default</span><span class="status warn">overridden</span><span class="mono c-path">~/.claude/settings.json</span></li>
+                    </ol>
+                  </div>
+                </li>
+                <li class="kv" data-flags="">
+                  <div class="kv-row">
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-allow">permissions.allow</button></div>
+                    <div class="kv-val"><ul class="mono"><li>Bash(npm test *)</li><li>Bash(npm run build)</li><li>Read(./tests/**)</li></ul></div>
+                    <div class="kv-lin"><span class="lin" role="img" aria-label="Merged from project, user"><span class="node m"></span><span class="node l"></span><span class="node p merged"></span><span class="node u merged"></span></span></div>
+                    <div class="kv-meta"><span class="src">2 layers</span></div>
+                  </div>
+                  <div class="kv-panel" id="kv-allow">
+                    <span class="route" role="img" aria-label="Route: managed not set, local not set, project merged, user merged"><span class="node m"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p merged"></span><span class="link"></span><span class="node u merged"></span></span>
+                    <ol class="contribs">
+                      <li><span aria-hidden="true" class="node p merged"></span><span class="layer">Project</span><span class="mono c-val"><span class="vline">Bash(npm test *)</span> <span class="vline">Bash(npm run build)</span></span><span class="status">merged</span><span class="mono c-path">~/ws/app/.claude/settings.json</span></li>
+                      <li><span aria-hidden="true" class="node u merged"></span><span class="layer">User</span><span class="mono c-val">Read(./tests/**)</span><span class="status">merged</span><span class="mono c-path">~/.claude/settings.json</span></li>
+                    </ol>
+                  </div>
+                </li>
+                <li class="kv" data-flags="">
+                  <div class="kv-row">
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-bypass">permissions.<wbr>disableBypassPermissionsMode</button></div>
+                    <div class="kv-val"><span class="mono">disable</span></div>
+                    <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from managed"><span class="node m applied"></span><span class="node l"></span><span class="node p"></span><span class="node u"></span></span></div>
+                    <div class="kv-meta"><span class="src">managed</span></div>
+                  </div>
+                  <div class="kv-panel" id="kv-bypass">
+                    <span class="route" role="img" aria-label="Route: managed applied, local not set, project not set, user not set"><span class="node m applied"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p"></span><span class="link"></span><span class="node u"></span></span>
+                    <ol class="contribs">
+                      <li><span aria-hidden="true" class="node m applied"></span><span class="layer">Managed</span><span class="mono c-val">disable</span><span class="status ok">applied</span><span class="mono c-path">managed-settings.json</span></li>
+                    </ol>
+                  </div>
+                </li>
+                <li class="kv" data-flags="redacted">
+                  <div class="kv-row">
+                    <div class="kv-key"><button type="button" class="kv-btn" aria-expanded="false" aria-controls="kv-otel">env.<wbr>OTEL_EXPORTER_OTLP_HEADERS</button></div>
+                    <div class="kv-val"><span class="redacted mono"><svg class="i" aria-hidden="true"><use href="#i-eye-off"/></svg><span aria-hidden="true">[redacted]</span><span class="sr-only">value redacted</span></span></div>
+                    <div class="kv-lin"><span class="lin" role="img" aria-label="Effective from user"><span class="node m"></span><span class="node l"></span><span class="node p"></span><span class="node u applied"></span></span></div>
+                    <div class="kv-meta"><span class="src">user</span><span class="badge"><svg class="i" aria-hidden="true"><use href="#i-eye-off"/></svg>redacted</span></div>
+                  </div>
+                  <div class="kv-panel" id="kv-otel">
+                    <span class="route" role="img" aria-label="Route: managed not set, local not set, project not set, user applied"><span class="node m"></span><span class="link"></span><span class="node l"></span><span class="link"></span><span class="node p"></span><span class="link"></span><span class="node u applied"></span></span>
+                    <ol class="contribs">
+                      <li><span aria-hidden="true" class="node u applied"></span><span class="layer">User</span><span class="mono c-val"><span class="redacted"><svg class="i" aria-hidden="true"><use href="#i-eye-off"/></svg><span aria-hidden="true">[redacted]</span><span class="sr-only">value redacted</span></span></span><span class="status ok">applied</span><span class="mono c-path">~/.claude/settings.json</span></li>
+                    </ol>
+                  </div>
+                </li>
+              </ul>
+              <p class="kv-none" hidden>No rows match the filter.</p>
+            </div>
+          </div>
+        </div>
+        <figcaption>This is the Settings view. Select a row to see every layer that set it.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="why" aria-labelledby="why-title">
+    <div class="wrap split">
+      <div class="sec-head">
+        <h2 id="why-title">One harness, many files</h2>
+        <p class="intro">Claude Code builds its behavior from settings in four layers, instruction files from several folders, and a growing set of agents, skills, hooks and MCP servers. When something behaves differently than you expect, the answer is somewhere in those files.</p>
+      </div>
+      <ol class="ruled why-list">
+        <li><span class="num mono" aria-hidden="true">1</span><div><h3>Four layers, one effective value.</h3><p>Managed, local, project and user settings merge per key. cfgdash shows the winner, the file it came from and what it overrode.</p></div></li>
+        <li><span class="num mono" aria-hidden="true">2</span><div><h3>Instructions load from many places.</h3><p>cfgdash shows the chain for a folder in load order, with sizes and token estimates, including imports.</p></div></li>
+        <li><span class="num mono" aria-hidden="true">3</span><div><h3>Broken config fails quietly.</h3><p>A hook whose script is gone, an agent that loses to a duplicate, an MCP command that is not on PATH. Health lists each one with its evidence.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="features-title">What it shows</h2>
+      </div>
+      <ul class="bento">
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-route"/></svg>Layer lineage</h3>
+          <p>Every setting carries its route through the four layers: managed, local, project, user.</p>
+          <div class="vis">
+            <div class="lin-example">
+              <span class="mono">model</span>
+              <span class="route" role="img" aria-label="Route of model: managed not set, local applied, project not set, user overridden"><span class="node m"></span><span class="link"></span><span class="node l applied"></span><span class="link"></span><span class="node p"></span><span class="link dashed"></span><span class="node u over"></span></span>
+              <span class="mono">opus</span>
+            </div>
+            <ul class="legend">
+              <li><span class="node p applied" aria-hidden="true"></span><span>applied</span><span class="muted">filled</span></li>
+              <li><span class="node u over" aria-hidden="true"></span><span>overridden</span><span class="muted">outlined, struck glyph</span></li>
+              <li><span class="node p merged" aria-hidden="true"></span><span>merged</span><span class="muted">half filled</span></li>
+              <li><span class="node m" aria-hidden="true"></span><span>not set</span><span class="muted">dotted</span></li>
+            </ul>
+          </div>
+        </li>
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg>Instruction chain</h3>
+          <p>What loads for a folder, in order, with a token estimate per file.</p>
+          <div class="vis">
+            <p class="small muted">Loaded for <span class="mono">~/ws/app</span></p>
+            <p class="total"><span class="tabular">4,600</span> <span class="small muted">tok est.</span></p>
+            <div class="segbar" aria-hidden="true"><span class="g19"></span><span class="g12"></span><span class="g9"></span><span class="g6"></span></div>
+            <ol class="chain-rows">
+              <li><span class="mono">~/.claude/CLAUDE.md</span><span class="mono tabular">1,900</span></li>
+              <li><span class="mono">~/ws/CLAUDE.md</span><span class="mono tabular">1,200</span></li>
+              <li><span class="mono">~/ws/app/CLAUDE.md</span><span class="mono tabular">900</span></li>
+              <li class="import"><span class="mono">@AGENTS.md</span><span class="mono tabular">600</span></li>
+            </ol>
+            <p class="small muted tabular">4 files · 18.0 KB · about 4,600 tokens (estimate)</p>
+          </div>
+        </li>
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-heart-pulse"/></svg>Health</h3>
+          <p>Deterministic rules over the snapshot, no AI involved. <code>cfgdash doctor</code> prints the same findings and exits with code 3 on a critical one, so a hook or CI job can use it.</p>
+          <div class="vis">
+            <div class="sevbar" aria-hidden="true"><span class="sev-c g1"></span><span class="sev-w g7"></span><span class="sev-i g4"></span></div>
+            <p class="small sevcounts tabular"><span class="t-danger">1 critical</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-warn">7 warning</span><span aria-hidden="true"> · </span><span class="sr-only">, </span><span class="t-muted">4 info</span></p>
+            <ul class="findings">
+              <li><span class="sev t-danger"><svg class="i" aria-hidden="true"><use href="#i-critical"/></svg>Critical</span><span>Hook script not found</span></li>
+              <li><span class="sev t-warn"><svg class="i" aria-hidden="true"><use href="#i-warning"/></svg>Warning</span><span>Duplicate entry</span></li>
+            </ul>
+          </div>
+        </li>
+        <li class="tile">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>Search everything</h3>
+          <p>Keys, values, labels and file contents, from the command palette.</p>
+          <div class="vis">
+            <div class="fake-field"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>allow</span><kbd>Ctrl K</kbd></div>
+            <ul class="hits">
+              <li class="sel"><span class="mono">permissions.<span class="hit">allow</span></span><span class="small muted">Settings</span></li>
+              <li><span class="mono">settings.json</span><span class="small muted">File contents</span></li>
+            </ul>
+          </div>
+        </li>
+        <li class="tile">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-network"/></svg>Fleet</h3>
+          <p>Compare this machine with another one on your tailnet, or with an earlier export of itself.</p>
+          <div class="vis">
+            <p><strong>devbox</strong> <span class="muted">compared with</span> <strong>laptop</strong></p>
+            <p class="small muted tabular">3 changed · 1 only on devbox · 2 only on laptop</p>
+            <div class="change">
+              <p class="mono">settings › model <span class="t-warn">Changed</span></p>
+              <p class="side"><span class="small muted">devbox</span><span class="mono">opus</span></p>
+              <p class="side"><span class="small muted">laptop</span><span class="mono">sonnet</span></p>
+            </div>
+          </div>
+        </li>
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg>Guarded edits</h3>
+          <p>Settings and text config files can be changed from localhost. Every change is a dry-run diff first, applied only after you confirm, written to an audit log and undoable.</p>
+          <div class="vis diff" role="group" aria-label="Changes to ~/.claude/settings.json">
+            <div class="diff-head">
+              <span class="mono diff-path">~/.claude/settings.json</span>
+              <span class="diff-meta"><span class="scope">user</span><span class="muted">dry run</span><span class="tabular"><span aria-hidden="true"><span class="t-ok">+1</span> <span class="t-danger">−1</span></span><span class="sr-only">1 added, 1 removed</span></span></span>
+            </div>
+            <div class="diff-body mono">
+              <div class="dl"><span class="gut" aria-hidden="true">1</span><span class="gut" aria-hidden="true">1</span><span class="sign" aria-hidden="true"></span><span class="code">{</span></div>
+              <div class="dl del"><span class="gut" aria-hidden="true">2</span><span class="gut" aria-hidden="true"></span><span class="sign" aria-hidden="true">-</span><span class="code"><span class="sr-only">removed </span>  "model": "sonnet",</span></div>
+              <div class="dl add"><span class="gut" aria-hidden="true"></span><span class="gut" aria-hidden="true">2</span><span class="sign" aria-hidden="true">+</span><span class="code"><span class="sr-only">added </span>  "model": "opus",</span></div>
+              <div class="dl"><span class="gut" aria-hidden="true">3</span><span class="gut" aria-hidden="true">3</span><span class="sign" aria-hidden="true"></span><span class="code">  "permissions": {</span></div>
+            </div>
+          </div>
+        </li>
+        <li class="tile">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-bot"/></svg>Config assistant</h3>
+          <p>A contained Claude session that reads the redacted snapshot, explains a finding and proposes a fix as a diff you review.</p>
+          <div class="vis proposal">
+            <p class="small">Proposed by the assistant from your config files</p>
+            <p class="mono prop-file"><span>settings.json</span><span class="tabular"><span aria-hidden="true"><span class="t-ok">+1</span> <span class="t-danger">−1</span></span><span class="sr-only">1 added, 1 removed</span></span></p>
+          </div>
+        </li>
+        <li class="tile">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-chart"/></svg>Usage</h3>
+          <p>Cost, tokens and sessions per day, model and project, when your machine has an OpenTelemetry metrics store.</p>
+          <div class="vis">
+            <svg class="chart" viewBox="0 0 232 124" width="232" height="124" role="img" aria-label="Cost per day for the last 14 days, from $3.20 to $17.60, total $148.80">
+              <g class="grid"><line x1="22" x2="230" y1="104" y2="104"/><line x1="22" x2="230" y1="56" y2="56"/><line x1="22" x2="230" y1="8" y2="8"/></g>
+              <g><text x="16" y="104" text-anchor="end" dominant-baseline="middle">0</text><text x="16" y="56" text-anchor="end" dominant-baseline="middle">10</text><text x="16" y="8" text-anchor="end" dominant-baseline="middle">20</text><text x="22" y="120">Oct 29</text><text x="230" y="120" text-anchor="end">Nov 11</text></g>
+              <path class="cols" d="M24.82 104V47.48A3 3 0 0 1 27.82 44.48H31.03A3 3 0 0 1 34.03 47.48V104ZM39.68 104V59.96A3 3 0 0 1 42.68 56.96H45.89A3 3 0 0 1 48.89 59.96V104ZM54.54 104V89.72A3 3 0 0 1 57.54 86.72H60.75A3 3 0 0 1 63.75 89.72V104ZM69.39 104V91.64A3 3 0 0 1 72.39 88.64H75.61A3 3 0 0 1 78.61 91.64V104ZM84.25 104V36.92A3 3 0 0 1 87.25 33.92H90.46A3 3 0 0 1 93.46 36.92V104ZM99.11 104V29.24A3 3 0 0 1 102.11 26.24H105.32A3 3 0 0 1 108.32 29.24V104ZM113.97 104V54.2A3 3 0 0 1 116.97 51.2H120.18A3 3 0 0 1 123.18 54.2V104ZM128.82 104V33.08A3 3 0 0 1 131.82 30.08H135.03A3 3 0 0 1 138.03 33.08V104ZM143.68 104V45.56A3 3 0 0 1 146.68 42.56H149.89A3 3 0 0 1 152.89 45.56V104ZM158.54 104V90.68A3 3 0 0 1 161.54 87.68H164.75A3 3 0 0 1 167.75 90.68V104ZM173.39 104V88.76A3 3 0 0 1 176.39 85.76H179.61A3 3 0 0 1 182.61 88.76V104ZM188.25 104V22.52A3 3 0 0 1 191.25 19.52H194.46A3 3 0 0 1 197.46 22.52V104ZM203.11 104V38.84A3 3 0 0 1 206.11 35.84H209.32A3 3 0 0 1 212.32 38.84V104ZM217.97 104V55.16A3 3 0 0 1 220.97 52.16H224.18A3 3 0 0 1 227.18 55.16V104Z"/>
+            </svg>
+          </div>
+        </li>
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-boxes"/></svg>More than Claude Code</h3>
+          <p>Codex, OpenCode and T3 Code configs appear in the same model, and Health flags where the tools disagree about MCP servers or instruction files.</p>
+          <ul class="vis states">
+            <li><span class="mono">Claude Code</span><span class="state"><span class="dot ok"></span>active</span></li>
+            <li><span class="mono">Codex</span><span class="state"><span class="dot ok"></span>active</span></li>
+            <li><span class="mono">OpenCode</span><span class="state"><span class="dot off"></span>not on this machine</span></li>
+          </ul>
+        </li>
+        <li class="tile w2">
+          <h3><svg class="i" aria-hidden="true"><use href="#i-database"/></svg>Sessions and memory</h3>
+          <p>Recent Claude Code sessions with tokens and estimated cost, and what agents remember in the Engram store, when the machine has one.</p>
+          <ul class="vis states">
+            <li><span class="mono">~/ws/app</span><span class="mono small muted tabular">412k tok · $3.84 est.</span></li>
+            <li><span class="mono">~/ws/site</span><span class="mono small muted tabular">96k tok · $0.41 est.</span></li>
+            <li><span class="mono">engram</span><span class="small muted tabular">2 projects · 37 observations</span></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="views" aria-labelledby="views-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="views-title">The views</h2>
+        <p class="intro">Screenshots of the real UI, running on its built-in demo data.</p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" tabindex="0">Overview</button>
+        <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings</button>
+        <button type="button" role="tab" id="tab-instructions" aria-controls="panel-instructions" aria-selected="false" tabindex="-1">Instructions</button>
+        <button type="button" role="tab" id="tab-health" aria-controls="panel-health" aria-selected="false" tabindex="-1">Health</button>
+        <button type="button" role="tab" id="tab-usage" aria-controls="panel-usage" aria-selected="false" tabindex="-1">Usage</button>
+      </div>
+      <div>
+        <div class="panel is-active" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" tabindex="0">
+          <h3 class="panel-title">Overview</h3>
+          <p class="caption">What this machine is, what is active and where to look next.</p>
+          <div class="frame">
+            <p class="frame-bar mono">127.0.0.1:7820</p>
+            <img class="shot light" src="/assets/img/overview-light-1280.webp" srcset="/assets/img/overview-light-1280.webp 1280w, /assets/img/overview-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views.">
+            <img class="shot dark" src="/assets/img/overview-dark-1280.webp" srcset="/assets/img/overview-dark-1280.webp 1280w, /assets/img/overview-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Overview view for the machine devbox: an identity tile, a Health tile with 1 critical, 7 warning and 7 info findings, and count tiles for Settings, Instructions, Agents, Skills and commands, Hooks and the other views.">
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" tabindex="0">
+          <h3 class="panel-title">Settings</h3>
+          <p class="caption">Effective Claude Code settings for the folder and where each value comes from.</p>
+          <div class="frame">
+            <p class="frame-bar mono">127.0.0.1:7820</p>
+            <img class="shot light" src="/assets/img/settings-light-1280.webp" srcset="/assets/img/settings-light-1280.webp 1280w, /assets/img/settings-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view for D:/ws/app: effective settings as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user.">
+            <img class="shot dark" src="/assets/img/settings-dark-1280.webp" srcset="/assets/img/settings-dark-1280.webp 1280w, /assets/img/settings-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Settings view for D:/ws/app: effective settings as ruled rows with key, value, lineage strip and source. The model row is expanded and shows opus applied from project (local), overriding sonnet from user.">
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-instructions" aria-labelledby="tab-instructions" tabindex="0">
+          <h3 class="panel-title">Instructions</h3>
+          <p class="caption">Instruction files loaded for the folder, in load order.</p>
+          <div class="frame">
+            <p class="frame-bar mono">127.0.0.1:7820</p>
+            <img class="shot light" src="/assets/img/instructions-light-1280.webp" srcset="/assets/img/instructions-light-1280.webp 1280w, /assets/img/instructions-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view for D:/ws/app: an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts.">
+            <img class="shot dark" src="/assets/img/instructions-dark-1280.webp" srcset="/assets/img/instructions-dark-1280.webp 1280w, /assets/img/instructions-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Instructions view for D:/ws/app: an estimated total of 5,439 tokens with a segmented bar, then the instruction files in load order with their imports, flags, sizes and token counts.">
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-health" aria-labelledby="tab-health" tabindex="0">
+          <h3 class="panel-title">Health</h3>
+          <p class="caption">Problems found in this harness: missing scripts and commands, errors, duplicates and overrides.</p>
+          <div class="frame">
+            <p class="frame-bar mono">127.0.0.1:7820</p>
+            <img class="shot light" src="/assets/img/health-light-1280.webp" srcset="/assets/img/health-light-1280.webp 1280w, /assets/img/health-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found.">
+            <img class="shot dark" src="/assets/img/health-dark-1280.webp" srcset="/assets/img/health-dark-1280.webp 1280w, /assets/img/health-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Health view: 15 findings with a severity bar, chips for All, Critical, Warning and Info, and a table of findings by severity, title and location, starting with the critical finding Hook script not found.">
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-usage" aria-labelledby="tab-usage" tabindex="0">
+          <h3 class="panel-title">Usage</h3>
+          <p class="caption">Claude Code cost, tokens and sessions from the OpenTelemetry metrics store.</p>
+          <div class="frame">
+            <p class="frame-bar mono">127.0.0.1:7820</p>
+            <img class="shot light" src="/assets/img/usage-light-1280.webp" srcset="/assets/img/usage-light-1280.webp 1280w, /assets/img/usage-light-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days.">
+            <img class="shot dark" src="/assets/img/usage-dark-1280.webp" srcset="/assets/img/usage-dark-1280.webp 1280w, /assets/img/usage-dark-2560.webp 2560w" sizes="(min-width: 1168px) 1118px, 94vw" width="1280" height="800" loading="lazy" decoding="async" alt="The Usage view: tiles for cost today, cost over 7 and 30 days, tokens, sessions and active time, and a column chart of cost per day over the last 30 days.">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" aria-labelledby="security-title">
+    <div class="wrap split">
+      <div class="sec-head">
+        <h2 id="security-title">Local by design</h2>
+        <p class="intro">cfgdash looks at files that hold your tooling's secrets, so the rules are strict and written down.</p>
+      </div>
+      <dl class="rules">
+        <div><dt class="mono">listens on</dt><dd>127.0.0.1 only. Never a LAN address.</dd></div>
+        <div><dt class="mono">access</dt><dd>A fresh random token for every run, in the URL it prints.</dd></div>
+        <div><dt class="mono">secrets</dt><dd>Credential files are never opened. Secret-looking keys and values are redacted before anything leaves the core, and over-redaction is the accepted failure mode.</dd></div>
+        <div><dt class="mono">writes</dt><dd>Nothing by default. Edits work only from localhost, after a diff and an explicit confirm, and every one is audited and undoable.</dd></div>
+        <div><dt class="mono">network</dt><dd>The UI loads nothing from outside its own origin: no CDN, no remote fonts, no analytics.</dd></div>
+        <div><dt class="mono">idle</dt><dd>It stops itself after 30 minutes without a request.</dd></div>
+        <div><dt class="mono">tailnet</dt><dd>Optional. <code>--tailnet</code> publishes through Tailscale Serve to your own tailnet, and every request needs the token plus a tailnet identity. Never Funnel.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="commands" aria-labelledby="commands-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="commands-title">One command</h2>
+        <p class="intro">A single self-contained executable for Windows x64 and Linux x64. No runtime to install.</p>
+      </div>
+      <ul class="term">
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash</code><span class="desc">Serve on 127.0.0.1:7820 and open the browser</span><button type="button" class="copy" data-copy="cfgdash" aria-label="Copy cfgdash"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash --dir &lt;path&gt;</code><span class="desc">Start in another folder</span><button type="button" class="copy" data-copy="cfgdash --dir &lt;path&gt;" aria-label="Copy cfgdash --dir &lt;path&gt;"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash --tailnet</code><span class="desc">Also publish to your tailnet</span><button type="button" class="copy" data-copy="cfgdash --tailnet" aria-label="Copy cfgdash --tailnet"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash doctor</code><span class="desc">Print health findings; exit code 3 on a critical one</span><button type="button" class="copy" data-copy="cfgdash doctor" aria-label="Copy cfgdash doctor"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash context</code><span class="desc">Print what the harness loads for a folder</span><button type="button" class="copy" data-copy="cfgdash context" aria-label="Copy cfgdash context"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash export</code><span class="desc">Write a snapshot as JSON</span><button type="button" class="copy" data-copy="cfgdash export" aria-label="Copy cfgdash export"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash autostart on</code><span class="desc">Start at login</span><button type="button" class="copy" data-copy="cfgdash autostart on" aria-label="Copy cfgdash autostart on"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash update</code><span class="desc">Install the latest release</span><button type="button" class="copy" data-copy="cfgdash update" aria-label="Copy cfgdash update"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+        <li><code><span class="prompt" aria-hidden="true">$ </span>cfgdash stop</code><span class="desc">Stop the running instance</span><button type="button" class="copy" data-copy="cfgdash stop" aria-label="Copy cfgdash stop"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></li>
+      </ul>
+      <p class="sr-only" id="copy-status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="access" aria-labelledby="access-title">
+    <div class="wrap">
+      <div class="access">
+        <h2 id="access-title">Get access</h2>
+        <p>cfgdash is not public yet. The repository and its releases are private while it settles. If you want to try it on your own harness, or want to know when it opens up, write to me.</p>
+        <div class="actions">
+          <a class="btn primary" href="mailto:contact@nicowoellnitz.de?subject=cfgdash%20access"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg><span>Write to contact@nicowoellnitz.de</span></a>
+          <p>Windows x64 and Linux x64 · v0.6.0</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-title">
+    <div class="wrap split">
+      <div class="sec-head">
+        <h2 id="faq-title">Questions</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Does it change my configuration?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Not unless you ask it to. Viewing never writes. The edit path is separate: it works only from localhost, shows a dry-run diff, applies after you confirm, logs the change and can undo it.</p>
+        </details>
+        <details>
+          <summary>Does anything leave my machine?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>The dashboard itself makes no outside requests. Two features talk to other systems when you use them: the config assistant starts a session with your own Claude CLI, which sends the redacted data it reads to your model provider, and <code>cfgdash update</code> downloads the next release.</p>
+        </details>
+        <details>
+          <summary>Do I need Tailscale?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>No. It is only needed to open the dashboard from your other devices (<code>--tailnet</code>) and to compare machines in Fleet.</p>
+        </details>
+        <details>
+          <summary>What if my machine only has part of this?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>cfgdash shows what the machine has. A source that is missing shows as "not on this machine" with the reason, and is never an error.</p>
+        </details>
+        <details>
+          <summary>Which platforms?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Windows x64 and Linux x64.</p>
+        </details>
+        <details>
+          <summary>Is it open source?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Not at the moment. The repository is private for now.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-grid">
+    <p class="foot-brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" rx="7"/><path d="M16 6 6 11l10 5 10-5z"/><path d="m6 16 10 5 10-5"/><path d="m6 21 10 5 10-5"/></svg>
+      <span>cfgdash <span class="mono">v0.6.0</span></span>
+    </p>
+    <ul class="foot-links">
+      <li><a href="https://nicowoellnitz.de/">Built by Nico Wöllnitz</a></li>
+      <li><a href="https://nicowoellnitz.de/impressum/" hreflang="de" lang="de">Impressum</a></li>
+      <li><a href="https://nicowoellnitz.de/datenschutz/" hreflang="de" lang="de">Datenschutz</a></li>
+    </ul>
+    <p class="foot-note">cfgdash is an independent project and is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cfgdash.nicowoellnitz.de/sitemap.xml

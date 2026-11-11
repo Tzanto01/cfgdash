@@ -1,0 +1,77 @@
+.og {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 40px;
+  width: 1200px;
+  height: 630px;
+  padding: 0 96px;
+}
+
+.og-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+}
+
+.og .mark {
+  width: 48px;
+  height: 48px;
+}
+
+.og h1 {
+  margin: 0;
+  font-size: 72px;
+  max-width: 940px;
+}
+
+.og-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  align-self: flex-start;
+  padding: 18px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.og-row .node {
+  width: 34px;
+  height: 34px;
+  border-width: 2.5px;
+  border-radius: 8px;
+  font-size: 18px;
+}
+
+.og-row .link {
+  width: 20px;
+  border-top-width: 2.5px;
+}
+
+.og-sub {
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.icon {
+  width: 180px;
+  height: 180px;
+  overflow: hidden;
+}
+
+.icon .mark {
+  display: block;
+  width: 180px;
+  height: 180px;
+}
+
+.icon .mark rect {
+  fill: var(--bg);
+  stroke: none;
+}

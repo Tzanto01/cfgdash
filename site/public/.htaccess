@@ -1,0 +1,6 @@
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  <If "%{REQUEST_URI} =~ m#^/assets/(fonts|img)/#">
+    Header set Cache-Control "public, max-age=2592000"
+  </If>
+</IfModule>
