@@ -183,7 +183,7 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 - Preload the two latin `woff2` files. `font-display: swap`. Fonts copied from `web/node_modules/@fontsource-variable/*/files/*-latin-wght-normal.woff2` and `*-latin-ext-wght-normal.woff2`.
 - `404.html`: same header and footer, h1 "This page doesn't exist", a link back to the start, `noindex`.
 - `robots.txt` allows all and names the sitemap; `sitemap.xml` lists the one URL.
-- `.htaccess`: headers only. The folder sits inside the portfolio's document root, whose `.htaccess` already applies here: `Options -Indexes`, `ErrorDocument 404 /404.html` (resolved against this docroot), the HTTPS redirect for this host, the redirect from `nicowoellnitz.de/cfgdash/` to the subdomain, HSTS and the other security headers, `Cache-Control` 300s and `mod_deflate`. Ours must not contain `RewriteEngine` (it would replace those redirects for this folder). It sets `Header always set Content-Security-Policy` with the CSP above, so the stricter value replaces the parent's, and `Cache-Control` 30 days for `assets/fonts` and `assets/img`.
+- `.htaccess`: complete on its own. The subdomain has its own document root and the portfolio's `.htaccess` does not apply to it (verified live on the hosting). It carries `Options -Indexes`, `FileETag None`, `ErrorDocument 404 /404.html`, an HTTPS redirect that keeps the host (`RewriteCond %{HTTPS} off`, excluding `/.well-known/` so certificate renewals keep working), `Header always set` for `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Strict-Transport-Security` and the CSP above, `Cache-Control` 300s by default and 30 days for `assets/fonts` and `assets/img`, and `mod_deflate` for text types.
 
 ## Checks
 
@@ -193,5 +193,5 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 
 1. The subdomain `cfgdash.nicowoellnitz.de` exists (FTP path `/cfgdash`, inside the portfolio's document root). It needs an A record only (IPv6 is broken on this hosting) and its own Let's Encrypt certificate (domain → Services → SSL Manager → Install Certificate next to the subdomain). konsoleH's "HTTPS redirect" toggle stays off.
 2. Upload with the hosting repo's tool (`personal/hosting/tools/deploy-ftp.py`): `FTP_DIST=<repo>/site/public FTP_ROOT=/cfgdash`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
-3. After the first upload: `curl -sI https://cfgdash.nicowoellnitz.de/` must show exactly one `Content-Security-Policy` header, and the http and `www` forms must 301 to the canonical host.
+3. After the first upload: `curl -sI https://cfgdash.nicowoellnitz.de/` must show exactly one `Content-Security-Policy` header and the other security headers, the http form must 301 to https, and a font and an image must come back with the 30-day `Cache-Control`.
 4. The portfolio's Datenschutz page gets one sentence covering the subdomain and its `cfgdash-site-theme` storage key before the page goes live.
