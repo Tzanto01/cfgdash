@@ -152,13 +152,13 @@ A terminal-styled block (`raised`, mono, 8px radius) listing commands with a des
 | `cfgdash update` | Install the latest release |
 | `cfgdash stop` | Stop the running instance |
 
-### Get access (`#access`, h2: Get access) (provisional)
+### Get access (`#access`, h2: Get access)
 
 cfgdash is not public yet. The repository and its releases are private while it settles. If you want to try it on your own harness, or want to know when it opens up, write to me.
 
 Primary button "Write to contact@nicowoellnitz.de" (`mailto:contact@nicowoellnitz.de?subject=cfgdash%20access`). Next to it, muted: "Windows x64 and Linux x64 · v0.6.0".
 
-This block is provisional until Nico decides how cfgdash goes public. Keep it one self-contained `section` so it can be swapped for a download block.
+Nico confirmed this wording on 2026-11-11 ("Keep it"). It stays one self-contained `section` so it can be swapped for a download block when cfgdash goes public.
 
 ### FAQ (`#faq`, h2: Questions)
 
@@ -190,6 +190,8 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 `node site/tools/check.mjs` serves `site/public` on a loopback port with the CSP header above and drives Chromium (`playwright-core` from `web/node_modules`) at 320, 375, 768 and 1280 wide in both themes. It fails on: a console error or CSP violation, a request to another origin, horizontal page scroll, an `img` without `alt`, `width` or `height`, an in-page link without a target. It exercises: the row expand, the chips and the filter (and its count line), the tabs with arrow keys, a copy button, the theme toggle surviving a reload, the menu button at 375 with Escape. It writes full-page screenshots per width and theme to an artifacts folder outside the repo for review. Static greps: no `style=` attribute, no inline script, no `http://` asset, no em or en dash in `site/public/*.html`.
 
 ## Deploy (Nico's call, not part of the build)
+
+Branch `test` is the baseline and holds the site; `main` gets it only once Nico decides it can go live. Every push to `test` publishes `site/public` to the preview on the homeserver within about a minute (LAN `http://192.168.188.40:8092`, tailnet `https://nicos-homeserver.meteor-pauling.ts.net:8092`; plain static serving, so the `.htaccess` redirects and headers are not previewed). Go-live waits for the portfolio copy pass and happens together with the portfolio upload.
 
 1. The subdomain `cfgdash.nicowoellnitz.de` exists (FTP path `/cfgdash`, inside the portfolio's document root). It needs an A record only (IPv6 is broken on this hosting) and its own Let's Encrypt certificate (domain → Services → SSL Manager → Install Certificate next to the subdomain). konsoleH's "HTTPS redirect" toggle stays off.
 2. Upload with the hosting repo's tool (`personal/hosting/tools/deploy-ftp.py`): `FTP_DIST=<repo>/site/public FTP_ROOT=/cfgdash`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
