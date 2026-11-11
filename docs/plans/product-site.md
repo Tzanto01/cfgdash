@@ -181,7 +181,7 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 - Preload the two latin `woff2` files. `font-display: swap`. Fonts copied from `web/node_modules/@fontsource-variable/*/files/*-latin-wght-normal.woff2` and `*-latin-ext-wght-normal.woff2`.
 - `404.html`: same header and footer, h1 "This page doesn't exist", a link back to the start, `noindex`.
 - `robots.txt` allows all and names the sitemap; `sitemap.xml` lists the one URL.
-- `.htaccess`: `Options -Indexes`, `ErrorDocument 404 /404.html`, its own `RewriteEngine On` with the HTTPS and host redirect to `cfgdash.nicowoellnitz.de` (excluding `/.well-known/`), and `Header always set` for `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Strict-Transport-Security` and the CSP above (the folder sits inside the portfolio's document root, so `always set` must replace the parent's CSP). `Cache-Control` 300s for pages, 30 days for `assets/fonts` and `assets/img`. `mod_deflate` for text types.
+- `.htaccess`: headers only. The folder sits inside the portfolio's document root, whose `.htaccess` already applies here: `Options -Indexes`, `ErrorDocument 404 /404.html` (resolved against this docroot), the HTTPS redirect for this host, the redirect from `nicowoellnitz.de/cfgdash/` to the subdomain, HSTS and the other security headers, `Cache-Control` 300s and `mod_deflate`. Ours must not contain `RewriteEngine` (it would replace those redirects for this folder). It sets `Header always set Content-Security-Policy` with the CSP above, so the stricter value replaces the parent's, and `Cache-Control` 30 days for `assets/fonts` and `assets/img`.
 
 ## Checks
 
@@ -189,7 +189,7 @@ Mark and "cfgdash v0.6.0". "Built by Nico Wöllnitz" (link `https://nicowoellnit
 
 ## Deploy (Nico's call, not part of the build)
 
-1. Nico creates the subdomain `cfgdash.nicowoellnitz.de` in konsoleH (folder inside the main document root, for example `/cfgdash`), adds an A record only (IPv6 is broken on this hosting) in the Hetzner Console DNS, and requests its own Let's Encrypt certificate (domain → Services → SSL Manager → Install Certificate next to the subdomain). konsoleH's "HTTPS redirect" toggle stays off.
-2. Upload with the portfolio's `tools/deploy-ftp.py`: `FTP_DIST=<repo>/site/public FTP_ROOT=/<folder>`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
+1. The subdomain `cfgdash.nicowoellnitz.de` exists (FTP path `/cfgdash`, inside the portfolio's document root). It needs an A record only (IPv6 is broken on this hosting) and its own Let's Encrypt certificate (domain → Services → SSL Manager → Install Certificate next to the subdomain). konsoleH's "HTTPS redirect" toggle stays off.
+2. Upload from the portfolio repo: `FTP_DIST=<repo>/site/public FTP_ROOT=/cfgdash python3 tools/deploy-ftp.py`, `--dry-run` first. The portfolio deploy keeps that folder (`FTP_KEEP`).
 3. After the first upload: `curl -sI https://cfgdash.nicowoellnitz.de/` must show exactly one `Content-Security-Policy` header, and the http and `www` forms must 301 to the canonical host.
 4. The portfolio's Datenschutz page gets one sentence covering the subdomain and its `cfgdash-site-theme` storage key before the page goes live.
